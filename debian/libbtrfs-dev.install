@@ -1,0 +1,4 @@
+usr/include/btrfs/*.h
+usr/lib/*/libbtrfs.so
+usr/lib/*/libbtrfs.a
+

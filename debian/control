@@ -1,0 +1,112 @@
+Source: btrfs-progs
+Section: admin
+Priority: optional
+Maintainer: Adam Borowski <kilobyte@angband.pl>
+Build-Depends: debhelper-compat (= 13),
+               e2fslibs-dev,
+               pkg-config,
+               libacl1-dev,
+               libblkid-dev,
+               liblzo2-dev,
+               libudev-dev,
+               libzstd-dev,
+               uuid-dev,
+               udev,
+               zlib1g-dev,
+               asciidoctor,
+               xmlto,
+               bash-completion,
+	       python3-dev,
+	       python3-setuptools,
+	       dh-python,
+Standards-Version: 4.6.0
+Rules-Requires-Root: no
+Homepage: http://btrfs.wiki.kernel.org/
+Vcs-Browser: https://salsa.debian.org/debian/btrfs-progs/tree/debian
+Vcs-Git: https://salsa.debian.org/debian/btrfs-progs.git -b debian
+
+Package: btrfs-progs
+Architecture: linux-any
+Multi-Arch: foreign
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Breaks: libgcc-s1 (<< 10-20200211), initramfs-tools (<< 0.137~)
+Suggests: duperemove
+Description: Checksumming Copy on Write Filesystem utilities
+ Btrfs is a copy on write filesystem for Linux aimed at implementing
+ advanced features while focusing on fault tolerance, repair and easy
+ administration.
+ .
+ This package contains utilities (mkfs, fsck) used to work with btrfs
+ and an utility (btrfs-convert) to make a btrfs filesystem from an ext3.
+
+Package: libbtrfs0
+Architecture: linux-any
+Multi-Arch: same
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Replaces: btrfs-progs (<< 4.16.1-1)
+Breaks: btrfs-progs (<< 4.16.1-1)
+Description: Checksumming Copy on Write Filesystem utilities (runtime library)
+ Btrfs is a copy on write filesystem for Linux aimed at implementing
+ advanced features while focusing on fault tolerance, repair and easy
+ administration.
+ .
+ This package contains userspace shared code library libbtrfs.
+
+Package: libbtrfs-dev
+Architecture: linux-any
+Multi-Arch: same
+Section: libdevel
+Depends: ${misc:Depends}, ${shlibs:Depends}, libbtrfs0 (= ${binary:Version})
+Replaces: btrfs-progs (<< 4.16.1-1)
+Breaks: btrfs-progs (<< 4.16.1-1)
+Description: Checksumming Copy on Write Filesystem utilities (development headers)
+ Btrfs is a copy on write filesystem for Linux aimed at implementing
+ advanced features while focusing on fault tolerance, repair and easy
+ administration.
+ .
+ This package contains development headers for the libbtrfs library.
+
+Package: libbtrfsutil1
+Architecture: linux-any
+Multi-Arch: same
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Breaks: python3-btrfsutil (<< 5.5)
+Description: Checksumming Copy on Write Filesystem utilities (runtime util library)
+ Btrfs is a copy on write filesystem for Linux aimed at implementing
+ advanced features while focusing on fault tolerance, repair and easy
+ administration.
+ .
+ This package contains userspace shared code library libbtrfsutil.
+
+Package: libbtrfsutil-dev
+Architecture: linux-any
+Multi-Arch: same
+Section: libdevel
+Depends: ${misc:Depends}, ${shlibs:Depends}, libbtrfsutil1 (= ${binary:Version})
+Description: Checksumming Copy on Write Filesystem utilities (util development headers)
+ Btrfs is a copy on write filesystem for Linux aimed at implementing
+ advanced features while focusing on fault tolerance, repair and easy
+ administration.
+ .
+ This package contains development headers for the libbtrfsutil library.
+
+Package: python3-btrfsutil
+Architecture: linux-any
+Multi-Arch: same
+Section: python
+Depends: ${misc:Depends}, ${shlibs:Depends}, ${python3:Depends}
+Description: Checksumming Copy on Write Filesystem utilities (python3 bindings)
+ Btrfs is a new copy on write filesystem for Linux aimed at implementing
+ advanced features while focusing on fault tolerance, repair and easy
+ administration.
+ .
+ This package contains python3 bindings.
+
+Package: btrfs-progs-udeb
+Package-Type: udeb
+Section: debian-installer
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Checksumming Copy on Write Filesystem utilities (udeb)
