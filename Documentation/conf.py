@@ -14,13 +14,12 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+import pathlib
+
 # -- Project information -----------------------------------------------------
 project = 'BTRFS'
-# TODO: get from date
-copyright = '2021'
 
-# TODO: copy from ../VERSION
-release = '5.14.2'
+version = pathlib.Path("../VERSION").read_text().strip('v\n')
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -39,8 +38,14 @@ html_theme = 'sphinx_rtd_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
+# Disable em-dash translation to a single character as we use that for long
+# command line options and this does not render in a copy & paste friendly way
+# in html
+smartquotes_action = 'qe'
+
 man_pages = [
-    ('btrfs-select-super', 'btrfs-select-super', 'overwrite primary superblock with a backup copy', '', '8'),
+    # Source file, page name, description, authors, section
+    ('btrfs-select-super', 'btrfs-select-super', 'overwrite primary superblock with a backup copy', '', 8),
     ('btrfstune', 'btrfstune', 'tune various filesystem parameters', '', 8),
     ('fsck.btrfs', 'fsck.btrfs', 'do nothing, successfully', '', 8),
     ('btrfs-send', 'btrfs-send', 'generate a stream of changes between two subvolume snapshots', '', 8),
@@ -64,5 +69,5 @@ man_pages = [
     ('btrfs-map-logical', 'btrfs-map-logical', 'map btrfs logical extent to physical extent', '', 8),
     ('btrfs', 'btrfs', 'a toolbox to manage btrfs filesystems', '', 8),
     ('mkfs.btrfs', 'mkfs.btrfs', 'create a btrfs filesystem', '', 8),
-    ('btrfs-man5', 'btrfs-man5', 'topics about the BTRFS filesystem (mount options, supported file attributes and other)', '', 8),
+    ('btrfs-man5', 'btrfs', 'topics about the BTRFS filesystem (mount options, supported file attributes and other)', '', 5),
 ]

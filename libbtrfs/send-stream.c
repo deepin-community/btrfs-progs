@@ -16,10 +16,17 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include <unistd.h>
-#include "kernel-shared/send.h"
+#include "libbtrfs/send.h"
 #include "libbtrfs/send-stream.h"
-#include "crypto/crc32c.h"
+#include "libbtrfs/ctree.h"
+#include "libbtrfs/crc32c.h"
+#include "common/messages.h"
 
 struct btrfs_send_stream {
 	char read_buf[BTRFS_SEND_BUF_SIZE];
@@ -102,7 +109,7 @@ static int read_cmd(struct btrfs_send_stream *sctx)
 
 	memset(sctx->cmd_attrs, 0, sizeof(sctx->cmd_attrs));
 
-	ASSERT(sizeof(*sctx->cmd_hdr) <= sizeof(sctx->read_buf));
+	UASSERT(sizeof(*sctx->cmd_hdr) <= sizeof(sctx->read_buf));
 	ret = read_buf(sctx, sctx->read_buf, sizeof(*sctx->cmd_hdr));
 	if (ret < 0)
 		goto out;

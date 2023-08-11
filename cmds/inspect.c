@@ -14,25 +14,36 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/statfs.h>
+#include <linux/fs.h>
+#include <linux/magic.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <sys/ioctl.h>
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h>
-
-#include "kerncompat.h"
-#include "ioctl.h"
-#include "common/utils.h"
+#include <dirent.h>
+#include <string.h>
+#include <unistd.h>
+#include "kernel-lib/list.h"
+#include "kernel-lib/sizes.h"
+#include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
-#include "common/send-utils.h"
 #include "kernel-shared/disk-io.h"
-#include "cmds/commands.h"
+#include "common/internal.h"
+#include "common/messages.h"
+#include "common/utils.h"
+#include "common/send-utils.h"
 #include "common/help.h"
 #include "common/open-utils.h"
 #include "common/units.h"
+#include "common/string-utils.h"
+#include "common/string-table.h"
+#include "cmds/commands.h"
 
 static const char * const inspect_cmd_group_usage[] = {
 	"btrfs inspect-internal <command> <args>",
@@ -57,7 +68,7 @@ static int __ino_to_path_fd(u64 inum, int fd, const char *prepend)
 		goto out;
 	}
 
-	pr_verbose(1,
+	pr_verbose(LOG_DEBUG,
 	"ioctl ret=%d, bytes_left=%lu, bytes_missing=%lu cnt=%d, missed=%d\n",
 		   ret, (unsigned long)fspath->bytes_left,
 		   (unsigned long)fspath->bytes_missing, fspath->elem_cnt,
@@ -70,9 +81,9 @@ static int __ino_to_path_fd(u64 inum, int fd, const char *prepend)
 		ptr += fspath->val[i];
 		str = (char *)(unsigned long)ptr;
 		if (prepend)
-			printf("%s/%s\n", prepend, str);
+			pr_verbose(LOG_DEFAULT, "%s/%s\n", prepend, str);
 		else
-			printf("%s\n", str);
+			pr_verbose(LOG_DEFAULT, "%s\n", str);
 	}
 
 out:
@@ -83,7 +94,7 @@ static const char * const cmd_inspect_inode_resolve_usage[] = {
 	"btrfs inspect-internal inode-resolve [-v] <inode> <path>",
 	"Get file system paths for the given inode",
 	"",
-	"-v   deprecated, alias for global -v option",
+	OPTLINE("-v", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
 	NULL
@@ -129,14 +140,13 @@ static const char * const cmd_inspect_logical_resolve_usage[] = {
 	"btrfs inspect-internal logical-resolve [-Pvo] [-s bufsize] <logical> <path>",
 	"Get file system paths for the given logical address",
 	"",
-	"-P          skip the path resolving and print the inodes instead",
-	"-o          ignore offsets when matching references (requires v2 ioctl",
-	"            support in the kernel 4.15+)",
-	"-s bufsize  set inode container's size. This is used to increase inode",
-	"            container's size in case it is not enough to read all the ",
-	"            resolved results. The max value one can set is 64k with the",
-	"            v1 ioctl. Sizes over 64k will use the v2 ioctl (kernel 4.15+)",
-	"-v          deprecated, alias for global -v option",
+	OPTLINE("-P", "skip the path resolving and print the inodes instead"),
+	OPTLINE("-o", "ignore offsets when matching references (requires v2 ioctl support in the kernel 4.15+)"),
+	OPTLINE("-s bufsize", "set inode container's size. This is used to increase inode "
+		"container's size in case it is not enough to read all the "
+		"resolved results. The max value one can set is 64k with the "
+		"v1 ioctl. Sizes over 64k will use the v2 ioctl (kernel 4.15+)"),
+	OPTLINE("-v", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
 	NULL
@@ -148,7 +158,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 	int ret;
 	int fd;
 	int i;
-	int getpath = 1;
+	bool getpath = true;
 	int bytes_left;
 	struct btrfs_ioctl_logical_ino_args loi = { 0 };
 	struct btrfs_data_container *inodes;
@@ -167,7 +177,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 
 		switch (c) {
 		case 'P':
-			getpath = 0;
+			getpath = false;
 			break;
 		case 'v':
 			bconf_be_verbose();
@@ -212,7 +222,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 		goto out;
 	}
 
-	pr_verbose(1,
+	pr_verbose(LOG_DEBUG,
 "ioctl ret=%d, total_size=%llu, bytes_left=%lu, bytes_missing=%lu, cnt=%d, missed=%d\n",
 		   ret, size, (unsigned long)inodes->bytes_left,
 		   (unsigned long)inodes->bytes_missing, inodes->elem_cnt,
@@ -292,7 +302,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 			if (path_fd != fd)
 				close_file_or_dir(path_fd, dirs);
 		} else {
-			printf("inode %llu offset %llu root %llu\n", inum,
+			pr_verbose(LOG_DEFAULT, "inode %llu offset %llu root %llu\n", inum,
 				offset, root);
 		}
 	}
@@ -334,13 +344,12 @@ static int cmd_inspect_subvolid_resolve(const struct cmd_struct *cmd,
 	ret = btrfs_subvolid_resolve(fd, path, sizeof(path), subvol_id);
 
 	if (ret) {
-		error("resolving subvolid %llu error %d",
-			(unsigned long long)subvol_id, ret);
+		error("resolving subvolid %llu error %d", subvol_id, ret);
 		goto out;
 	}
 
 	path[PATH_MAX - 1] = '\0';
-	printf("%s\n", path);
+	pr_verbose(LOG_DEFAULT, "%s\n", path);
 
 out:
 	close_file_or_dir(fd, dirstream);
@@ -380,7 +389,7 @@ static int cmd_inspect_rootid(const struct cmd_struct *cmd,
 		goto out;
 	}
 
-	printf("%llu\n", (unsigned long long)rootid);
+	pr_verbose(LOG_DEFAULT, "%llu\n", rootid);
 out:
 	close_file_or_dir(fd, dirstream);
 
@@ -393,7 +402,7 @@ static const char* const cmd_inspect_min_dev_size_usage[] = {
 	"Get the minimum size the device can be shrunk to",
 	"",
 	"The device id 1 is used by default.",
-	"--id DEVID   specify the device id to query",
+	OPTLINE("--id DEVID", "specify the device id to query"),
 	NULL
 };
 
@@ -628,7 +637,7 @@ static int print_min_dev_size(int fd, u64 devid)
 	}
 
 	adjust_dev_min_size(&extents, &holes, &min_size);
-	printf("%llu bytes (%s)\n", min_size, pretty_size(min_size));
+	pr_verbose(LOG_DEFAULT, "%llu bytes (%s)\n", min_size, pretty_size(min_size));
 	ret = 0;
 out:
 	free_dev_extent_list(&extents);
@@ -648,7 +657,7 @@ static int cmd_inspect_min_dev_size(const struct cmd_struct *cmd,
 	optind = 0;
 	while (1) {
 		int c;
-		enum { GETOPT_VAL_DEVID = 256 };
+		enum { GETOPT_VAL_DEVID = GETOPT_VAL_FIRST };
 		static const struct option long_options[] = {
 			{ "id", required_argument, NULL, GETOPT_VAL_DEVID },
 			{NULL, 0, NULL, 0}
@@ -682,6 +691,838 @@ out:
 }
 static DEFINE_SIMPLE_COMMAND(inspect_min_dev_size, "min-dev-size");
 
+#if EXPERIMENTAL
+
+static const char * const cmd_inspect_list_chunks_usage[] = {
+	"btrfs inspect-internal list-chunks [options] <path>",
+	"Show chunks (block groups) layout",
+	"Show chunks (block groups) layout for all devices",
+	"",
+	HELPINFO_UNITS_LONG,
+	OPTLINE("--sort MODE", "sort by the physical or logical chunk start MODE is one of pstart or lstart (default: pstart)"),
+	OPTLINE("--usage", "show usage per block group (note: this can be slow)"),
+	OPTLINE("--no-usage", "don't show usage per block group"),
+	OPTLINE("--empty", "show empty space between block groups"),
+	OPTLINE("--no-empty", "do not show empty space between block groups"),
+	NULL
+};
+
+enum {
+	CHUNK_SORT_PSTART,
+	CHUNK_SORT_LSTART,
+	CHUNK_SORT_DEFAULT = CHUNK_SORT_PSTART
+};
+
+struct list_chunks_entry {
+	u64 devid;
+	u64 start;
+	u64 lstart;
+	u64 length;
+	u64 flags;
+	u64 age;
+	u64 used;
+	u32 pnumber;
+};
+
+struct list_chunks_ctx {
+	unsigned length;
+	unsigned size;
+	struct list_chunks_entry *stats;
+};
+
+static int cmp_cse_devid_start(const void *va, const void *vb)
+{
+	const struct list_chunks_entry *a = va;
+	const struct list_chunks_entry *b = vb;
+
+	if (a->devid < b->devid)
+		return -1;
+	if (a->devid > b->devid)
+		return 1;
+
+	if (a->start < b->start)
+		return -1;
+	if (a->start == b->start) {
+		error(
+	"chunks start on same offset in the same device: devid %llu start %llu",
+		    (unsigned long long)a->devid, (unsigned long long)a->start);
+		return 0;
+	}
+	return 1;
+}
+
+static int cmp_cse_devid_lstart(const void *va, const void *vb)
+{
+	const struct list_chunks_entry *a = va;
+	const struct list_chunks_entry *b = vb;
+
+	if (a->devid < b->devid)
+		return -1;
+	if (a->devid > b->devid)
+		return 1;
+
+	if (a->lstart < b->lstart)
+		return -1;
+	if (a->lstart == b->lstart) {
+		error(
+"chunks logically start on same offset in the same device: devid %llu start %llu",
+		    (unsigned long long)a->devid, (unsigned long long)a->lstart);
+		return 0;
+	}
+	return 1;
+}
+
+static int print_list_chunks(struct list_chunks_ctx *ctx, unsigned sort_mode,
+			     unsigned unit_mode, bool with_usage, bool with_empty)
+{
+	u64 devid;
+	struct list_chunks_entry e;
+	struct string_table *table;
+	int i;
+	int chidx;
+	u64 lastend;
+	u64 age;
+	u32 gaps;
+	u32 tabidx;
+
+	/*
+	 * Chunks are sorted logically as found by the ioctl, we need to sort
+	 * them once to find the physical ordering. This is the default mode.
+	 */
+	qsort(ctx->stats, ctx->length, sizeof(ctx->stats[0]), cmp_cse_devid_start);
+	devid = 0;
+	age = 0;
+	gaps = 0;
+	lastend = 0;
+	for (i = 0; i < ctx->length; i++) {
+		e = ctx->stats[i];
+		if (e.devid != devid) {
+			devid = e.devid;
+			age = 0;
+		}
+		ctx->stats[i].pnumber = age;
+		age++;
+		if (with_empty && sort_mode == CHUNK_SORT_PSTART && e.start != lastend)
+			gaps++;
+		lastend = e.start + e.length;
+	}
+
+	if (sort_mode == CHUNK_SORT_LSTART)
+		qsort(ctx->stats, ctx->length, sizeof(ctx->stats[0]),
+				cmp_cse_devid_lstart);
+
+	/* Optional usage, two rows for header and separator, gaps */
+	table = table_create(7 + (int)with_usage, 2 + ctx->length + gaps);
+	if (!table) {
+		error_msg(ERROR_MSG_MEMORY, NULL);
+		return 1;
+	}
+	devid = 0;
+	tabidx = 0;
+	chidx = 1;
+	for (i = 0; i < ctx->length; i++) {
+		e = ctx->stats[i];
+		/* TODO: print header and devid */
+		if (e.devid != devid) {
+			int j;
+
+			devid = e.devid;
+			table_printf(table, 0, tabidx, ">PNumber");
+			table_printf(table, 1, tabidx, ">Type");
+			table_printf(table, 2, tabidx, ">PStart");
+			table_printf(table, 3, tabidx, ">Length");
+			table_printf(table, 4, tabidx, ">PEnd");
+			table_printf(table, 5, tabidx, ">Age");
+			table_printf(table, 6, tabidx, ">LStart");
+			if (with_usage) {
+				table_printf(table, 7, tabidx, ">Usage%%");
+				table_printf(table, 7, tabidx + 1, "*-");
+			}
+			for (j = 0; j < 7; j++)
+				table_printf(table, j, tabidx + 1, "*-");
+
+			chidx = 1;
+			lastend = 0;
+			tabidx += 2;
+		}
+		if (with_empty && sort_mode == CHUNK_SORT_PSTART && e.start != lastend) {
+			table_printf(table, 0, tabidx, ">-");
+			table_printf(table, 1, tabidx, ">%s", "empty");
+			table_printf(table, 2, tabidx, ">-");
+			table_printf(table, 3, tabidx, ">%s",
+				pretty_size_mode(e.start - lastend, unit_mode));
+			table_printf(table, 4, tabidx, ">-");
+			table_printf(table, 5, tabidx, ">-");
+			table_printf(table, 6, tabidx, ">-");
+			if (with_usage)
+				table_printf(table, 7, tabidx, ">-");
+			tabidx++;
+		}
+
+		table_printf(table, 0, tabidx, ">%llu", chidx++);
+		table_printf(table, 1, tabidx, ">%10s/%-6s",
+				btrfs_group_type_str(e.flags),
+				btrfs_group_profile_str(e.flags));
+		table_printf(table, 2, tabidx, ">%s", pretty_size_mode(e.start, unit_mode));
+		table_printf(table, 3, tabidx, ">%s", pretty_size_mode(e.length, unit_mode));
+		table_printf(table, 4, tabidx, ">%s", pretty_size_mode(e.start + e.length, unit_mode));
+		table_printf(table, 5, tabidx, ">%llu", e.age);
+		table_printf(table, 6, tabidx, ">%s", pretty_size_mode(e.lstart, unit_mode));
+		if (with_usage)
+			table_printf(table, 7, tabidx, ">%6.2f",
+					(float)e.used / e.length * 100);
+		lastend = e.start + e.length;
+		tabidx++;
+	}
+	table_dump(table);
+	table_free(table);
+
+	return 0;
+}
+
+static u64 fill_usage(int fd, u64 lstart)
+{
+	struct btrfs_ioctl_search_args args;
+	struct btrfs_ioctl_search_key *sk = &args.key;
+	struct btrfs_ioctl_search_header sh;
+	struct btrfs_block_group_item *item;
+	int ret;
+
+	memset(&args, 0, sizeof(args));
+	sk->tree_id = BTRFS_EXTENT_TREE_OBJECTID;
+	sk->min_objectid = lstart;
+	sk->max_objectid = lstart;
+	sk->min_type = BTRFS_BLOCK_GROUP_ITEM_KEY;
+	sk->max_type = BTRFS_BLOCK_GROUP_ITEM_KEY;
+	sk->min_offset = 0;
+	sk->max_offset = (u64)-1;
+	sk->max_transid = (u64)-1;
+	sk->nr_items = 1;
+
+	ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
+	if (ret < 0) {
+		error("cannot perform the search: %m");
+		return 1;
+	}
+	if (sk->nr_items == 0) {
+		warning("blockgroup %llu not found", lstart);
+		return 0;
+	}
+	if (sk->nr_items > 1)
+		warning("found more than one blockgroup %llu", lstart);
+
+	memcpy(&sh, args.buf, sizeof(sh));
+	item = (struct btrfs_block_group_item*)(args.buf + sizeof(sh));
+
+	return item->used;
+}
+
+static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
+				   int argc, char **argv)
+{
+	struct btrfs_ioctl_search_args args;
+	struct btrfs_ioctl_search_key *sk = &args.key;
+	struct btrfs_ioctl_search_header sh;
+	unsigned long off = 0;
+	u64 *age = NULL;
+	unsigned age_size = 128;
+	int ret;
+	int fd;
+	int i;
+	int e;
+	DIR *dirstream = NULL;
+	unsigned unit_mode;
+	unsigned sort_mode = 0;
+	bool with_usage = true;
+	bool with_empty = true;
+	const char *path;
+	struct list_chunks_ctx ctx = {
+		.length = 0,
+		.size = 1024,
+		.stats = NULL
+	};
+
+	unit_mode = get_unit_mode_from_arg(&argc, argv, 0);
+
+	while (1) {
+		int c;
+		enum { GETOPT_VAL_SORT = GETOPT_VAL_FIRST,
+		       GETOPT_VAL_USAGE, GETOPT_VAL_NO_USAGE,
+		       GETOPT_VAL_EMPTY, GETOPT_VAL_NO_EMPTY
+		};
+		static const struct option long_options[] = {
+			{"sort", required_argument, NULL, GETOPT_VAL_SORT },
+			{"usage", no_argument, NULL, GETOPT_VAL_USAGE },
+			{"no-usage", no_argument, NULL, GETOPT_VAL_NO_USAGE },
+			{"empty", no_argument, NULL, GETOPT_VAL_EMPTY },
+			{"no-empty", no_argument, NULL, GETOPT_VAL_NO_EMPTY },
+			{NULL, 0, NULL, 0}
+		};
+
+		c = getopt_long(argc, argv, "", long_options, NULL);
+		if (c < 0)
+			break;
+
+		switch (c) {
+		case GETOPT_VAL_SORT:
+			if (strcmp(optarg, "pstart") == 0) {
+				sort_mode = CHUNK_SORT_PSTART;
+			} else if (strcmp(optarg, "lstart") == 0) {
+				sort_mode = CHUNK_SORT_LSTART;
+			} else {
+				error("unknown sort mode: %s", optarg);
+				exit(1);
+			}
+			break;
+		case GETOPT_VAL_USAGE:
+		case GETOPT_VAL_NO_USAGE:
+			with_usage = (c == GETOPT_VAL_USAGE);
+			break;
+		case GETOPT_VAL_EMPTY:
+		case GETOPT_VAL_NO_EMPTY:
+			with_empty = (c == GETOPT_VAL_EMPTY);
+			break;
+		default:
+			usage_unknown_option(cmd, argv);
+		}
+	}
+
+	if (check_argc_exact(argc - optind, 1))
+		return 1;
+
+	ctx.stats = calloc(ctx.size, sizeof(ctx.stats[0]));
+	if (!ctx.stats) {
+		ret = 1;
+		error_msg(ERROR_MSG_MEMORY, NULL);
+		goto out_nomem;
+	}
+
+	path = argv[optind];
+
+	fd = open_file_or_dir(path, &dirstream);
+	if (fd < 0) {
+	        error("cannot access '%s': %m", path);
+		return 1;
+	}
+
+	memset(&args, 0, sizeof(args));
+	sk->tree_id = BTRFS_CHUNK_TREE_OBJECTID;
+	sk->min_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
+	sk->max_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
+	sk->min_type = BTRFS_CHUNK_ITEM_KEY;
+	sk->max_type = BTRFS_CHUNK_ITEM_KEY;
+	sk->max_offset = (u64)-1;
+	sk->max_transid = (u64)-1;
+	age = calloc(age_size, sizeof(u64));
+	if (!age) {
+		ret = 1;
+		error_msg(ERROR_MSG_MEMORY, NULL);
+		goto out_nomem;
+	}
+
+	while (1) {
+		sk->nr_items = 1;
+		ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
+		e = errno;
+		if (ret < 0) {
+			error("cannot perform the search: %s", strerror(e));
+			return 1;
+		}
+		if (sk->nr_items == 0)
+			break;
+
+		off = 0;
+		for (i = 0; i < sk->nr_items; i++) {
+			struct btrfs_chunk *item;
+			struct btrfs_stripe *stripes;
+			int sidx;
+			u64 used = (u64)-1;
+
+			memcpy(&sh, args.buf + off, sizeof(sh));
+			off += sizeof(sh);
+			item = (struct btrfs_chunk*)(args.buf + off);
+			off += sh.len;
+
+			stripes = &item->stripe;
+			for (sidx = 0; sidx < item->num_stripes; sidx++) {
+				struct list_chunks_entry *e;
+				u64 devid;
+
+				e = &ctx.stats[ctx.length];
+				devid = stripes[sidx].devid;
+				e->devid = devid;
+				e->start = stripes[sidx].offset;
+				e->lstart = sh.offset;
+				e->length = item->length;
+				e->flags = item->type;
+				e->pnumber = -1;
+				while (devid > age_size) {
+					u64 *tmp;
+					unsigned old_size = age_size;
+
+					age_size += 128;
+					tmp = calloc(age_size, sizeof(u64));
+					if (!tmp) {
+						ret = 1;
+						error_msg(ERROR_MSG_MEMORY, NULL);
+						goto out_nomem;
+					}
+					memcpy(tmp, age, sizeof(u64) * old_size);
+					age = tmp;
+				}
+				e->age = age[devid]++;
+				if (with_usage) {
+					if (used == (u64)-1)
+						used = fill_usage(fd, sh.offset);
+					e->used = used;
+				} else {
+					e->used = 0;
+				}
+
+				ctx.length++;
+
+				if (ctx.length == ctx.size) {
+					ctx.size += 1024;
+					ctx.stats = realloc(ctx.stats, ctx.size
+						* sizeof(ctx.stats[0]));
+					if (!ctx.stats) {
+						ret = 1;
+						error_msg(ERROR_MSG_MEMORY, NULL);
+						goto out_nomem;
+					}
+				}
+			}
+
+			sk->min_objectid = sh.objectid;
+			sk->min_type = sh.type;
+			sk->min_offset = sh.offset;
+		}
+		if (sk->min_offset < (u64)-1)
+			sk->min_offset++;
+		else
+			break;
+	}
+
+	ret = print_list_chunks(&ctx, sort_mode, unit_mode, with_usage, with_empty);
+	close_file_or_dir(fd, dirstream);
+
+out_nomem:
+	free(ctx.stats);
+	free(age);
+
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(inspect_list_chunks, "list-chunks");
+
+#endif
+
+static const char * const cmd_inspect_map_swapfile_usage[] = {
+	"btrfs inspect-internal map-swapfile <file>",
+	"Print physical offset of first block and resume offset if file is suitable as swapfile",
+	"Print physical offset of first block and resume offset if file is suitable as swapfile.",
+	"All conditions of a swapfile extents are verified if they could pass kernel tests.",
+	"Use the value of resume offset for /sys/power/resume_offset, this depends on the",
+	"page size that's detected on this system.",
+	"",
+	OPTLINE("-r|--resume-offset", "print only the value of resume_offset"),
+	NULL
+};
+
+struct stripe {
+	u64 devid;
+	u64 offset;
+};
+
+struct chunk {
+	u64 offset;
+	u64 length;
+	u64 stripe_len;
+	u64 type;
+	struct stripe *stripes;
+	size_t num_stripes;
+	size_t sub_stripes;
+};
+
+struct chunk_tree {
+	struct chunk *chunks;
+	size_t num_chunks;
+};
+
+static int read_chunk_tree(int fd, struct chunk **chunks, size_t *num_chunks)
+{
+	struct btrfs_ioctl_search_args search = {
+		.key = {
+			.tree_id = BTRFS_CHUNK_TREE_OBJECTID,
+			.min_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID,
+			.min_type = BTRFS_CHUNK_ITEM_KEY,
+			.min_offset = 0,
+			.max_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID,
+			.max_type = BTRFS_CHUNK_ITEM_KEY,
+			.max_offset = (u64)-1,
+			.min_transid = 0,
+			.max_transid = (u64)-1,
+			.nr_items = 0,
+		},
+	};
+	size_t items_pos = 0, buf_off = 0;
+	size_t capacity = 0;
+	int ret;
+
+	*chunks = NULL;
+	*num_chunks = 0;
+	for (;;) {
+		const struct btrfs_ioctl_search_header *header;
+		const struct btrfs_chunk *item;
+		struct chunk *chunk;
+		size_t i;
+
+		if (items_pos >= search.key.nr_items) {
+			search.key.nr_items = 4096;
+			ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &search);
+			if (ret == -1) {
+				perror("BTRFS_IOC_TREE_SEARCH");
+				return -1;
+			}
+			items_pos = 0;
+			buf_off = 0;
+
+			if (search.key.nr_items == 0)
+				break;
+		}
+
+		header = (struct btrfs_ioctl_search_header *)(search.buf + buf_off);
+		if (header->type != BTRFS_CHUNK_ITEM_KEY)
+			goto next;
+
+		item = (void *)(header + 1);
+		if (*num_chunks >= capacity) {
+			struct chunk *tmp;
+
+			if (capacity == 0)
+				capacity = 1;
+			else
+				capacity *= 2;
+			tmp = realloc(*chunks, capacity * sizeof(**chunks));
+			if (!tmp) {
+				perror("realloc");
+				return -1;
+			}
+			*chunks = tmp;
+		}
+
+		chunk = &(*chunks)[*num_chunks];
+		chunk->offset = header->offset;
+		chunk->length = le64_to_cpu(item->length);
+		chunk->stripe_len = le64_to_cpu(item->stripe_len);
+		chunk->type = le64_to_cpu(item->type);
+		chunk->num_stripes = le16_to_cpu(item->num_stripes);
+		chunk->sub_stripes = le16_to_cpu(item->sub_stripes);
+		chunk->stripes = calloc(chunk->num_stripes,
+					sizeof(*chunk->stripes));
+		if (!chunk->stripes) {
+			perror("calloc");
+			return -1;
+		}
+		(*num_chunks)++;
+
+		for (i = 0; i < chunk->num_stripes; i++) {
+			const struct btrfs_stripe *stripe;
+
+			stripe = &item->stripe + i;
+			chunk->stripes[i].devid = le64_to_cpu(stripe->devid);
+			chunk->stripes[i].offset = le64_to_cpu(stripe->offset);
+		}
+
+next:
+		items_pos++;
+		buf_off += sizeof(*header) + header->len;
+		if (header->offset == (u64)-1)
+			break;
+		else
+			search.key.min_offset = header->offset + 1;
+	}
+	return 0;
+}
+
+static struct chunk *find_chunk(struct chunk *chunks, size_t num_chunks, u64 logical)
+{
+	size_t lo, hi;
+
+	if (!num_chunks)
+		return NULL;
+
+	lo = 0;
+	hi = num_chunks - 1;
+	while (lo <= hi) {
+		size_t mid = lo + (hi - lo) / 2;
+
+		if (logical < chunks[mid].offset)
+			hi = mid - 1;
+		else if (logical >= chunks[mid].offset + chunks[mid].length)
+			lo = mid + 1;
+		else
+			return &chunks[mid];
+	}
+	return NULL;
+}
+
+static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
+			      u64 *physical_start)
+{
+	struct btrfs_ioctl_search_args search = {
+		.key = {
+			.min_type = BTRFS_EXTENT_DATA_KEY,
+			.max_type = BTRFS_EXTENT_DATA_KEY,
+			.min_offset = 0,
+			.max_offset = (u64)-1,
+			.min_transid = 0,
+			.max_transid = (u64)-1,
+			.nr_items = 0,
+		},
+	};
+	struct btrfs_ioctl_ino_lookup_args args = {
+		.treeid = 0,
+		.objectid = BTRFS_FIRST_FREE_OBJECTID,
+	};
+	size_t items_pos = 0, buf_off = 0;
+	struct stat st;
+	int ret;
+	u64 valid_devid = (u64)-1;
+
+	*physical_start = (u64)-1;
+
+	ret = fstat(fd, &st);
+	if (ret == -1) {
+		error("cannot fstat file: %m");
+		return -errno;
+	}
+	if (!S_ISREG(st.st_mode)) {
+		error("not a regular file");
+		return -EINVAL;
+	}
+
+	ret = ioctl(fd, BTRFS_IOC_INO_LOOKUP, &args);
+	if (ret == -1) {
+		error("cannot lookup parent subvolume: %m");
+		return -errno;
+	}
+
+	search.key.tree_id = args.treeid;
+	search.key.min_objectid = search.key.max_objectid = st.st_ino;
+	for (;;) {
+		const struct btrfs_ioctl_search_header *header;
+		const struct btrfs_file_extent_item *item;
+		u8 type;
+		u64 logical_offset = 0;
+		struct chunk *chunk = NULL;
+
+		if (items_pos >= search.key.nr_items) {
+			search.key.nr_items = 4096;
+			ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &search);
+			if (ret == -1) {
+				error("cannot search tree: %m");
+				return -errno;
+			}
+			items_pos = 0;
+			buf_off = 0;
+
+			if (search.key.nr_items == 0)
+				break;
+		}
+
+		header = (struct btrfs_ioctl_search_header *)(search.buf + buf_off);
+		if (header->type != BTRFS_EXTENT_DATA_KEY)
+			goto next;
+
+		item = (void *)(header + 1);
+
+		type = item->type;
+		if (type == BTRFS_FILE_EXTENT_REG ||
+		    type == BTRFS_FILE_EXTENT_PREALLOC) {
+			logical_offset = le64_to_cpu(item->disk_bytenr);
+			if (logical_offset) {
+				/* Regular extent */
+				chunk = find_chunk(chunks, num_chunks, logical_offset);
+				if (!chunk) {
+					error("cannot find chunk containing %llu",
+						(unsigned long long)logical_offset);
+					return -ENOENT;
+				}
+			} else {
+				error("file with holes");
+				ret = -EINVAL;
+				goto out;
+			}
+		} else {
+			if (type == BTRFS_FILE_EXTENT_INLINE)
+				error("file with inline extent");
+			else
+				error("unknown extent type: %u", type);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (item->compression != 0) {
+			error("compressed extent: %u", item->compression);
+			ret = -EINVAL;
+			goto out;
+		}
+		if (item->encryption != 0) {
+			error("file with encryption: %u", item->encryption);
+			ret = -EINVAL;
+			goto out;
+		}
+		if (item->other_encoding != 0) {
+			error("file with other_encoding: %u", le16_to_cpu(item->other_encoding));
+			ret = -EINVAL;
+			goto out;
+		}
+
+		/* Only single profile */
+		if ((chunk->type & BTRFS_BLOCK_GROUP_PROFILE_MASK) != 0) {
+			error("unsupported block group profile: %llu",
+				(unsigned long long)(chunk->type & BTRFS_BLOCK_GROUP_PROFILE_MASK));
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (valid_devid == (u64)-1) {
+			valid_devid = chunk->stripes[0].devid;
+		} else {
+			if (valid_devid != chunk->stripes[0].devid) {
+				error("file stored on multiple devices");
+				break;
+			}
+		}
+		if (*physical_start == (u64)-1) {
+			u64 offset;
+			u64 stripe_nr;
+			u64 stripe_offset;
+			u64 stripe_index;
+
+			offset = logical_offset - chunk->offset;
+			stripe_nr = offset / chunk->stripe_len;
+			stripe_offset = offset - stripe_nr * chunk->stripe_len;
+
+			stripe_index = stripe_nr % chunk->num_stripes;
+			stripe_nr /= chunk->num_stripes;
+
+			*physical_start = chunk->stripes[stripe_index].offset +
+				stripe_nr * chunk->stripe_len + stripe_offset;
+		}
+
+next:
+		items_pos++;
+		buf_off += sizeof(*header) + header->len;
+		if (header->offset == (u64)-1)
+			break;
+		else
+			search.key.min_offset = header->offset + 1;
+	}
+	return 0;
+
+out:
+	return ret;
+}
+
+static int cmd_inspect_map_swapfile(const struct cmd_struct *cmd,
+				    int argc, char **argv)
+{
+	int fd, ret;
+	struct chunk *chunks = NULL;
+	size_t num_chunks = 0, i;
+	struct statfs stfs;
+	long flags;
+	u64 physical_start;
+	long page_size = sysconf(_SC_PAGESIZE);
+	bool resume_offset = false;
+
+	optind = 0;
+	while (1) {
+		static const struct option long_options[] = {
+			{ "resume-offset", no_argument, NULL, 'r' },
+			{ NULL, 0, NULL, 0 }
+		};
+		int c;
+
+		c = getopt_long(argc, argv, "r", long_options, NULL);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'r':
+			resume_offset = true;
+			break;
+		default:
+			usage_unknown_option(cmd, argv);
+		}
+	}
+	if (check_argc_exact(argc - optind, 1))
+		return 1;
+
+	fd = open(argv[optind], O_RDONLY);
+	if (fd == -1) {
+		error("cannot open %s: %m", argv[optind]);
+		ret = 1;
+		goto out;
+	}
+
+	/* Quick checks before extent enumeration. */
+	ret = fstatfs(fd, &stfs);
+	if (ret == -1) {
+		error("cannot statfs file: %m");
+		ret = 1;
+		goto out;
+	}
+	if (stfs.f_type != BTRFS_SUPER_MAGIC) {
+		error("not a file on BTRFS");
+		ret = 1;
+		goto out;
+	}
+
+	ret = ioctl(fd, FS_IOC_GETFLAGS, &flags);
+	if (ret == -1) {
+		error("cannot verify file flags/attributes: %m");
+		ret = 1;
+		goto out;
+	}
+	if (!(flags & FS_NOCOW_FL)) {
+		error("file is not NOCOW");
+		ret = 1;
+		goto out;
+	}
+	if (flags & FS_COMPR_FL) {
+		error("file with COMP attribute");
+		ret = 1;
+		goto out;
+	}
+
+	ret = read_chunk_tree(fd, &chunks, &num_chunks);
+	if (ret == -1)
+		goto out;
+
+	ret = map_physical_start(fd, chunks, num_chunks, &physical_start);
+	if (ret == 0) {
+		if (resume_offset) {
+			printf("%llu\n", physical_start / page_size);
+		} else {
+			pr_verbose(LOG_DEFAULT, "Physical start: %12llu\n",
+					physical_start);
+			pr_verbose(LOG_DEFAULT, "Resume offset:  %12llu\n",
+					physical_start / page_size);
+		}
+	}
+
+out:
+	for (i = 0; i < num_chunks; i++)
+		free(chunks[i].stripes);
+
+	free(chunks);
+	close(fd);
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(inspect_map_swapfile, "map-swapfile");
+
 static const char inspect_cmd_group_info[] =
 "query various internal information";
 
@@ -691,10 +1532,14 @@ static const struct cmd_group inspect_cmd_group = {
 		&cmd_struct_inspect_logical_resolve,
 		&cmd_struct_inspect_subvolid_resolve,
 		&cmd_struct_inspect_rootid,
+		&cmd_struct_inspect_map_swapfile,
 		&cmd_struct_inspect_min_dev_size,
 		&cmd_struct_inspect_dump_tree,
 		&cmd_struct_inspect_dump_super,
 		&cmd_struct_inspect_tree_stats,
+#if EXPERIMENTAL
+		&cmd_struct_inspect_list_chunks,
+#endif
 		NULL
 	}
 };

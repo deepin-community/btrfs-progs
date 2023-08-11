@@ -130,7 +130,7 @@ int handle_command_group(const struct cmd_struct *cmd, int argc, char **argv);
 extern const char * const generic_cmd_help_usage[];
 
 DECLARE_COMMAND(subvolume);
-DECLARE_COMMAND(subvol_list);
+DECLARE_COMMAND(subvolume_list);
 DECLARE_COMMAND(filesystem);
 DECLARE_COMMAND(filesystem_du);
 DECLARE_COMMAND(filesystem_usage);
@@ -145,6 +145,7 @@ DECLARE_COMMAND(inspect_tree_stats);
 DECLARE_COMMAND(property);
 DECLARE_COMMAND(send);
 DECLARE_COMMAND(receive);
+DECLARE_COMMAND(reflink);
 DECLARE_COMMAND(quota);
 DECLARE_COMMAND(qgroup);
 DECLARE_COMMAND(replace);

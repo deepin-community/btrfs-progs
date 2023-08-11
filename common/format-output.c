@@ -16,6 +16,11 @@
 
 #include "kerncompat.h"
 #include <stdio.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include <uuid/uuid.h>
 #include "common/defs.h"
 #include "common/format-output.h"
@@ -35,6 +40,48 @@ static void print_uuid(const u8 *uuid)
 	}
 }
 
+static void print_escaped(const char *str)
+{
+	while (*str) {
+		switch (*str) {
+		case '\b':			/* 0x08 */
+			putchar('\\');
+			putchar('b');
+			break;
+		case '\t':			/* 0x09 */
+			putchar('\\');
+			putchar('t');
+			break;
+		case '\n':			/* 0x0a */
+			putchar('\\');
+			putchar('n');
+			break;
+		case '\f':			/* 0x0c */
+			putchar('\\');
+			putchar('f');
+			break;
+		case '\r':			/* 0x0d */
+			putchar('\\');
+			putchar('r');
+			break;
+		/* Other control characters from 0 .. 31 */
+		case '\v':			/* 0x0b */
+		case 0x00 ... 0x07:
+		case 0x0e ... 0x1f:
+			printf("\\u%04x", *str);
+			break;
+		/* '/' (solidus) not escaped */
+		case '"':
+		case '\\':
+			putchar('\\');
+			fallthrough;
+		default:
+			putchar(*str);
+		}
+		str++;
+	}
+}
+
 static void fmt_indent1(int indent)
 {
 	while (indent--)
@@ -51,15 +98,14 @@ static void fmt_indent2(int indent)
 
 static void fmt_error(struct format_ctx *fctx)
 {
-	printf("INTERNAL ERROR: formatting json: depth=%d\n", fctx->depth);
+	internal_error("formatting json: depth=%d", fctx->depth);
 	exit(1);
 }
 
 static void fmt_inc_depth(struct format_ctx *fctx)
 {
 	if (fctx->depth >= JSON_NESTING_LIMIT - 1) {
-		printf("INTERNAL ERROR: nesting too deep, limit %d\n",
-				JSON_NESTING_LIMIT);
+		internal_error("nesting too deep, limit %d", JSON_NESTING_LIMIT);
 		exit(1);
 	}
 	fctx->depth++;
@@ -68,7 +114,7 @@ static void fmt_inc_depth(struct format_ctx *fctx)
 static void fmt_dec_depth(struct format_ctx *fctx)
 {
 	if (fctx->depth < 1) {
-		printf("INTERNAL ERROR: nesting below first level\n");
+		internal_error("nesting below first level");
 		exit(1);
 	}
 	fctx->depth--;
@@ -239,7 +285,7 @@ void fmt_print(struct format_ctx *fctx, const char* key, ...)
 		row++;
 	}
 	if (!found) {
-		printf("INTERNAL ERROR: unknown key: %s\n", key);
+		internal_error("unknown key: %s", key);
 		exit(1);
 	}
 
@@ -268,7 +314,8 @@ void fmt_print(struct format_ctx *fctx, const char* key, ...)
 		} else {
 			/* Simple key/values */
 			fmt_separator(fctx);
-			printf("\"%s\": ", row->out_json);
+			if (row->out_json)
+				printf("\"%s\": ", row->out_json);
 		}
 	}
 
@@ -276,6 +323,10 @@ void fmt_print(struct format_ctx *fctx, const char* key, ...)
 
 	if (row->fmt[0] == '%') {
 		vprintf(row->fmt, args);
+	} else if (strcmp(row->fmt, "str") == 0) {
+		const char *str = va_arg(args, const char *);
+
+		print_escaped(str);
 	} else if (strcmp(row->fmt, "uuid") == 0) {
 		const u8 *uuid = va_arg(args, const u8*);
 
@@ -296,10 +347,14 @@ void fmt_print(struct format_ctx *fctx, const char* key, ...)
 	} else if (strcmp(row->fmt, "list") == 0) {
 	} else if (strcmp(row->fmt, "map") == 0) {
 	} else if (strcmp(row->fmt, "qgroupid") == 0) {
-		const u64 level = va_arg(args, u64);
+		/*
+		 * Level is u16 but promoted to int when it's a vararg, callers
+		 * should add explicit cast.
+		 */
+		const int level = va_arg(args, int);
 		const u64 id = va_arg(args, u64);
 
-		printf("%llu/%llu", level, id);
+		printf("%hu/%llu", level, id);
 	} else if (strcmp(row->fmt, "size-or-none") == 0) {
 		const u64 size = va_arg(args, u64);
 		const unsigned int unit_mode = va_arg(args, unsigned int);
@@ -314,7 +369,7 @@ void fmt_print(struct format_ctx *fctx, const char* key, ...)
 
 		printf("%s", pretty_size_mode(size, unit_mode));
 	} else {
-		printf("INTERNAL ERROR: unknown format %s\n", row->fmt);
+		internal_error("unknown format %s", row->fmt);
 	}
 
 	fmt_end_value(fctx, row);

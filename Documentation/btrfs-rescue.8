@@ -1,164 +1,151 @@
-'\" t
-.\"     Title: btrfs-rescue
-.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 11/05/2021
-.\"    Manual: Btrfs Manual
-.\"    Source: Btrfs v5.15
-.\"  Language: English
-.\"
-.TH "BTRFS\-RESCUE" "8" "11/05/2021" "Btrfs v5\&.15" "Btrfs Manual"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
-.SH "NAME"
-btrfs-rescue \- Recover a damaged btrfs filesystem
-.SH "SYNOPSIS"
+.\" Man page generated from reStructuredText.
+.
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.TH "BTRFS-RESCUE" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.SH NAME
+btrfs-rescue \- recover a damaged btrfs filesystem
+.SH SYNOPSIS
 .sp
-\fBbtrfs rescue\fR \fI<subcommand>\fR \fI<args>\fR
-.SH "DESCRIPTION"
+\fBbtrfs rescue\fP <subcommand> <args>
+.SH DESCRIPTION
 .sp
-\fBbtrfs rescue\fR is used to try to recover a damaged btrfs filesystem\&.
-.SH "SUBCOMMAND"
-.PP
-\fBchunk\-recover\fR [options] \fI<device>\fR
-.RS 4
+\fBbtrfs rescue\fP is used to try to recover a damaged btrfs filesystem.
+.SH SUBCOMMAND
+.INDENT 0.0
+.TP
+.B chunk\-recover [options] <device>
 Recover the chunk tree by scanning the devices
 .sp
-\fBOptions\fR
-.PP
-\-y
-.RS 4
-assume an answer of
-\fIyes\fR
-to all questions\&.
-.RE
-.PP
-\-h
-.RS 4
-help\&.
-.RE
-.PP
-\-v
-.RS 4
-(deprecated) alias for global
-\fI\-v\fR
-option
-.RE
-.RE
-.if n \{\
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B  \-y
+assume an answer of \fIyes\fP to all questions.
+.TP
+.B  \-h
+help.
+.TP
+.B  \-v
+(deprecated) alias for global \fI\-v\fP option
+.UNINDENT
+.UNINDENT
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-.sp
-Since \fBchunk\-recover\fR will scan the whole device, it will be \fBVERY\fR slow especially executed on a large device\&.
-.sp .5v
-.RE
-.PP
-\fBfix\-device\-size\fR \fI<device>\fR
-.RS 4
+\fBNOTE:\fP
+.INDENT 0.0
+.INDENT 3.5
+Since \fBchunk\-recover\fP will scan the whole device, it will be very
+slow especially executed on a large device.
+.UNINDENT
+.UNINDENT
+.INDENT 0.0
+.TP
+.B fix\-device\-size <device>
 fix device size and super block total bytes values that are do not match
 .sp
-Kernel 4\&.11 starts to check the device size more strictly and this might mismatch the stored value of total bytes\&. See the exact error message below\&. Newer kernel will refuse to mount the filesystem where the values do not match\&. This error is not fatal and can be fixed\&. This command will fix the device size values if possible\&.
+Kernel 4.11 starts to check the device size more strictly and this might
+mismatch the stored value of total bytes. See the exact error message below.
+Newer kernel will refuse to mount the filesystem where the values do not match.
+This error is not fatal and can be fixed.  This command will fix the device
+size values if possible.
+.INDENT 7.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 BTRFS error (device sdb): super_total_bytes 92017859088384 mismatch with fs_devices total_rw_bytes 92017859094528
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
 The mismatch may also exhibit as a kernel warning:
+.INDENT 7.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
-WARNING: CPU: 3 PID: 439 at fs/btrfs/ctree\&.h:1559 btrfs_update_device+0x1c5/0x1d0 [btrfs]
+.ft C
+WARNING: CPU: 3 PID: 439 at fs/btrfs/ctree.h:1559 btrfs_update_device+0x1c5/0x1d0 [btrfs]
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
-.RE
-.PP
-\fBsuper\-recover\fR [options] \fI<device>\fR
-.RS 4
-Recover bad superblocks from good copies\&.
+.UNINDENT
+.UNINDENT
+.TP
+.B clear\-uuid\-tree <device>
+Clear UUID tree, so that kernel can re\-generate it at next read\-write
+mount.
 .sp
-\fBOptions\fR
-.PP
-\-y
-.RS 4
-assume an answer of
-\fIyes\fR
-to all questions\&.
-.RE
-.PP
-\-v
-.RS 4
-(deprecated) alias for global
-\fI\-v\fR
-option
-.RE
-.RE
-.PP
-\fBzero\-log\fR \fI<device>\fR
-.RS 4
+Since kernel v4.16 there are more sanity check performed, and sometimes
+non\-critical trees like UUID tree can cause problems and reject the mount.
+In such case, clearing UUID tree may make the filesystem to be mountable again
+without much risk as it\(aqs built from other trees.
+.TP
+.B super\-recover [options] <device>
+Recover bad superblocks from good copies.
+.sp
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B  \-y
+assume an answer of \fIyes\fP to all questions.
+.TP
+.B  \-v
+(deprecated) alias for global \fI\-v\fP option
+.UNINDENT
+.TP
+.B zero\-log <device>
 clear the filesystem log tree
 .sp
-This command will clear the filesystem log tree\&. This may fix a specific set of problem when the filesystem mount fails due to the log replay\&. See below for sample stacktraces that may show up in system log\&.
+This command will clear the filesystem log tree. This may fix a specific
+set of problem when the filesystem mount fails due to the log replay. See below
+for sample stack traces that may show up in system log.
 .sp
-The common case where this happens was fixed a long time ago, so it is unlikely that you will see this particular problem, but the command is kept around\&.
-.if n \{\
+The common case where this happens was fixed a long time ago,
+so it is unlikely that you will see this particular problem, but the command is
+kept around.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-clearing the log may lead to loss of changes that were made since the last transaction commit\&. This may be up to 30 seconds (default commit period) or less if the commit was implied by other filesystem activity\&.
-.sp .5v
-.RE
-One can determine whether
-\fBzero\-log\fR
-is needed according to the kernel backtrace:
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Clearing the log may lead to loss of changes that were made
+since the last transaction commit. This may be up to 30 seconds
+(default commit period) or less if the commit was implied by
+other filesystem activity.
+.UNINDENT
+.UNINDENT
 .sp
-.if n \{\
-.RS 4
-.\}
+One can determine whether \fBzero\-log\fP is needed according to the kernel
+backtrace:
+.INDENT 7.0
+.INDENT 3.5
+.sp
 .nf
+.ft C
 ? replay_one_dir_item+0xb5/0xb5 [btrfs]
 ? walk_log_tree+0x9c/0x19d [btrfs]
 ? btrfs_read_fs_root_no_radix+0x169/0x1a1 [btrfs]
@@ -166,27 +153,28 @@ is needed according to the kernel backtrace:
 ? replay_one_dir_item+0xb5/0xb5 [btrfs]
 ? btree_read_extent_buffer_pages+0x76/0xbc [btrfs]
 ? open_ctree+0xff6/0x132c [btrfs]
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-If the errors are like above, then
-\fBzero\-log\fR
-should be used to clear the log and the filesystem may be mounted normally again\&. The keywords to look for are
-\fIopen_ctree\fR
-which says that it\(cqs during mount and function names that contain
-\fIreplay\fR,
-\fIrecover\fR
-or
-\fIlog_tree\fR\&.
-.RE
-.SH "EXIT STATUS"
+If the errors are like above, then \fBzero\-log\fP should be used to clear
+the log and the filesystem may be mounted normally again. The keywords to look
+for are \(aqopen_ctree\(aq which says that it\(aqs during mount and function names
+that contain \fIreplay\fP, \fIrecover\fP or \fIlog_tree\fP\&.
+.UNINDENT
+.SH EXIT STATUS
 .sp
-\fBbtrfs rescue\fR returns a zero exit status if it succeeds\&. Non zero is returned in case of failure\&.
-.SH "AVAILABILITY"
+\fBbtrfs rescue\fP returns a zero exit status if it succeeds. Non zero is
+returned in case of failure.
+.SH AVAILABILITY
 .sp
-\fBbtrfs\fR is part of btrfs\-progs\&. Please refer to the btrfs wiki \m[blue]\fBhttp://btrfs\&.wiki\&.kernel\&.org\fR\m[] for further details\&.
-.SH "SEE ALSO"
+\fBbtrfs\fP is part of btrfs\-progs.  Please refer to the documentation at
+\fI\%https://btrfs.readthedocs.io\fP\&.
+.SH SEE ALSO
 .sp
-\fBmkfs\&.btrfs\fR(8), \fBbtrfs\-scrub\fR(8), \fBbtrfs\-check\fR(8)
+\fI\%btrfs\-check(8)\fP,
+\fI\%btrfs\-scrub(8)\fP,
+\fI\%mkfs.btrfs(8)\fP
+.\" Generated by docutils manpage writer.
+.

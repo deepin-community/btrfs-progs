@@ -16,12 +16,14 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
 #include <sys/stat.h>
 #include "kernel-shared/ctree.h"
-#include "common/utils.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/transaction.h"
-#include "kerncompat.h"
+#include "kernel-shared/compression.h"
+#include "kernel-shared/file-item.h"
+#include "common/utils.h"
 
 /*
  * Get the first file extent that covers (part of) the given range
@@ -225,11 +227,11 @@ int btrfs_read_file(struct btrfs_root *root, u64 ino, u64 start, int len,
 	memset(dest, 0, len);
 	while (1) {
 		struct btrfs_file_extent_item *fi;
+		u64 offset = 0;
 		u64 extent_start;
 		u64 extent_len;
 		u64 read_start;
 		u64 read_len;
-		u64 read_len_ret;
 		u64 disk_bytenr;
 
 		leaf = path.nodes[0];
@@ -282,14 +284,16 @@ int btrfs_read_file(struct btrfs_root *root, u64 ino, u64 start, int len,
 
 		disk_bytenr = btrfs_file_extent_disk_bytenr(leaf, fi) +
 			      btrfs_file_extent_offset(leaf, fi);
-		read_len_ret = read_len;
-		ret = read_extent_data(fs_info, dest + read_start - start, disk_bytenr,
-				       &read_len_ret, 0);
-		if (ret < 0)
-			break;
-		/* Short read, something went wrong */
-		if (read_len_ret != read_len)
-			return -EIO;
+		while (offset < read_len) {
+			u64 read_len_ret = read_len - offset;
+
+			ret = read_data_from_disk(fs_info,
+					dest + read_start - start + offset,
+					disk_bytenr + offset, &read_len_ret, 0);
+			if (ret < 0)
+				goto out;
+			offset += read_len_ret;
+		}
 		read += read_len;
 next:
 		ret = btrfs_next_item(root, &path);

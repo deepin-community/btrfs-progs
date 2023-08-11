@@ -1,264 +1,219 @@
-'\" t
-.\"     Title: btrfs-check
-.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 11/05/2021
-.\"    Manual: Btrfs Manual
-.\"    Source: Btrfs v5.15
-.\"  Language: English
-.\"
-.TH "BTRFS\-CHECK" "8" "11/05/2021" "Btrfs v5\&.15" "Btrfs Manual"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
-.SH "NAME"
+.\" Man page generated from reStructuredText.
+.
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.TH "BTRFS-CHECK" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.SH NAME
 btrfs-check \- check or repair a btrfs filesystem
-.SH "SYNOPSIS"
+.SH SYNOPSIS
 .sp
-\fBbtrfs check\fR [options] \fI<device>\fR
-.SH "DESCRIPTION"
+\fBbtrfs check\fP [options] <device>
+.SH DESCRIPTION
 .sp
-The filesystem checker is used to verify structural integrity of a filesystem and attempt to repair it if requested\&. It is recommended to unmount the filesystem prior to running the check, but it is possible to start checking a mounted filesystem (see \fI\-\-force\fR)\&.
+The filesystem checker is used to verify structural integrity of a filesystem
+and attempt to repair it if requested.  It is recommended to unmount the
+filesystem prior to running the check, but it is possible to start checking a
+mounted filesystem (see \fI\-\-force\fP).
 .sp
-By default, \fBbtrfs check\fR will not modify the device but you can reaffirm that by the option \fI\-\-readonly\fR\&.
+By default, \fBbtrfs check\fP will not modify the device but you can reaffirm that
+by the option \fI\-\-readonly\fP\&.
 .sp
-\fBbtrfsck\fR is an alias of \fBbtrfs check\fR command and is now deprecated\&.
-.if n \{\
+\fBbtrfsck\fP is an alias of \fBbtrfs check\fP command and is now deprecated.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBWarning\fR
-.ps -1
-.br
+\fBWARNING:\fP
+.INDENT 0.0
+.INDENT 3.5
+Do not use \fI\-\-repair\fP unless you are advised to do so by a developer
+or an experienced user, and then only after having accepted that no \fIfsck\fP
+successfully repair all types of filesystem corruption. E.g. some other software
+or hardware bugs can fatally damage a volume.
+.UNINDENT
+.UNINDENT
 .sp
-Do not use \fI\-\-repair\fR unless you are advised to do so by a developer or an experienced user, and then only after having accepted that no \fIfsck\fR successfully repair all types of filesystem corruption\&. Eg\&. some other software or hardware bugs can fatally damage a volume\&.
-.sp .5v
-.RE
+The structural integrity check verifies if internal filesystem objects or
+data structures satisfy the constraints, point to the right objects or are
+correctly connected together.
 .sp
-The structural integrity check verifies if internal filesystem objects or data structures satisfy the constraints, point to the right objects or are correctly connected together\&.
+There are several cross checks that can detect wrong reference counts of shared
+extents, backreferences, missing extents of inodes, directory and inode
+connectivity etc.
 .sp
-There are several cross checks that can detect wrong reference counts of shared extents, backreferences, missing extents of inodes, directory and inode connectivity etc\&.
-.sp
-The amount of memory required can be high, depending on the size of the filesystem, similarly the run time\&. Check the modes that can also affect that\&.
-.SH "SAFE OR ADVISORY OPTIONS"
-.PP
-\-b|\-\-backup
-.RS 4
+The amount of memory required can be high, depending on the size of the
+filesystem, similarly the run time. Check the modes that can also affect that.
+.SH SAFE OR ADVISORY OPTIONS
+.INDENT 0.0
+.TP
+.B \-b|\-\-backup
 use the first valid set of backup roots stored in the superblock
 .sp
-This can be combined with
-\fI\-\-super\fR
-if some of the superblocks are damaged\&.
-.RE
-.PP
-\-\-check\-data\-csum
-.RS 4
+This can be combined with \fI\-\-super\fP if some of the superblocks are damaged.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B  \-\-check\-data\-csum
 verify checksums of data blocks
 .sp
 This expects that the filesystem is otherwise OK, and is basically an offline
-\fIscrub\fR
-that does not repair data from spare copies\&.
-.RE
-.PP
-\-\-chunk\-root \fI<bytenr>\fR
-.RS 4
-use the given offset
-\fIbytenr\fR
-for the chunk tree root
-.RE
-.PP
-\-E|\-\-subvol\-extents \fI<subvolid>\fR
-.RS 4
+\fIscrub\fP that does not repair data from spare copies.
+.TP
+.BI \-\-chunk\-root \ <bytenr>
+use the given offset \fIbytenr\fP for the chunk tree root
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-E|\-\-subvol\-extents <subvolid>
 show extent state for the given subvolume
-.RE
-.PP
-\-p|\-\-progress
-.RS 4
+.TP
+.B \-p|\-\-progress
 indicate progress at various checking phases
-.RE
-.PP
-\-Q|\-\-qgroup\-report
-.RS 4
+.TP
+.B \-Q|\-\-qgroup\-report
 verify qgroup accounting and compare against filesystem accounting
-.RE
-.PP
-\-r|\-\-tree\-root \fI<bytenr>\fR
-.RS 4
-use the given offset
-\fIbytenr\fR
-for the tree root
-.RE
-.PP
-\-\-readonly
-.RS 4
-(default) run in read\-only mode, this option exists to calm potential panic when users are going to run the checker
-.RE
-.PP
-\-s|\-\-super \fI<superblock>\fR
-.RS 4
-use \*(Aqsuperblock\(cqth superblock copy, valid values are 0, 1 or 2 if the respective superblock offset is within the device size
+.TP
+.B \-r|\-\-tree\-root <bytenr>
+use the given offset \(aqbytenr\(aq for the tree root
+.UNINDENT
+.INDENT 0.0
+.TP
+.B  \-\-readonly
+(default)
+run in read\-only mode, this option exists to calm potential panic when users
+are going to run the checker
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-s|\-\-super <N>
+use Nth superblock copy, valid values are 0, 1 or 2 if the
+respective superblock offset is within the device size
 .sp
-This can be used to use a different starting point if some of the primary superblock is damaged\&.
-.RE
-.PP
-\-\-clear\-space\-cache v1|v2
-.RS 4
-completely wipe all free space cache of given type
+This can be used to use a different starting point if some of the primary
+superblock is damaged.
+.TP
+.B \-\-clear\-space\-cache v1|v2
+completely remove the free space cache of the given version
 .sp
-For free space cache
-\fIv1\fR, the
-\fIclear_cache\fR
-kernel mount option only rebuilds the free space cache for block groups that are modified while the filesystem is mounted with that option\&. Thus, using this option with
-\fIv1\fR
-makes it possible to actually clear the entire free space cache\&.
-.sp
-For free space cache
-\fIv2\fR, the
-\fIclear_cache\fR
-kernel mount option destroys the entire free space cache\&. This option, with
-\fIv2\fR
-provides an alternative method of clearing the free space cache that doesn\(cqt require mounting the filesystem\&.
-.RE
-.PP
-\-\-clear\-ino\-cache
-.RS 4
+See also the \fIclear_cache\fP mount option.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B  \-\-clear\-ino\-cache
 remove leftover items pertaining to the deprecated inode map feature
-.RE
-.SH "DANGEROUS OPTIONS"
-.PP
-\-\-repair
-.RS 4
+.UNINDENT
+.SH DANGEROUS OPTIONS
+.INDENT 0.0
+.TP
+.B  \-\-repair
 enable the repair mode and attempt to fix problems where possible
-.if n \{\
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-there\(cqs a warning and 10 second delay when this option is run without
-\fI\-\-force\fR
-to give users a chance to think twice before running repair, the warnings in documentation have shown to be insufficient
-.sp .5v
-.RE
-.RE
-.PP
-\-\-init\-csum\-tree
-.RS 4
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+There\(aqs a warning and 10 second delay when this option is run without
+\fI\-\-force\fP to give users a chance to think twice before running repair, the
+warnings in documentation have shown to be insufficient.
+.UNINDENT
+.UNINDENT
+.TP
+.B  \-\-init\-csum\-tree
 create a new checksum tree and recalculate checksums in all files
-.if n \{\
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-Do not blindly use this option to fix checksum mismatch problems\&.
-.sp .5v
-.RE
-.RE
-.PP
-\-\-init\-extent\-tree
-.RS 4
+\fBWARNING:\fP
+.INDENT 7.0
+.INDENT 3.5
+Do not blindly use this option to fix checksum mismatch problems.
+.UNINDENT
+.UNINDENT
+.TP
+.B  \-\-init\-extent\-tree
 build the extent tree from scratch
-.if n \{\
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-Do not use unless you know what you\(cqre doing\&.
-.sp .5v
-.RE
-.RE
-.PP
-\-\-mode \fI<MODE>\fR
-.RS 4
+\fBWARNING:\fP
+.INDENT 7.0
+.INDENT 3.5
+Do not use unless you know what you\(aqre doing.
+.UNINDENT
+.UNINDENT
+.TP
+.BI \-\-mode \ <MODE>
 select mode of operation regarding memory and IO
 .sp
-The
-\fIMODE\fR
-can be one of:
-.PP
-\fIoriginal\fR
-.RS 4
-The metadata are read into memory and verified, thus the requirements are high on large filesystems and can even lead to out\-of\-memory conditions\&. The possible workaround is to export the block device over network to a machine with enough memory\&.
-.RE
-.PP
-\fIlowmem\fR
-.RS 4
-This mode is supposed to address the high memory consumption at the cost of increased IO when it needs to re\-read blocks\&. This may increase run time\&.
-.if n \{\
+The \fIMODE\fP can be one of:
+.INDENT 7.0
+.TP
+.B original
+The metadata are read into memory and verified, thus the requirements are high
+on large filesystems and can even lead to out\-of\-memory conditions.  The
+possible workaround is to export the block device over network to a machine
+with enough memory.
+.TP
+.B lowmem
+This mode is supposed to address the high memory consumption at the cost of
+increased IO when it needs to re\-read blocks.  This may increase run time.
+.UNINDENT
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-\fIlowmem\fR
-mode does not work with
-\fI\-\-repair\fR
-yet, and is still considered experimental\&.
-.sp .5v
-.RE
-.RE
-.RE
-.PP
-\-\-force
-.RS 4
-allow work on a mounted filesystem\&. Note that this should work fine on a quiescent or read\-only mounted filesystem but may crash if the device is changed externally, eg\&. by the kernel module\&. Repair without mount checks is not supported right now\&.
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+\fIlowmem\fP mode does not work with \fI\-\-repair\fP yet, and is still considered
+experimental.
+.UNINDENT
+.UNINDENT
+.TP
+.B  \-\-force
+allow work on a mounted filesystem and skip mount checks. Note that
+this should work fine on a quiescent or read\-only mounted filesystem
+but may crash if the device is changed externally, e.g. by the kernel
+module.
+.sp
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+It is possible to run with \-\-repair but on a mounted filesystem
+that will most likely lead to a corruption unless the filesystem
+is in a quiescent state which may not be possible to guarantee.
+.UNINDENT
+.UNINDENT
 .sp
 This option also skips the delay and warning in the repair mode (see
-\fI\-\-repair\fR)\&.
-.RE
-.SH "EXIT STATUS"
+\fI\-\-repair\fP).
+.UNINDENT
+.SH EXIT STATUS
 .sp
-\fBbtrfs check\fR returns a zero exit status if it succeeds\&. Non zero is returned in case of failure\&.
-.SH "AVAILABILITY"
+\fBbtrfs check\fP returns a zero exit status if it succeeds. Non zero is
+returned in case of failure.
+.SH AVAILABILITY
 .sp
-\fBbtrfs\fR is part of btrfs\-progs\&. Please refer to the btrfs wiki \m[blue]\fBhttp://btrfs\&.wiki\&.kernel\&.org\fR\m[] for further details\&.
-.SH "SEE ALSO"
+\fBbtrfs\fP is part of btrfs\-progs.  Please refer to the documentation at
+\fI\%https://btrfs.readthedocs.io\fP\&.
+.SH SEE ALSO
 .sp
-\fBmkfs\&.btrfs\fR(8), \fBbtrfs\-scrub\fR(8), \fBbtrfs\-rescue\fR(8)
+\fI\%mkfs.btrfs(8)\fP,
+\fI\%btrfs\-scrub(8)\fP,
+\fI\%btrfs\-rescue(8)\fP
+.\" Generated by docutils manpage writer.
+.

@@ -1,451 +1,332 @@
-'\" t
-.\"     Title: btrfs-inspect-internal
-.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 11/05/2021
-.\"    Manual: Btrfs Manual
-.\"    Source: Btrfs v5.15
-.\"  Language: English
-.\"
-.TH "BTRFS\-INSPECT\-INTE" "8" "11/05/2021" "Btrfs v5\&.15" "Btrfs Manual"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
-.SH "NAME"
+.\" Man page generated from reStructuredText.
+.
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.TH "BTRFS-INSPECT-INTERNAL" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.SH NAME
 btrfs-inspect-internal \- query various internal information
-.SH "SYNOPSIS"
+.SH SYNOPSIS
 .sp
-\fBbtrfs inspect\-internal\fR \fI<subcommand>\fR \fI<args>\fR
-.SH "DESCRIPTION"
+\fBbtrfs inspect\-internal\fP <subcommand> <args>
+.SH DESCRIPTION
 .sp
-This command group provides an interface to query internal information\&. The functionality ranges from a simple UI to an ioctl or a more complex query that assembles the result from several internal structures\&. The latter usually requires calls to privileged ioctls\&.
-.SH "SUBCOMMAND"
-.PP
-\fBdump\-super\fR [options] \fI<device>\fR [device\&...]
-.RS 4
-(replaces the standalone tool
-\fBbtrfs\-show\-super\fR)
+This command group provides an interface to query internal information. The
+functionality ranges from a simple UI to an ioctl or a more complex query that
+assembles the result from several internal structures. The latter usually
+requires calls to privileged ioctls.
+.SH SUBCOMMAND
+.INDENT 0.0
+.TP
+.B dump\-super [options] <device> [device...]
+Show btrfs superblock information stored on given devices in textual form.
+By default the first superblock is printed, more details about all copies or
+additional backup data can be printed.
 .sp
-Show btrfs superblock information stored on given devices in textual form\&. By default the first superblock is printed, more details about all copies or additional backup data can be printed\&.
+Besides verification of the filesystem signature, there are no other sanity
+checks. The superblock checksum status is reported, the device item and
+filesystem UUIDs are checked and reported.
 .sp
-Besides verification of the filesystem signature, there are no other sanity checks\&. The superblock checksum status is reported, the device item and filesystem UUIDs are checked and reported\&.
-.if n \{\
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+The meaning of option \fI\-s\fP has changed in version 4.8 to be consistent
+with other tools to specify superblock copy rather the offset. The old way still
+works, but prints a warning. Please update your scripts to use \fI\-\-bytenr\fP
+instead. The option \fI\-i\fP has been deprecated.
+.UNINDENT
+.UNINDENT
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-the meaning of option
-\fI\-s\fR
-has changed in version 4\&.8 to be consistent with other tools to specify superblock copy rather the offset\&. The old way still works, but prints a warning\&. Please update your scripts to use
-\fI\-\-bytenr\fR
-instead\&. The option
-\fI\-i\fR
-has been deprecated\&.
-.sp .5v
-.RE
-\fBOptions\fR
-.PP
-\-f|\-\-full
-.RS 4
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B \-f|\-\-full
 print full superblock information, including the system chunk array and backup roots
-.RE
-.PP
-\-a|\-\-all
-.RS 4
-print information about all present superblock copies (cannot be used together with
-\fI\-s\fR
-option)
-.RE
-.PP
-\-i \fI<super>\fR
-.RS 4
-(deprecated since 4\&.8, same behaviour as
-\fI\-\-super\fR)
-.RE
-.PP
-\-\-bytenr \fI<bytenr>\fR
-.RS 4
-specify offset to a superblock in a non\-standard location at
-\fIbytenr\fR, useful for debugging (disables the
-\fI\-f\fR
-option)
+.TP
+.B \-a|\-\-all
+print information about all present superblock copies (cannot be used together
+with \fI\-s\fP option)
+.UNINDENT
+.INDENT 7.0
+.TP
+.BI \-i \ <super>
+(deprecated since 4.8, same behaviour as \fI\-\-super\fP)
+.TP
+.BI \-\-bytenr \ <bytenr>
+specify offset to a superblock in a non\-standard location at \fIbytenr\fP, useful
+for debugging (disables the \fI\-f\fP option)
 .sp
-If there are multiple options specified, only the last one applies\&.
-.RE
-.PP
-\-F|\-\-force
-.RS 4
-attempt to print the superblock even if a valid BTRFS signature is not found; the result may be completely wrong if the data does not resemble a superblock
-.RE
-.PP
-\-s|\-\-super \fI<bytenr>\fR
-.RS 4
+If there are multiple options specified, only the last one applies.
+.UNINDENT
+.INDENT 7.0
+.TP
+.B \-F|\-\-force
+attempt to print the superblock even if a valid BTRFS signature is not found;
+the result may be completely wrong if the data does not resemble a superblock
+.TP
+.B \-s|\-\-super <bytenr>
 (see compatibility note above)
 .sp
-specify which mirror to print, valid values are 0, 1 and 2 and the superblock must be present on the device with a valid signature, can be used together with
-\fI\-\-force\fR
-.RE
-.RE
-.PP
-\fBdump\-tree\fR [options] \fI<device>\fR [device\&...]
-.RS 4
-(replaces the standalone tool
-\fBbtrfs\-debug\-tree\fR)
+specify which mirror to print, valid values are 0, 1 and 2 and the superblock
+must be present on the device with a valid signature, can be used together with
+\fI\-\-force\fP
+.UNINDENT
+.TP
+.B dump\-tree [options] <device> [device...]
+Dump tree structures from a given device in textual form, expand keys to human
+readable equivalents where possible.
+This is useful for analyzing filesystem state or inconsistencies and has
+a positive educational effect on understanding the internal filesystem structure.
 .sp
-Dump tree structures from a given device in textual form, expand keys to human readable equivalents where possible\&. This is useful for analyzing filesystem state or inconsistencies and has a positive educational effect on understanding the internal filesystem structure\&.
-.if n \{\
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Contains file names, consider that if you\(aqre asked to send the dump for
+analysis. Does not contain file data.
+.UNINDENT
+.UNINDENT
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-contains file names, consider that if you\(cqre asked to send the dump for analysis\&. Does not contain file data\&.
-.sp .5v
-.RE
-\fBOptions\fR
-.PP
-\-e|\-\-extents
-.RS 4
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B \-e|\-\-extents
 print only extent\-related information: extent and device trees
-.RE
-.PP
-\-d|\-\-device
-.RS 4
+.TP
+.B \-d|\-\-device
 print only device\-related information: tree root, chunk and device trees
-.RE
-.PP
-\-r|\-\-roots
-.RS 4
-print only short root node information, ie\&. the root tree keys
-.RE
-.PP
-\-R|\-\-backups
-.RS 4
-same as \-\-roots plus print backup root info, ie\&. the backup root keys and the respective tree root block offset
-.RE
-.PP
-\-u|\-\-uuid
-.RS 4
+.TP
+.B \-r|\-\-roots
+print only short root node information, i.e. the root tree keys
+.TP
+.B \-R|\-\-backups
+same as \fI\-\-roots\fP plus print backup root info, i.e. the backup root keys and
+the respective tree root block offset
+.TP
+.B \-u|\-\-uuid
 print only the uuid tree information, empty output if the tree does not exist
-.RE
-.PP
-\-b \fI<block_num>\fR
-.RS 4
+.UNINDENT
+.INDENT 7.0
+.TP
+.BI \-b \ <block_num>
 print info of the specified block only, can be specified multiple times
-.RE
-.PP
-\-\-follow
-.RS 4
-use with
-\fI\-b\fR, print all children tree blocks of
-\fI\fI<block_num>\fR\fR
-.RE
-.PP
-\-\-dfs
-.RS 4
-(default up to 5\&.2)
+.TP
+.B  \-\-follow
+use with \fI\-b\fP, print all children tree blocks of \fI<block_num>\fP
+.TP
+.B  \-\-dfs
+(default up to 5.2)
 .sp
-use depth\-first search to print trees, the nodes and leaves are intermixed in the output
-.RE
-.PP
-\-\-bfs
-.RS 4
-(default since 5\&.3)
+use depth\-first search to print trees, the nodes and leaves are
+intermixed in the output
+.TP
+.B  \-\-bfs
+(default since 5.3)
 .sp
-use breadth\-first search to print trees, the nodes are printed before all leaves
-.RE
-.PP
-\-\-hide\-names
-.RS 4
-print a placeholder
-\fIHIDDEN\fR
-instead of various names, useful for developers to inspect the dump while keeping potentially sensitive information hidden
+use breadth\-first search to print trees, the nodes are printed before all
+leaves
+.TP
+.B  \-\-hide\-names
+print a placeholder \fIHIDDEN\fP instead of various names, useful for developers to
+inspect the dump while keeping potentially sensitive information hidden
 .sp
 This is:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.INDENT 7.0
+.IP \(bu 2
 directory entries (files, directories, subvolumes)
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 default subvolume
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 extended attributes (name, value)
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 hardlink names (if stored inside another item or as extended references in standalone items)
-.if n \{\
+.UNINDENT
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-lengths are not hidden because they can be calculated from the item size anyway\&.
-.sp .5v
-.RE
-.RE
-.RE
-.PP
-\-\-csum\-headers
-.RS 4
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Lengths are not hidden because they can be calculated from the item size anyway.
+.UNINDENT
+.UNINDENT
+.TP
+.B  \-\-csum\-headers
 print b\-tree node checksums stored in headers (metadata)
-.RE
-.PP
-\-\-csum\-items
-.RS 4
+.TP
+.B  \-\-csum\-items
 print checksums stored in checksum items (data)
-.RE
-.PP
-\-\-noscan
-.RS 4
-do not automatically scan the system for other devices from the same filesystem, only use the devices provided as the arguments
-.RE
-.PP
-\-t \fI<tree_id>\fR
-.RS 4
-print only the tree with the specified ID, where the ID can be numerical or common name in a flexible human readable form
+.TP
+.B  \-\-noscan
+do not automatically scan the system for other devices from the same
+filesystem, only use the devices provided as the arguments
+.TP
+.BI \-t \ <tree_id>
+print only the tree with the specified ID, where the ID can be numerical or
+common name in a flexible human readable form
 .sp
 The tree id name recognition rules:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.INDENT 7.0
+.IP \(bu 2
 case does not matter
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-the C source definition, eg\&. BTRFS_ROOT_TREE_OBJECTID
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-short forms without BTRFS_ prefix, without _TREE and _OBJECTID suffix, eg\&. ROOT_TREE, ROOT
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-convenience aliases, eg\&. DEVICE for the DEV tree, CHECKSUM for CSUM
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
+the C source definition, e.g. BTRFS_ROOT_TREE_OBJECTID
+.IP \(bu 2
+short forms without BTRFS_ prefix, without _TREE and _OBJECTID suffix, e.g. ROOT_TREE, ROOT
+.IP \(bu 2
+convenience aliases, e.g. DEVICE for the DEV tree, CHECKSUM for CSUM
+.IP \(bu 2
 unrecognized ID is an error
-.RE
-.RE
-.RE
-.PP
-\fBinode\-resolve\fR [\-v] \fI<ino>\fR \fI<path>\fR
-.RS 4
+.UNINDENT
+.UNINDENT
+.TP
+.B inode\-resolve [\-v] <ino> <path>
 (needs root privileges)
 .sp
-resolve paths to all files with given inode number
-\fIino\fR
-in a given subvolume at
-\fIpath\fR, ie\&. all hardlinks
+resolve paths to all files with given inode number \fIino\fP in a given subvolume
+at \fIpath\fP, i.e. all hardlinks
 .sp
-\fBOptions\fR
-.PP
-\-v
-.RS 4
-(deprecated) alias for global
-\fI\-v\fR
-option
-.RE
-.RE
-.PP
-\fBlogical\-resolve\fR [\-Pvo] [\-s \fI<bufsize>\fR] \fI<logical>\fR \fI<path>\fR
-.RS 4
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B  \-v
+(deprecated) alias for global \fI\-v\fP option
+.UNINDENT
+.TP
+.B logical\-resolve [\-Pvo] [\-s <bufsize>] <logical> <path>
 (needs root privileges)
 .sp
-resolve paths to all files at given
-\fIlogical\fR
-address in the linear filesystem space
+resolve paths to all files at given \fIlogical\fP address in the linear filesystem space
 .sp
-\fBOptions\fR
-.PP
-\-P
-.RS 4
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B  \-P
 skip the path resolving and print the inodes instead
-.RE
-.PP
-\-o
-.RS 4
-ignore offsets, find all references to an extent instead of a single block\&. Requires kernel support for the V2 ioctl (added in 4\&.15)\&. The results might need further processing to filter out unwanted extents by the offset that is supposed to be obtained by other means\&.
-.RE
-.PP
-\-s \fI<bufsize>\fR
-.RS 4
-set internal buffer for storing the file names to
-\fIbufsize\fR, default is 64k, maximum 16m\&. Buffer sizes over 64K require kernel support for the V2 ioctl (added in 4\&.15)\&.
-.RE
-.PP
-\-v
-.RS 4
-(deprecated) alias for global
-\fI\-v\fR
-option
-.RE
-.RE
-.PP
-\fBmin\-dev\-size\fR [options] \fI<path>\fR
-.RS 4
+.TP
+.B  \-o
+ignore offsets, find all references to an extent instead of a single block.
+Requires kernel support for the V2 ioctl (added in 4.15). The results might need
+further processing to filter out unwanted extents by the offset that is supposed
+to be obtained by other means.
+.TP
+.BI \-s \ <bufsize>
+set internal buffer for storing the file names to \fIbufsize\fP, default is 64KiB,
+maximum 16MiB.  Buffer sizes over 64Kib require kernel support for the V2 ioctl
+(added in 4.15).
+.TP
+.B  \-v
+(deprecated) alias for global \fI\-v\fP option
+.UNINDENT
+.TP
+.B map\-swapfile [options] <file>
 (needs root privileges)
 .sp
-return the minimum size the device can be shrunk to, without performing any resize operation, this may be useful before executing the actual resize operation
+Find device\-specific physical offset of \fIfile\fP that can be used for
+hibernation. Also verify that the \fIfile\fP is suitable as a swapfile.
+See also command \fBbtrfs filesystem mkswapfile\fP and the
+\fI\%Swapfile feature\fP description.
 .sp
-\fBOptions\fR
-.PP
-\-\-id \fI<id>\fR
-.RS 4
-specify the device
-\fIid\fR
-to query, default is 1 if this option is not used
-.RE
-.RE
-.PP
-\fBrootid\fR \fI<path>\fR
-.RS 4
-for a given file or directory, return the containing tree root id, but for a subvolume itself return its own tree id (ie\&. subvol id)
-.if n \{\
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Do not use \fBfilefrag\fP or \fIFIEMAP\fP ioctl values reported as
+physical, this is different due to internal filesystem mappings.
+The hibernation expects offset relative to the physical block device.
+.UNINDENT
+.UNINDENT
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-The result is undefined for the so\-called empty subvolumes (identified by inode number 2), but such a subvolume does not contain any files anyway
-.sp .5v
-.RE
-.RE
-.PP
-\fBsubvolid\-resolve\fR \fI<subvolid>\fR \fI<path>\fR
-.RS 4
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B \-r|\-\-resume\-offset
+print only the value suitable as resume offset for file \fI/sys/power/resume_offset\fP
+.UNINDENT
+.TP
+.B min\-dev\-size [options] <path>
 (needs root privileges)
 .sp
-resolve the absolute path of the subvolume id
-\fIsubvolid\fR
-.RE
-.PP
-\fBtree\-stats\fR [options] \fI<device>\fR
-.RS 4
+return the minimum size the device can be shrunk to, without performing any
+resize operation, this may be useful before executing the actual resize operation
+.sp
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.BI \-\-id \ <id>
+specify the device \fIid\fP to query, default is 1 if this option is not used
+.UNINDENT
+.TP
+.B rootid <path>
+for a given file or directory, return the containing tree root id, but for a
+subvolume itself return its own tree id (i.e. subvol id)
+.sp
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+The result is undefined for the so\-called empty subvolumes (identified by
+inode number 2), but such a subvolume does not contain any files anyway
+.UNINDENT
+.UNINDENT
+.TP
+.B subvolid\-resolve <subvolid> <path>
 (needs root privileges)
 .sp
-Print sizes and statistics of trees\&.
+resolve the absolute path of the subvolume id \fIsubvolid\fP
+.TP
+.B tree\-stats [options] <device>
+(needs root privileges)
 .sp
-\fBOptions\fR
-.PP
-\-b
-.RS 4
-Print raw numbers in bytes\&.
-.RE
-.RE
-.SH "EXIT STATUS"
+Print sizes and statistics of trees. This takes a device as an argument
+and not a mount point unlike other commands.
 .sp
-\fBbtrfs inspect\-internal\fR returns a zero exit status if it succeeds\&. Non zero is returned in case of failure\&.
-.SH "AVAILABILITY"
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+In case the the filesystem is still mounted it\(aqs possible to
+run the command but the results may be inaccurate or various
+errors may be printed in case there are ongoing writes to the
+filesystem. A warning is printed in such case.
+.UNINDENT
+.UNINDENT
 .sp
-\fBbtrfs\fR is part of btrfs\-progs\&. Please refer to the btrfs wiki \m[blue]\fBhttp://btrfs\&.wiki\&.kernel\&.org\fR\m[] for further details\&.
-.SH "SEE ALSO"
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B  \-b
+Print raw numbers in bytes.
+.UNINDENT
+.UNINDENT
+.SH EXIT STATUS
 .sp
-\fBmkfs\&.btrfs\fR(8)
+\fBbtrfs inspect\-internal\fP returns a zero exit status if it succeeds. Non zero is
+returned in case of failure.
+.SH AVAILABILITY
+.sp
+\fBbtrfs\fP is part of btrfs\-progs.  Please refer to the documentation at
+\fI\%https://btrfs.readthedocs.io\fP\&.
+.SH SEE ALSO
+.sp
+\fI\%mkfs.btrfs(8)\fP
+.\" Generated by docutils manpage writer.
+.

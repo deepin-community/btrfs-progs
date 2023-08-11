@@ -9,12 +9,13 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-**btrfs restore** is used to try to salvage files from a damaged filesystem and
+:command:`btrfs restore` is used to try to salvage files from a damaged filesystem and
 restore them into *path* or just list the subvolume tree roots. The filesystem
 image is not modified.
 
 If the filesystem is damaged and cannot be repaired by the other tools
-(``btrfs-check(8)`` or ``btrfs-rescue(8)``), **btrfs restore** could be used to
+(:doc:`btrfs-check(8)<btrfs-check>` or :doc:`btrfs-rescue(8)<btrfs-rescue>`),
+:command:`btrfs restore` could be used to
 retrieve file data, as far as the metadata are readable. The checks done by
 restore are less strict and the process is usually able to get far enough to
 retrieve data from the whole filesystem. This comes at a cost that some data
@@ -52,7 +53,7 @@ OPTIONS
         ignore errors during restoration and continue
 
 -o|--overwrite
-        overwrite directories/files in *path*, eg. for repeated runs
+        overwrite directories/files in *path*, e.g. for repeated runs
 
 -t <bytenr>
         use *bytenr* to read the root tree
@@ -105,13 +106,12 @@ returned in case of failure.
 AVAILABILITY
 ------------
 
-**btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``,
-``btrfs-rescue(8)``,
-``btrfs-check(8)``
+:doc:`btrfs-check(8)<btrfs-check>`,
+:doc:`btrfs-rescue(8)<btrfs-rescue>`,
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`

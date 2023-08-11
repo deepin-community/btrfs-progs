@@ -23,14 +23,16 @@
 #include <uuid/uuid.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include "kernel-lib/raid56.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/transaction.h"
 #include "kernel-shared/print-tree.h"
 #include "kernel-shared/volumes.h"
-#include "zoned.h"
+#include "kernel-shared/tree-checker.h"
+#include "kernel-shared/zoned.h"
 #include "common/utils.h"
-#include "kernel-lib/raid56.h"
+#include "common/device-utils.h"
 
 const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
 	[BTRFS_RAID_RAID10] = {
@@ -583,30 +585,19 @@ static bool dev_extent_hole_check_zoned(struct btrfs_device *device,
 					u64 *hole_start, u64 *hole_size,
 					u64 num_bytes)
 {
-	u64 zone_size = device->zone_info->zone_size;
 	u64 pos;
-	bool changed = false;
 
-	ASSERT(IS_ALIGNED(*hole_start, zone_size));
+	ASSERT(IS_ALIGNED(*hole_start, device->zone_info->zone_size));
 
-	while (*hole_size > 0) {
-		pos = btrfs_find_allocatable_zones(device, *hole_start,
-						   *hole_start + *hole_size,
-						   num_bytes);
-		if (pos != *hole_start) {
-			*hole_size = *hole_start + *hole_size - pos;
-			*hole_start = pos;
-			changed = true;
-			if (*hole_size < num_bytes)
-				break;
-		}
-
-		*hole_start += zone_size;
-		*hole_size -= zone_size;
-		changed = true;
+	pos = btrfs_find_allocatable_zones(device, *hole_start,
+					   *hole_start + *hole_size, num_bytes);
+	if (pos != *hole_start) {
+		*hole_size = *hole_start + *hole_size - pos;
+		*hole_start = pos;
+		return true;
 	}
 
-	return changed;
+	return false;
 }
 
 /**
@@ -774,13 +765,12 @@ next:
 	 * search_end may be smaller than search_start.
 	 */
 	if (search_end > search_start) {
+		hole_size = search_end - search_start;
 		if (dev_extent_hole_check(device, &search_start, &hole_size,
 					  num_bytes)) {
 			btrfs_release_path(path);
 			goto again;
 		}
-
-		hole_size = search_end - search_start;
 
 		if (hole_size > max_hole_size) {
 			max_hole_start = search_start;
@@ -1359,7 +1349,6 @@ static int create_chunk(struct btrfs_trans_handle *trans,
 			struct btrfs_fs_info *info, struct alloc_chunk_ctl *ctl,
 			struct list_head *private_devs)
 {
-	struct btrfs_root *extent_root = info->extent_root;
 	struct btrfs_root *chunk_root = info->chunk_root;
 	struct btrfs_stripe *stripes;
 	struct btrfs_device *device = NULL;
@@ -1443,7 +1432,7 @@ static int create_chunk(struct btrfs_trans_handle *trans,
 
 	/* key was set above */
 	btrfs_set_stack_chunk_length(chunk, ctl->num_bytes);
-	btrfs_set_stack_chunk_owner(chunk, extent_root->root_key.objectid);
+	btrfs_set_stack_chunk_owner(chunk, BTRFS_EXTENT_TREE_OBJECTID);
 	btrfs_set_stack_chunk_stripe_len(chunk, BTRFS_STRIPE_LEN);
 	btrfs_set_stack_chunk_type(chunk, ctl->type);
 	btrfs_set_stack_chunk_num_stripes(chunk, ctl->num_stripes);
@@ -1571,6 +1560,21 @@ again:
 	}
 
 	ret = create_chunk(trans, info, &ctl, &private_devs);
+
+	/*
+	 * This can happen if above create_chunk() failed, we need to move all
+	 * devices back to dev_list.
+	 */
+	while (!list_empty(&private_devs)) {
+		device = list_entry(private_devs.next, struct btrfs_device,
+				    dev_list);
+		list_move(&device->dev_list, dev_list);
+	}
+	/*
+	 * All private devs moved back to @dev_list, now dev_list should not be
+	 * empty.
+	 */
+	ASSERT(!list_empty(dev_list));
 	*start = ctl.start;
 	*num_bytes = ctl.num_bytes;
 
@@ -1808,6 +1812,7 @@ int __btrfs_map_block(struct btrfs_fs_info *fs_info, int rw,
 	int stripes_required = 1;
 	int stripe_index;
 	int i;
+	bool need_raid_map = false;
 	struct btrfs_multi_bio *multi = NULL;
 
 	if (multi_ret && rw == READ) {
@@ -1845,17 +1850,18 @@ again:
 	}
 	if (map->type & BTRFS_BLOCK_GROUP_RAID56_MASK
 	    && multi_ret && ((rw & WRITE) || mirror_num > 1) && raid_map_ret) {
-		    /* RAID[56] write or recovery. Return all stripes */
-		    stripes_required = map->num_stripes;
+		need_raid_map = true;
+		/* RAID[56] write or recovery. Return all stripes */
+		stripes_required = map->num_stripes;
 
-		    /* Only allocate the map if we've already got a large enough multi_ret */
-		    if (stripes_allocated >= stripes_required) {
-			    raid_map = kmalloc(sizeof(u64) * map->num_stripes, GFP_NOFS);
-			    if (!raid_map) {
-				    kfree(multi);
-				    return -ENOMEM;
-			    }
-		    }
+		/* Only allocate the map if we've already got a large enough multi_ret */
+		if (stripes_allocated >= stripes_required) {
+			raid_map = kmalloc(sizeof(u64) * map->num_stripes, GFP_NOFS);
+			if (!raid_map) {
+				kfree(multi);
+				return -ENOMEM;
+			}
+		}
 	}
 
 	/* if our multi bio struct is too small, back off and try again */
@@ -1893,6 +1899,7 @@ again:
 		goto out;
 
 	multi->num_stripes = 1;
+	multi->type = map->type;
 	stripe_index = 0;
 	if (map->type & BTRFS_BLOCK_GROUP_RAID1_MASK) {
 		if (rw == WRITE)
@@ -1919,7 +1926,7 @@ again:
 		else if (mirror_num)
 			stripe_index = mirror_num - 1;
 	} else if (map->type & BTRFS_BLOCK_GROUP_RAID56_MASK) {
-		if (raid_map) {
+		if (need_raid_map && raid_map) {
 			int rot;
 			u64 tmp;
 			u64 raid56_full_stripe_start;
@@ -2081,139 +2088,6 @@ static struct btrfs_device *fill_missing_device(u64 devid)
 }
 
 /*
- * slot == -1: SYSTEM chunk
- * return -EIO on error, otherwise return 0
- */
-int btrfs_check_chunk_valid(struct btrfs_fs_info *fs_info,
-			    struct extent_buffer *leaf,
-			    struct btrfs_chunk *chunk,
-			    int slot, u64 logical)
-{
-	u64 length;
-	u64 stripe_len;
-	u16 num_stripes;
-	u16 sub_stripes;
-	u64 type;
-	u32 chunk_ondisk_size;
-	u32 sectorsize = fs_info->sectorsize;
-	int min_devs;
-	int table_sub_stripes;
-
-	/*
-	 * Basic chunk item size check.  Note that btrfs_chunk already contains
-	 * one stripe, so no "==" check.
-	 */
-	if (slot >= 0 &&
-	    btrfs_item_size_nr(leaf, slot) < sizeof(struct btrfs_chunk)) {
-		error("invalid chunk item size, have %u expect [%zu, %u)",
-			btrfs_item_size_nr(leaf, slot),
-			sizeof(struct btrfs_chunk),
-			BTRFS_LEAF_DATA_SIZE(fs_info));
-		return -EUCLEAN;
-	}
-	length = btrfs_chunk_length(leaf, chunk);
-	stripe_len = btrfs_chunk_stripe_len(leaf, chunk);
-	num_stripes = btrfs_chunk_num_stripes(leaf, chunk);
-	sub_stripes = btrfs_chunk_sub_stripes(leaf, chunk);
-	type = btrfs_chunk_type(leaf, chunk);
-
-	if (num_stripes == 0) {
-		error("invalid num_stripes, have %u expect non-zero",
-			num_stripes);
-		return -EUCLEAN;
-	}
-	if (slot >= 0 && btrfs_chunk_item_size(num_stripes) !=
-	    btrfs_item_size_nr(leaf, slot)) {
-		error("invalid chunk item size, have %u expect %lu",
-			btrfs_item_size_nr(leaf, slot),
-			btrfs_chunk_item_size(num_stripes));
-		return -EUCLEAN;
-	}
-
-	/*
-	 * These valid checks may be insufficient to cover every corner cases.
-	 */
-	if (!IS_ALIGNED(logical, sectorsize)) {
-		error("invalid chunk logical %llu",  logical);
-		return -EIO;
-	}
-	if (btrfs_chunk_sector_size(leaf, chunk) != sectorsize) {
-		error("invalid chunk sectorsize %llu",
-		      (unsigned long long)btrfs_chunk_sector_size(leaf, chunk));
-		return -EIO;
-	}
-	if (!length || !IS_ALIGNED(length, sectorsize)) {
-		error("invalid chunk length %llu",  length);
-		return -EIO;
-	}
-	if (stripe_len != BTRFS_STRIPE_LEN) {
-		error("invalid chunk stripe length: %llu", stripe_len);
-		return -EIO;
-	}
-	/* Check on chunk item type */
-	if (slot == -1 && (type & BTRFS_BLOCK_GROUP_SYSTEM) == 0) {
-		error("invalid chunk type %llu", type);
-		return -EIO;
-	}
-	if (type & ~(BTRFS_BLOCK_GROUP_TYPE_MASK |
-		     BTRFS_BLOCK_GROUP_PROFILE_MASK)) {
-		error("unrecognized chunk type: %llu",
-		      ~(BTRFS_BLOCK_GROUP_TYPE_MASK |
-			BTRFS_BLOCK_GROUP_PROFILE_MASK) & type);
-		return -EIO;
-	}
-	if (!(type & BTRFS_BLOCK_GROUP_TYPE_MASK)) {
-		error("missing chunk type flag: %llu", type);
-		return -EIO;
-	}
-	if (!(is_power_of_2(type & BTRFS_BLOCK_GROUP_PROFILE_MASK) ||
-	      (type & BTRFS_BLOCK_GROUP_PROFILE_MASK) == 0)) {
-		error("conflicting chunk type detected: %llu", type);
-		return -EIO;
-	}
-	if ((type & BTRFS_BLOCK_GROUP_PROFILE_MASK) &&
-	    !is_power_of_2(type & BTRFS_BLOCK_GROUP_PROFILE_MASK)) {
-		error("conflicting chunk profile detected: %llu", type);
-		return -EIO;
-	}
-
-	chunk_ondisk_size = btrfs_chunk_item_size(num_stripes);
-	/*
-	 * Btrfs_chunk contains at least one stripe, and for sys_chunk
-	 * it can't exceed the system chunk array size
-	 * For normal chunk, it should match its chunk item size.
-	 */
-	if (num_stripes < 1 ||
-	    (slot == -1 && chunk_ondisk_size > BTRFS_SYSTEM_CHUNK_ARRAY_SIZE) ||
-	    (slot >= 0 && chunk_ondisk_size > btrfs_item_size_nr(leaf, slot))) {
-		error("invalid num_stripes: %u", num_stripes);
-		return -EIO;
-	}
-	/*
-	 * Device number check against profile
-	 */
-	min_devs = btrfs_bg_type_to_devs_min(type);
-	table_sub_stripes = btrfs_bg_type_to_sub_stripes(type);
-	if ((type & BTRFS_BLOCK_GROUP_RAID10 && (sub_stripes != table_sub_stripes ||
-		  !IS_ALIGNED(num_stripes, sub_stripes))) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID1 && num_stripes < min_devs) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID1C3 && num_stripes < min_devs) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID1C4 && num_stripes < min_devs) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID5 && num_stripes < min_devs) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID6 && num_stripes < min_devs) ||
-	    (type & BTRFS_BLOCK_GROUP_DUP && num_stripes > 2) ||
-	    ((type & BTRFS_BLOCK_GROUP_PROFILE_MASK) == 0 &&
-	     num_stripes != 1)) {
-		error("Invalid num_stripes:sub_stripes %u:%u for profile %llu",
-		      num_stripes, sub_stripes,
-		      type & BTRFS_BLOCK_GROUP_PROFILE_MASK);
-		return -EIO;
-	}
-
-	return 0;
-}
-
-/*
  * Slot is used to verify the chunk item is valid
  *
  * For sys chunk in superblock, pass -1 to indicate sys chunk.
@@ -2237,7 +2111,7 @@ static int read_one_chunk(struct btrfs_fs_info *fs_info, struct btrfs_key *key,
 	length = btrfs_chunk_length(leaf, chunk);
 	num_stripes = btrfs_chunk_num_stripes(leaf, chunk);
 	/* Validation check */
-	ret = btrfs_check_chunk_valid(fs_info, leaf, chunk, slot, logical);
+	ret = btrfs_check_chunk_valid(leaf, chunk, logical);
 	if (ret) {
 		error("%s checksums match, but it has an invalid chunk, %s",
 		      (slot == -1) ? "Superblock" : "Metadata",
@@ -2623,8 +2497,6 @@ static int split_eb_for_raid56(struct btrfs_fs_info *info,
 		eb->len = stripe_len;
 		eb->refs = 1;
 		eb->flags = 0;
-		eb->fd = -1;
-		eb->dev_bytenr = (u64)-1;
 		eb->fs_info = info;
 
 		this_eb_start = raid_map[i];
@@ -2679,9 +2551,6 @@ int write_raid56_with_parity(struct btrfs_fs_info *info,
 	for (i = 0; i < multi->num_stripes; i++) {
 		struct extent_buffer *new_eb;
 		if (raid_map[i] < BTRFS_RAID5_P_STRIPE) {
-			ebs[i]->dev_bytenr = multi->stripes[i].physical;
-			ebs[i]->fd = multi->stripes[i].dev->fd;
-			multi->stripes[i].dev->total_ios++;
 			if (ebs[i]->start != raid_map[i]) {
 				ret = -EINVAL;
 				goto out_free_split;
@@ -2693,8 +2562,6 @@ int write_raid56_with_parity(struct btrfs_fs_info *info,
 			ret = -ENOMEM;
 			goto out_free_split;
 		}
-		new_eb->dev_bytenr = multi->stripes[i].physical;
-		new_eb->fd = multi->stripes[i].dev->fd;
 		multi->stripes[i].dev->total_ios++;
 		new_eb->len = stripe_len;
 		new_eb->fs_info = info;
@@ -2723,7 +2590,9 @@ int write_raid56_with_parity(struct btrfs_fs_info *info,
 	}
 
 	for (i = 0; i < multi->num_stripes; i++) {
-		ret = write_extent_to_disk(ebs[i]);
+		multi->stripes[i].dev->total_ios++;
+		ret = btrfs_pwrite(multi->stripes[i].dev->fd, ebs[i]->data, ebs[i]->len,
+				   multi->stripes[i].physical, info->zoned);
 		if (ret < 0)
 			goto out_free_split;
 	}
@@ -2757,6 +2626,7 @@ u64 btrfs_stripe_length(struct btrfs_fs_info *fs_info,
 		      BTRFS_BLOCK_GROUP_PROFILE_MASK;
 
 	chunk_len = btrfs_chunk_length(leaf, chunk);
+	stripe_len = chunk_len;
 
 	switch (profile) {
 	case 0: /* Single profile */
@@ -2764,7 +2634,7 @@ u64 btrfs_stripe_length(struct btrfs_fs_info *fs_info,
 	case BTRFS_BLOCK_GROUP_RAID1C3:
 	case BTRFS_BLOCK_GROUP_RAID1C4:
 	case BTRFS_BLOCK_GROUP_DUP:
-		stripe_len = chunk_len;
+		/* The default value is already fine. */
 		break;
 	case BTRFS_BLOCK_GROUP_RAID0:
 		stripe_len = chunk_len / num_stripes;
@@ -2785,12 +2655,62 @@ u64 btrfs_stripe_length(struct btrfs_fs_info *fs_info,
 }
 
 /*
- * Return 0 if size of @device is already good
- * Return >0 if size of @device is not aligned but fixed without problems
- * Return <0 if something wrong happened when aligning the size of @device
+ * Return <0 for error.
+ * Return >0 if we can not find any dev extent beyond @physical
+ * REturn 0 if we can find any dev extent beyond @physical or covers @physical.
  */
-int btrfs_fix_device_size(struct btrfs_fs_info *fs_info,
-			  struct btrfs_device *device)
+static int check_dev_extent_beyond_bytenr(struct btrfs_fs_info *fs_info,
+					  struct btrfs_device *device,
+					  u64 physical)
+{
+	struct btrfs_root *root = fs_info->dev_root;
+	struct btrfs_path path;
+	struct btrfs_dev_extent *dext;
+	struct btrfs_key key;
+	u64 dext_len;
+	u64 last_dev_extent_end = 0;
+	int ret;
+
+	key.objectid = device->devid;
+	key.type = BTRFS_DEV_EXTENT_KEY;
+	key.offset = (u64)-1;
+
+	btrfs_init_path(&path);
+	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
+	if (ret < 0)
+		return ret;
+	if (ret == 0) {
+		ret = -EUCLEAN;
+		error("invalid dev extent found for devid %llu", device->devid);
+		goto out;
+	}
+
+	ret = btrfs_previous_item(root, &path, device->devid, BTRFS_DEV_EXTENT_KEY);
+	/*
+	 * Either <0 we error out, or ret > 0 we can not find any dev extent
+	 * for this device, then last_dev_extent_end will be 0 and we will
+	 * return 1.
+	 */
+	if (ret)
+		goto out;
+
+	btrfs_item_key_to_cpu(path.nodes[0], &key, path.slots[0]);
+	dext = btrfs_item_ptr(path.nodes[0], path.slots[0], struct btrfs_dev_extent);
+	dext_len = btrfs_dev_extent_length(path.nodes[0], dext);
+	last_dev_extent_end = dext_len + key.offset;
+
+out:
+	btrfs_release_path(&path);
+	if (ret < 0)
+		return ret;
+	if (last_dev_extent_end <= physical)
+		return 1;
+	return 0;
+}
+
+static int reset_device_item_total_bytes(struct btrfs_fs_info *fs_info,
+					 struct btrfs_device *device,
+					 u64 new_size)
 {
 	struct btrfs_trans_handle *trans;
 	struct btrfs_key key;
@@ -2800,12 +2720,10 @@ int btrfs_fix_device_size(struct btrfs_fs_info *fs_info,
 	u64 old_bytes = device->total_bytes;
 	int ret;
 
-	if (IS_ALIGNED(old_bytes, fs_info->sectorsize))
-		return 0;
+	ASSERT(IS_ALIGNED(new_size, fs_info->sectorsize));
 
 	/* Align the in-memory total_bytes first, and use it as correct size */
-	device->total_bytes = round_down(device->total_bytes,
-					 fs_info->sectorsize);
+	device->total_bytes = new_size;
 
 	key.objectid = BTRFS_DEV_ITEMS_OBJECTID;
 	key.type = BTRFS_DEV_ITEM_KEY;
@@ -2815,7 +2733,7 @@ int btrfs_fix_device_size(struct btrfs_fs_info *fs_info,
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
 		errno = -ret;
-		error("error starting transaction: %d (%m)", ret);
+		error_msg(ERROR_MSG_START_TRANS, "%m");
 		return ret;
 	}
 
@@ -2837,7 +2755,7 @@ int btrfs_fix_device_size(struct btrfs_fs_info *fs_info,
 	ret = btrfs_commit_transaction(trans, chunk_root);
 	if (ret < 0) {
 		errno = -ret;
-		error("failed to commit current transaction: %d (%m)", ret);
+		error_msg(ERROR_MSG_COMMIT_TRANS, "%m");
 		btrfs_release_path(&path);
 		return ret;
 	}
@@ -2853,6 +2771,74 @@ err:
 	return ret;
 }
 
+static int btrfs_fix_block_device_size(struct btrfs_fs_info *fs_info,
+				       struct btrfs_device *device)
+{
+	struct stat st;
+	u64 block_dev_size;
+	int ret;
+
+	if (device->fd < 0 || !device->writeable) {
+		error("devid %llu is missing or not writable", device->devid);
+		return -EINVAL;
+	}
+
+	ret = fstat(device->fd, &st);
+	if (ret < 0) {
+		error("failed to get block device size for devid %llu: %m",
+		      device->devid);
+		return -errno;
+	}
+
+	block_dev_size = round_down(device_get_partition_size_fd_stat(device->fd, &st),
+				    fs_info->sectorsize);
+
+	/*
+	 * Total_bytes in device item is no larger than the device block size,
+	 * already the correct case.
+	 */
+	if (device->total_bytes <= block_dev_size)
+		return 0;
+
+	/*
+	 * Now we need to check if there is any device extent beyond
+	 * @block_dev_size.
+	 */
+	ret = check_dev_extent_beyond_bytenr(fs_info, device, block_dev_size);
+	if (ret < 0)
+		return ret;
+
+	if (ret == 0) {
+		error(
+"found dev extents covering or beyond bytenr %llu, can not shrink the device without losing data",
+			device->devid);
+		return -EINVAL;
+	}
+
+	/* Now we can shrink the device item total_bytes to @block_dev_size. */
+	return reset_device_item_total_bytes(fs_info, device, block_dev_size);
+}
+
+/*
+ * Return 0 if size of @device is already good
+ * Return >0 if size of @device is not aligned but fixed without problems
+ * Return <0 if something wrong happened when aligning the size of @device
+ */
+int btrfs_fix_device_size(struct btrfs_fs_info *fs_info, struct btrfs_device *device)
+{
+	u64 old_bytes = device->total_bytes;
+
+	/*
+	 * Our value is already good, then check if it's device item mismatch against
+	 * block device size.
+	 */
+	if (IS_ALIGNED(old_bytes, fs_info->sectorsize))
+		return btrfs_fix_block_device_size(fs_info, device);
+
+	return reset_device_item_total_bytes(fs_info, device,
+			round_down(old_bytes, fs_info->sectorsize));
+}
+
 /*
  * Return 0 if super block total_bytes matches all devices' total_bytes
  * Return >0 if super block total_bytes mismatch but fixed without problem
@@ -2860,7 +2846,6 @@ err:
  */
 int btrfs_fix_super_size(struct btrfs_fs_info *fs_info)
 {
-	struct btrfs_trans_handle *trans;
 	struct btrfs_device *device;
 	struct list_head *dev_list = &fs_info->fs_devices->devices;
 	u64 total_bytes = 0;
@@ -2885,19 +2870,11 @@ int btrfs_fix_super_size(struct btrfs_fs_info *fs_info)
 		return 0;
 
 	btrfs_set_super_total_bytes(fs_info->super_copy, total_bytes);
-
-	/* Commit transaction to update all super blocks */
-	trans = btrfs_start_transaction(fs_info->tree_root, 1);
-	if (IS_ERR(trans)) {
-		ret = PTR_ERR(trans);
-		errno = -ret;
-		error("error starting transaction: %d (%m)", ret);
-		return ret;
-	}
-	ret = btrfs_commit_transaction(trans, fs_info->tree_root);
+	/* Do not use transaction for overwriting only the super block */
+	ret = write_all_supers(fs_info);
 	if (ret < 0) {
 		errno = -ret;
-		error("failed to commit current transaction: %d (%m)", ret);
+		error("failed to write super blocks: %d (%m)", ret);
 		return ret;
 	}
 	printf("Fixed super total bytes, old size: %llu new size: %llu\n",

@@ -17,20 +17,28 @@
  */
 
 #include <sys/ioctl.h>
-#include <unistd.h>
 #include <getopt.h>
 #include <errno.h>
-#include <btrfsutil.h>
-
+#include <dirent.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include "libbtrfsutil/btrfsutil.h"
+#include "kernel-lib/list.h"
+#include "kernel-lib/rbtree.h"
+#include "kernel-lib/rbtree_types.h"
+#include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
-#include "ioctl.h"
 #include "common/open-utils.h"
-#include "cmds/commands.h"
-#include "qgroup.h"
 #include "common/utils.h"
 #include "common/help.h"
 #include "common/units.h"
 #include "common/parse-utils.h"
+#include "common/format-output.h"
+#include "common/messages.h"
+#include "cmds/commands.h"
 #include "cmds/qgroup.h"
 
 #define BTRFS_QGROUP_NFILTERS_INCREASE (2 * BTRFS_QGROUP_FILTER_MAX)
@@ -60,6 +68,9 @@ struct btrfs_qgroup {
 	 */
 	struct rb_node all_parent_node;
 	u64 qgroupid;
+
+	/* NULL for qgroups with level > 0 */
+	const char *path;
 
 	/*
 	 * info_item
@@ -111,11 +122,13 @@ enum btrfs_qgroup_column_enum {
 	BTRFS_QGROUP_MAX_EXCL,
 	BTRFS_QGROUP_PARENT,
 	BTRFS_QGROUP_CHILD,
+	BTRFS_QGROUP_PATH,
 	BTRFS_QGROUP_ALL,
 };
 
 enum btrfs_qgroup_comp_enum {
 	BTRFS_QGROUP_COMP_QGROUPID,
+	BTRFS_QGROUP_COMP_PATH,
 	BTRFS_QGROUP_COMP_RFER,
 	BTRFS_QGROUP_COMP_EXCL,
 	BTRFS_QGROUP_COMP_MAX_RFER,
@@ -144,41 +157,41 @@ static struct {
 		.column_name	= "Qgroupid",
 		.need_print	= 1,
 		.unit_mode	= 0,
-		.max_len	= 8,
+		.max_len	= 9,
 	},
 	{
 		.name		= "rfer",
-		.column_name	= "Rfer",
+		.column_name	= "Referenced",
 		.need_print	= 1,
 		.unit_mode	= UNITS_DEFAULT,
 		.max_len	= 12,
 	},
 	{
 		.name		= "excl",
-		.column_name	= "Excl",
+		.column_name	= "Exclusive",
 		.need_print	= 1,
 		.unit_mode	= UNITS_DEFAULT,
 		.max_len	= 12,
 	},
 	{	.name		= "max_rfer",
-		.column_name	= "Max_rfer",
+		.column_name	= "Max referenced",
 		.need_print	= 0,
 		.unit_mode	= UNITS_DEFAULT,
-		.max_len	= 12,
+		.max_len	= 15,
 	},
 	{
 		.name		= "max_excl",
-		.column_name	= "Max_excl",
+		.column_name	= "Max exclusive",
 		.need_print	= 0,
 		.unit_mode	= UNITS_DEFAULT,
-		.max_len	= 12,
+		.max_len	= 14,
 	},
 	{
 		.name		= "parent",
 		.column_name	= "Parent",
 		.need_print	= 0,
 		.unit_mode	= 0,
-		.max_len	= 7,
+		.max_len	= 8,
 	},
 	{
 		.name		= "child",
@@ -186,6 +199,13 @@ static struct {
 		.need_print	= 0,
 		.unit_mode	= 0,
 		.max_len	= 5,
+	},
+	{
+		.name		= "path",
+		.column_name	= "Path",
+		.need_print	= 1,
+		.unit_mode	= 0,
+		.max_len	= 6,
 	},
 	{
 		.name		= NULL,
@@ -202,7 +222,7 @@ static void qgroup_setup_print_column(enum btrfs_qgroup_column_enum column)
 {
 	int i;
 
-	ASSERT(0 <= column && column <= BTRFS_QGROUP_ALL);
+	UASSERT(0 <= column && column <= BTRFS_QGROUP_ALL);
 
 	if (column < BTRFS_QGROUP_ALL) {
 		btrfs_qgroup_columns[column].need_print = 1;
@@ -226,14 +246,14 @@ static int print_parent_column(struct btrfs_qgroup *qgroup)
 	int len = 0;
 
 	list_for_each_entry(list, &qgroup->qgroups, next_qgroup) {
-		len += printf("%llu/%llu",
+		len += printf("%u/%llu",
 			      btrfs_qgroup_level(list->qgroup->qgroupid),
-			      btrfs_qgroup_subvid(list->qgroup->qgroupid));
+			      btrfs_qgroup_subvolid(list->qgroup->qgroupid));
 		if (!list_is_last(&list->next_qgroup, &qgroup->qgroups))
 			len += printf(",");
 	}
 	if (list_empty(&qgroup->qgroups))
-		len += printf("---");
+		len += printf("-");
 
 	return len;
 }
@@ -244,14 +264,14 @@ static int print_child_column(struct btrfs_qgroup *qgroup)
 	int len = 0;
 
 	list_for_each_entry(list, &qgroup->members, next_member) {
-		len += printf("%llu/%llu",
+		len += printf("%u/%llu",
 			      btrfs_qgroup_level(list->member->qgroupid),
-			      btrfs_qgroup_subvid(list->member->qgroupid));
+			      btrfs_qgroup_subvolid(list->member->qgroupid));
 		if (!list_is_last(&list->next_member, &qgroup->members))
 			len += printf(",");
 	}
 	if (list_empty(&qgroup->members))
-		len += printf("---");
+		len += printf("-");
 
 	return len;
 }
@@ -269,6 +289,42 @@ static void print_qgroup_column_add_blank(enum btrfs_qgroup_column_enum column,
 		printf(" ");
 }
 
+static void print_path_column(struct btrfs_qgroup *qgroup)
+{
+	struct btrfs_qgroup_list *list = NULL;
+
+	pr_verbose(LOG_DEFAULT, "  ");
+	if (btrfs_qgroup_level(qgroup->qgroupid) > 0) {
+		int count = 0;
+
+		list_for_each_entry(list, &qgroup->qgroups, next_qgroup) {
+			struct btrfs_qgroup *member = list->qgroup;
+			u64 qgroupid = member->qgroupid;
+			u64 level = btrfs_qgroup_level(qgroupid);
+			u64 sid = btrfs_qgroup_subvolid(qgroupid);
+
+			if (count)
+				pr_verbose(LOG_DEFAULT, " ");
+			if (level == 0) {
+				const char *path = member->path;
+
+				if (!path)
+					path = "<stale>";
+				pr_verbose(LOG_DEFAULT, "%s", path);
+			} else {
+				pr_verbose(LOG_DEFAULT, "%llu/%llu", level, sid);
+			}
+			count++;
+		}
+		pr_verbose(LOG_DEFAULT, "<%u member qgroup%c>", count,
+			       (count != 1 ? 's' : '\0'));
+	} else if (qgroup->path) {
+		pr_verbose(LOG_DEFAULT, "%s%s", (*qgroup->path ? "" : "<toplevel>"), qgroup->path);
+	} else {
+		pr_verbose(LOG_DEFAULT, "<stale>");
+	}
+}
+
 static void print_qgroup_column(struct btrfs_qgroup *qgroup,
 				enum btrfs_qgroup_column_enum column)
 {
@@ -276,14 +332,14 @@ static void print_qgroup_column(struct btrfs_qgroup *qgroup,
 	int unit_mode = btrfs_qgroup_columns[column].unit_mode;
 	int max_len = btrfs_qgroup_columns[column].max_len;
 
-	ASSERT(0 <= column && column < BTRFS_QGROUP_ALL);
+	UASSERT(0 <= column && column < BTRFS_QGROUP_ALL);
 
 	switch (column) {
 
 	case BTRFS_QGROUP_QGROUPID:
-		len = printf("%llu/%llu",
+		len = printf("%u/%llu",
 			     btrfs_qgroup_level(qgroup->qgroupid),
-			     btrfs_qgroup_subvid(qgroup->qgroupid));
+			     btrfs_qgroup_subvolid(qgroup->qgroupid));
 		print_qgroup_column_add_blank(BTRFS_QGROUP_QGROUPID, len);
 		break;
 	case BTRFS_QGROUP_RFER:
@@ -313,6 +369,9 @@ static void print_qgroup_column(struct btrfs_qgroup *qgroup,
 	case BTRFS_QGROUP_CHILD:
 		len = print_child_column(qgroup);
 		print_qgroup_column_add_blank(BTRFS_QGROUP_CHILD, len);
+		break;
+	case BTRFS_QGROUP_PATH:
+		print_path_column(qgroup);
 		break;
 	default:
 		break;
@@ -346,9 +405,9 @@ static void print_table_head(void)
 			continue;
 		if ((i == BTRFS_QGROUP_QGROUPID) | (i == BTRFS_QGROUP_PARENT) |
 			(i == BTRFS_QGROUP_CHILD))
-			printf("%-*s", max_len, btrfs_qgroup_columns[i].name);
+			printf("%-*s", max_len, btrfs_qgroup_columns[i].column_name);
 		else
-			printf("%*s", max_len, btrfs_qgroup_columns[i].name);
+			printf("%*s", max_len, btrfs_qgroup_columns[i].column_name);
 		printf(" ");
 	}
 	printf("\n");
@@ -358,17 +417,17 @@ static void print_table_head(void)
 			continue;
 		if ((i == BTRFS_QGROUP_QGROUPID) | (i == BTRFS_QGROUP_PARENT) |
 			(i == BTRFS_QGROUP_CHILD)) {
-			len = strlen(btrfs_qgroup_columns[i].name);
+			len = strlen(btrfs_qgroup_columns[i].column_name);
 			while (len--)
 				printf("-");
-			len = max_len - strlen(btrfs_qgroup_columns[i].name);
+			len = max_len - strlen(btrfs_qgroup_columns[i].column_name);
 			while (len--)
 				printf(" ");
 		} else {
-			len = max_len - strlen(btrfs_qgroup_columns[i].name);
+			len = max_len - strlen(btrfs_qgroup_columns[i].column_name);
 			while (len--)
 				printf(" ");
-			len = strlen(btrfs_qgroup_columns[i].name);
+			len = strlen(btrfs_qgroup_columns[i].column_name);
 			while (len--)
 				printf("-");
 		}
@@ -397,6 +456,46 @@ static int comp_entry_with_qgroupid(struct btrfs_qgroup *entry1,
 		ret = 0;
 
 	return is_descending ? -ret : ret;
+}
+
+/* Sorts first-level qgroups by path and nested qgroups by qgroupid */
+static int comp_entry_with_path(struct btrfs_qgroup *entry1,
+				    struct btrfs_qgroup *entry2,
+				    int is_descending)
+{
+	int ret = 0;
+	const char *p1 = entry1->path;
+	const char *p2 = entry2->path;
+	u64 level1 = btrfs_qgroup_level(entry1->qgroupid);
+	u64 level2 = btrfs_qgroup_level(entry2->qgroupid);
+
+	if (level1 != level2) {
+		if (entry1->qgroupid > entry2->qgroupid)
+			ret = 1;
+		else if (entry1->qgroupid < entry2->qgroupid)
+			ret = -1;
+	}
+
+	if (ret)
+		goto out;
+
+	while (*p1 && *p2) {
+		if (*p1 != *p2)
+			break;
+		p1++;
+		p2++;
+	}
+
+	if (*p1 == '/')
+		ret = 1;
+	else if (*p2 == '/')
+		ret = -1;
+	else if (*p1 > *p2)
+		ret = 1;
+	else if (*p1 < *p2)
+		ret = -1;
+out:
+	return (is_descending ? -ret : ret);
 }
 
 static int comp_entry_with_rfer(struct btrfs_qgroup *entry1,
@@ -465,6 +564,7 @@ static int comp_entry_with_max_excl(struct btrfs_qgroup *entry1,
 
 static btrfs_qgroup_comp_func all_comp_funcs[] = {
 	[BTRFS_QGROUP_COMP_QGROUPID]	= comp_entry_with_qgroupid,
+	[BTRFS_QGROUP_COMP_PATH]	= comp_entry_with_path,
 	[BTRFS_QGROUP_COMP_RFER]	= comp_entry_with_rfer,
 	[BTRFS_QGROUP_COMP_EXCL]	= comp_entry_with_excl,
 	[BTRFS_QGROUP_COMP_MAX_RFER]	= comp_entry_with_max_rfer,
@@ -473,6 +573,7 @@ static btrfs_qgroup_comp_func all_comp_funcs[] = {
 
 static char *all_sort_items[] = {
 	[BTRFS_QGROUP_COMP_QGROUPID]	= "qgroupid",
+	[BTRFS_QGROUP_COMP_PATH]	= "path",
 	[BTRFS_QGROUP_COMP_RFER]	= "rfer",
 	[BTRFS_QGROUP_COMP_EXCL]	= "excl",
 	[BTRFS_QGROUP_COMP_MAX_RFER]	= "max_rfer",
@@ -500,7 +601,7 @@ static struct btrfs_qgroup_comparer_set *qgroup_alloc_comparer_set(void)
 	       sizeof(struct btrfs_qgroup_comparer);
 	set = calloc(1, size);
 	if (!set) {
-		error("memory allocation failed");
+		error_msg(ERROR_MSG_MEMORY, NULL);
 		exit(1);
 	}
 
@@ -516,9 +617,9 @@ static int qgroup_setup_comparer(struct btrfs_qgroup_comparer_set **comp_set,
 	struct btrfs_qgroup_comparer_set *set = *comp_set;
 	int size;
 
-	ASSERT(set != NULL);
-	ASSERT(comparer < BTRFS_QGROUP_COMP_MAX);
-	ASSERT(set->ncomps <= set->total);
+	UASSERT(set != NULL);
+	UASSERT(comparer < BTRFS_QGROUP_COMP_MAX);
+	UASSERT(set->ncomps <= set->total);
 
 	if (set->ncomps == set->total) {
 		void *tmp;
@@ -540,7 +641,7 @@ static int qgroup_setup_comparer(struct btrfs_qgroup_comparer_set **comp_set,
 		*comp_set = set;
 	}
 
-	ASSERT(set->comps[set->ncomps].comp_func == NULL);
+	UASSERT(set->comps[set->ncomps].comp_func == NULL);
 
 	set->comps[set->ncomps].comp_func = all_comp_funcs[comparer];
 	set->comps[set->ncomps].is_descending = is_descending;
@@ -551,7 +652,7 @@ static int qgroup_setup_comparer(struct btrfs_qgroup_comparer_set **comp_set,
 static int sort_comp(struct btrfs_qgroup *entry1, struct btrfs_qgroup *entry2,
 		     struct btrfs_qgroup_comparer_set *set)
 {
-	int qgroupid_compared = 0;
+	bool qgroupid_compared = false;
 	int i, ret = 0;
 
 	if (!set || !set->ncomps)
@@ -567,7 +668,7 @@ static int sort_comp(struct btrfs_qgroup *entry1, struct btrfs_qgroup *entry2,
 			return ret;
 
 		if (set->comps[i].comp_func == comp_entry_with_qgroupid)
-			qgroupid_compared = 1;
+			qgroupid_compared = true;
 	}
 
 	if (!qgroupid_compared) {
@@ -648,7 +749,7 @@ static struct btrfs_qgroup *qgroup_tree_search(struct qgroup_lookup *root_tree,
  * Return the pointer to the btrfs_qgroup if found or if inserted successfully.
  * Return ERR_PTR if any error occurred.
  */
-static struct btrfs_qgroup *get_or_add_qgroup(
+static struct btrfs_qgroup *get_or_add_qgroup(int fd,
 		struct qgroup_lookup *qgroup_lookup, u64 qgroupid)
 {
 	struct btrfs_qgroup *bq;
@@ -660,7 +761,7 @@ static struct btrfs_qgroup *get_or_add_qgroup(
 
 	bq = calloc(1, sizeof(*bq));
 	if (!bq) {
-		error("memory allocation failed");
+		error_msg(ERROR_MSG_MEMORY, NULL);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -668,11 +769,27 @@ static struct btrfs_qgroup *get_or_add_qgroup(
 	INIT_LIST_HEAD(&bq->qgroups);
 	INIT_LIST_HEAD(&bq->members);
 
+	if (btrfs_qgroup_level(qgroupid) == 0) {
+		enum btrfs_util_error uret;
+		char *path;
+
+		uret = btrfs_util_subvolume_path_fd(fd, qgroupid, &path);
+		if (uret == BTRFS_UTIL_OK)
+			bq->path = path;
+		/* Ignore stale qgroup items */
+		else if (uret != BTRFS_UTIL_ERROR_SUBVOLUME_NOT_FOUND) {
+			error("%s", btrfs_util_strerror(uret));
+			if (uret == BTRFS_UTIL_ERROR_NO_MEMORY)
+				return ERR_PTR(-ENOMEM);
+			else
+				return ERR_PTR(-EIO);
+		}
+	}
+
 	ret = qgroup_tree_insert(qgroup_lookup, bq);
 	if (ret) {
 		errno = -ret;
-		error("failed to insert %llu into tree: %m",
-		       (unsigned long long)bq->qgroupid);
+		error("failed to insert %llu into tree: %m", bq->qgroupid);
 		free(bq);
 		return ERR_PTR(ret);
 	}
@@ -680,44 +797,40 @@ static struct btrfs_qgroup *get_or_add_qgroup(
 	return bq;
 }
 
-static int update_qgroup_info(struct qgroup_lookup *qgroup_lookup, u64 qgroupid,
+static int update_qgroup_info(int fd, struct qgroup_lookup *qgroup_lookup, u64 qgroupid,
 			      struct btrfs_qgroup_info_item *info)
 {
 	struct btrfs_qgroup *bq;
 
-	bq = get_or_add_qgroup(qgroup_lookup, qgroupid);
+	bq = get_or_add_qgroup(fd, qgroup_lookup, qgroupid);
 	if (IS_ERR_OR_NULL(bq))
 		return PTR_ERR(bq);
 
 	bq->info.generation = btrfs_stack_qgroup_info_generation(info);
-	bq->info.referenced = btrfs_stack_qgroup_info_referenced(info);
+	bq->info.referenced = btrfs_stack_qgroup_info_rfer(info);
 	bq->info.referenced_compressed =
-			btrfs_stack_qgroup_info_referenced_compressed(info);
-	bq->info.exclusive = btrfs_stack_qgroup_info_exclusive(info);
-	bq->info.exclusive_compressed =
-			btrfs_stack_qgroup_info_exclusive_compressed(info);
+		btrfs_stack_qgroup_info_rfer_cmpr(info);
+	bq->info.exclusive = btrfs_stack_qgroup_info_excl(info);
+	bq->info.exclusive_compressed = btrfs_stack_qgroup_info_excl_cmpr(info);
 
 	return 0;
 }
 
-static int update_qgroup_limit(struct qgroup_lookup *qgroup_lookup,
+static int update_qgroup_limit(int fd, struct qgroup_lookup *qgroup_lookup,
 			       u64 qgroupid,
 			       struct btrfs_qgroup_limit_item *limit)
 {
 	struct btrfs_qgroup *bq;
 
-	bq = get_or_add_qgroup(qgroup_lookup, qgroupid);
+	bq = get_or_add_qgroup(fd, qgroup_lookup, qgroupid);
 	if (IS_ERR_OR_NULL(bq))
 		return PTR_ERR(bq);
 
 	bq->limit.flags = btrfs_stack_qgroup_limit_flags(limit);
-	bq->limit.max_referenced =
-			btrfs_stack_qgroup_limit_max_referenced(limit);
-	bq->limit.max_exclusive =
-			btrfs_stack_qgroup_limit_max_exclusive(limit);
-	bq->limit.rsv_referenced =
-			btrfs_stack_qgroup_limit_rsv_referenced(limit);
-	bq->limit.rsv_exclusive = btrfs_stack_qgroup_limit_rsv_exclusive(limit);
+	bq->limit.max_referenced = btrfs_stack_qgroup_limit_max_rfer(limit);
+	bq->limit.max_exclusive = btrfs_stack_qgroup_limit_max_excl(limit);
+	bq->limit.rsv_referenced = btrfs_stack_qgroup_limit_rsv_rfer(limit);
+	bq->limit.rsv_exclusive = btrfs_stack_qgroup_limit_rsv_excl(limit);
 
 	return 0;
 }
@@ -731,23 +844,23 @@ static int update_qgroup_relation(struct qgroup_lookup *qgroup_lookup,
 
 	child = qgroup_tree_search(qgroup_lookup, child_id);
 	if (!child) {
-		error("cannot find the qgroup %llu/%llu",
+		error("cannot find the qgroup %u/%llu",
 		      btrfs_qgroup_level(child_id),
-		      btrfs_qgroup_subvid(child_id));
+		      btrfs_qgroup_subvolid(child_id));
 		return -ENOENT;
 	}
 
 	parent = qgroup_tree_search(qgroup_lookup, parent_id);
 	if (!parent) {
-		error("cannot find the qgroup %llu/%llu",
+		error("cannot find the qgroup %u/%llu",
 		      btrfs_qgroup_level(parent_id),
-		      btrfs_qgroup_subvid(parent_id));
+		      btrfs_qgroup_subvolid(parent_id));
 		return -ENOENT;
 	}
 
 	list = malloc(sizeof(*list));
 	if (!list) {
-		error("memory allocation failed");
+		error_msg(ERROR_MSG_MEMORY, NULL);
 		return -ENOMEM;
 	}
 
@@ -778,6 +891,8 @@ static void __free_btrfs_qgroup(struct btrfs_qgroup *bq)
 		list_del(&list->next_member);
 		free(list);
 	}
+	if (bq->path)
+		free((void *)bq->path);
 	free(bq);
 }
 
@@ -881,7 +996,7 @@ static struct btrfs_qgroup_filter_set *qgroup_alloc_filter_set(void)
 	       sizeof(struct btrfs_qgroup_filter);
 	set = calloc(1, size);
 	if (!set) {
-		error("memory allocation failed");
+		error_msg(ERROR_MSG_MEMORY, NULL);
 		exit(1);
 	}
 	set->total = BTRFS_QGROUP_NFILTERS_INCREASE;
@@ -895,9 +1010,9 @@ static int qgroup_setup_filter(struct btrfs_qgroup_filter_set **filter_set,
 	struct btrfs_qgroup_filter_set *set = *filter_set;
 	int size;
 
-	ASSERT(set != NULL);
-	ASSERT(filter < BTRFS_QGROUP_FILTER_MAX);
-	ASSERT(set->nfilters <= set->total);
+	UASSERT(set != NULL);
+	UASSERT(filter < BTRFS_QGROUP_FILTER_MAX);
+	UASSERT(set->nfilters <= set->total);
 
 	if (set->nfilters == set->total) {
 		void *tmp;
@@ -908,7 +1023,7 @@ static int qgroup_setup_filter(struct btrfs_qgroup_filter_set **filter_set,
 		tmp = set;
 		set = realloc(set, size);
 		if (!set) {
-			error("memory allocation failed");
+			error_msg(ERROR_MSG_MEMORY, NULL);
 			free(tmp);
 			exit(1);
 		}
@@ -919,7 +1034,7 @@ static int qgroup_setup_filter(struct btrfs_qgroup_filter_set **filter_set,
 		*filter_set = set;
 	}
 
-	ASSERT(set->filters[set->nfilters].filter_func == NULL);
+	UASSERT(set->filters[set->nfilters].filter_func == NULL);
 	set->filters[set->nfilters].filter_func = all_filter_funcs[filter];
 	set->filters[set->nfilters].data = data;
 	set->nfilters++;
@@ -995,14 +1110,14 @@ static void __update_columns_max_len(struct btrfs_qgroup *bq,
 	int len;
 	unsigned unit_mode = btrfs_qgroup_columns[column].unit_mode;
 
-	ASSERT(0 <= column && column < BTRFS_QGROUP_ALL);
+	UASSERT(0 <= column && column < BTRFS_QGROUP_ALL);
 
 	switch (column) {
 
 	case BTRFS_QGROUP_QGROUPID:
-		sprintf(tmp, "%llu/%llu",
+		sprintf(tmp, "%u/%llu",
 			btrfs_qgroup_level(bq->qgroupid),
-			btrfs_qgroup_subvid(bq->qgroupid));
+			btrfs_qgroup_subvolid(bq->qgroupid));
 		len = strlen(tmp);
 		if (btrfs_qgroup_columns[column].max_len < len)
 			btrfs_qgroup_columns[column].max_len = len;
@@ -1032,9 +1147,9 @@ static void __update_columns_max_len(struct btrfs_qgroup *bq,
 	case BTRFS_QGROUP_PARENT:
 		len = 0;
 		list_for_each_entry(list, &bq->qgroups, next_qgroup) {
-			len += sprintf(tmp, "%llu/%llu",
+			len += sprintf(tmp, "%u/%llu",
 				btrfs_qgroup_level(list->qgroup->qgroupid),
-				btrfs_qgroup_subvid(list->qgroup->qgroupid));
+				btrfs_qgroup_subvolid(list->qgroup->qgroupid));
 			if (!list_is_last(&list->next_qgroup, &bq->qgroups))
 				len += 1;
 		}
@@ -1044,9 +1159,9 @@ static void __update_columns_max_len(struct btrfs_qgroup *bq,
 	case BTRFS_QGROUP_CHILD:
 		len = 0;
 		list_for_each_entry(list, &bq->members, next_member) {
-			len += sprintf(tmp, "%llu/%llu",
+			len += sprintf(tmp, "%u/%llu",
 				btrfs_qgroup_level(list->member->qgroupid),
-				btrfs_qgroup_subvid(list->member->qgroupid));
+				btrfs_qgroup_subvolid(list->member->qgroupid));
 			if (!list_is_last(&list->next_member, &bq->members))
 				len += 1;
 		}
@@ -1188,7 +1303,7 @@ static int __qgroups_search(int fd, struct btrfs_ioctl_search_args *args,
 				info = (struct btrfs_qgroup_info_item *)
 				       (args->buf + off);
 
-				ret = update_qgroup_info(qgroup_lookup,
+				ret = update_qgroup_info(fd, qgroup_lookup,
 							 qgroupid, info);
 				break;
 			case BTRFS_QGROUP_LIMIT_KEY:
@@ -1196,7 +1311,7 @@ static int __qgroups_search(int fd, struct btrfs_ioctl_search_args *args,
 				limit = (struct btrfs_qgroup_limit_item *)
 					(args->buf + off);
 
-				ret = update_qgroup_limit(qgroup_lookup,
+				ret = update_qgroup_limit(fd, qgroup_lookup,
 							  qgroupid, limit);
 				break;
 			case BTRFS_QGROUP_RELATION_KEY:
@@ -1257,10 +1372,12 @@ static int qgroups_search_all(int fd, struct qgroup_lookup *qgroup_lookup)
 	int ret;
 
 	ret = __qgroups_search(fd, &args, qgroup_lookup);
-	if (ret == -ENOTTY)
+	if (ret == -ENOTTY) {
 		error("can't list qgroups: quotas not enabled");
-	else if (ret < 0)
-		error("can't list qgroups: %s", strerror(-ret));
+	} else if (ret < 0) {
+		errno = -ret;
+		error("can't list qgroups: %m");
+	}
 	return ret;
 }
 
@@ -1318,6 +1435,80 @@ static void print_all_qgroups(struct qgroup_lookup *qgroup_lookup)
 	}
 }
 
+static const struct rowspec qgroup_show_rowspec[] = {
+	{ .key = "qgroupid", .fmt = "qgroupid", .out_json = "qgroupid" },
+	{ .key = "referenced", .fmt = "%llu", .out_json = "referenced" },
+	{ .key = "exclusive", .fmt = "%llu", .out_json = "exclusive" },
+	{ .key = "max_referenced", .fmt = "%llu", .out_json = "max_referenced" },
+	/* Special value if limits not set. */
+	{ .key = "max_referenced-none", .fmt = "%s", .out_json = "max_referenced" },
+	{ .key = "max_exclusive", .fmt = "%llu", .out_json = "max_exclusive" },
+	/* Special value if limits not set. */
+	{ .key = "max_exclusive-none", .fmt = "%s", .out_json = "max_exclusive" },
+	{ .key = "path", .fmt = "str", .out_json = "path" },
+	{ .key = "parents", .fmt = "list", .out_json = "parents" },
+	{ .key = "children", .fmt = "list", .out_json = "children" },
+	/* Workaround for printing qgroupid in the list as a plain value */
+	{ .key = "qgroupid-list", .fmt = "qgroupid", .out_json = NULL },
+	ROWSPEC_END
+};
+
+static void print_all_qgroups_json(struct qgroup_lookup *qgroup_lookup)
+{
+	struct rb_node *n;
+	struct btrfs_qgroup *qgroup;
+	struct format_ctx fctx;
+
+	fmt_start(&fctx, qgroup_show_rowspec, 24, 0);
+	fmt_print_start_group(&fctx, "qgroup-show", JSON_TYPE_ARRAY);
+
+	n = rb_first(&qgroup_lookup->root);
+	while (n) {
+		struct btrfs_qgroup_list *list = NULL;
+
+		qgroup = rb_entry(n, struct btrfs_qgroup, sort_node);
+
+		fmt_print_start_group(&fctx, NULL, JSON_TYPE_MAP);
+
+		fmt_print(&fctx, "qgroupid",
+				(int)btrfs_qgroup_level(qgroup->qgroupid),
+				btrfs_qgroup_subvolid(qgroup->qgroupid));
+		fmt_print(&fctx, "referenced", qgroup->info.referenced);
+		if (qgroup->limit.flags & BTRFS_QGROUP_LIMIT_MAX_RFER)
+			fmt_print(&fctx, "max_referenced", qgroup->limit.max_referenced);
+		else
+			fmt_print(&fctx, "max_referenced-none", "none");
+		fmt_print(&fctx, "exclusive", qgroup->info.exclusive);
+		if (qgroup->limit.flags & BTRFS_QGROUP_LIMIT_MAX_EXCL)
+			fmt_print(&fctx, "max_exclusive", qgroup->limit.max_exclusive);
+		else
+			fmt_print(&fctx, "max_exclusive-none", "none");
+		fmt_print(&fctx, "path", qgroup->path ?: "");
+
+		fmt_print_start_group(&fctx, "parents", JSON_TYPE_ARRAY);
+		list_for_each_entry(list, &qgroup->qgroups, next_qgroup) {
+			fmt_print(&fctx, "qgroupid-list",
+				btrfs_qgroup_level(list->qgroup->qgroupid),
+				btrfs_qgroup_subvolid(list->qgroup->qgroupid));
+		}
+		fmt_print_end_group(&fctx, "parents");
+
+		fmt_print_start_group(&fctx, "children", JSON_TYPE_ARRAY);
+		list_for_each_entry(list, &qgroup->members, next_member) {
+			fmt_print(&fctx, "qgroupid-list",
+				btrfs_qgroup_level(list->member->qgroupid),
+				btrfs_qgroup_subvolid(list->member->qgroupid));
+		}
+		fmt_print_end_group(&fctx, "children");
+
+		fmt_print_end_group(&fctx, NULL);
+
+		n = rb_next(n);
+	}
+	fmt_print_end_group(&fctx, "qgroup-show");
+	fmt_end(&fctx);
+}
+
 static int show_qgroups(int fd,
 		       struct btrfs_qgroup_filter_set *filter_set,
 		       struct btrfs_qgroup_comparer_set *comp_set)
@@ -1332,7 +1523,10 @@ static int show_qgroups(int fd,
 		return ret;
 	__filter_and_sort_qgroups(&qgroup_lookup, &sort_tree,
 				  filter_set, comp_set);
-	print_all_qgroups(&sort_tree);
+	if (bconf.output_format == CMD_FORMAT_JSON)
+		print_all_qgroups_json(&sort_tree);
+	else
+		print_all_qgroups(&sort_tree);
 
 	__free_all_qgroups(&qgroup_lookup);
 	return ret;
@@ -1348,8 +1542,8 @@ static int show_qgroups(int fd,
 static int qgroup_parse_sort_string(const char *opt_arg,
 				   struct btrfs_qgroup_comparer_set **comps)
 {
-	int order;
-	int flag;
+	bool order;
+	bool flag;
 	char *p;
 	char **ptr_argv;
 	int what_to_sort;
@@ -1362,17 +1556,17 @@ static int qgroup_parse_sort_string(const char *opt_arg,
 
 	p = strtok(opt_tmp, ",");
 	while (p) {
-		flag = 0;
+		flag = false;
 		ptr_argv = all_sort_items;
 
 		while (*ptr_argv) {
 			if (strcmp(*ptr_argv, p) == 0) {
-				flag = 1;
+				flag = true;
 				break;
 			} else {
 				p++;
 				if (strcmp(*ptr_argv, p) == 0) {
-					flag = 1;
+					flag = true;
 					p--;
 					break;
 				}
@@ -1381,18 +1575,18 @@ static int qgroup_parse_sort_string(const char *opt_arg,
 			ptr_argv++;
 		}
 
-		if (flag == 0) {
+		if (!flag) {
 			ret = 1;
 			goto out;
 		} else {
 			if (*p == '+') {
-				order = 0;
+				order = false;
 				p++;
 			} else if (*p == '-') {
-				order = 1;
+				order = true;
 				p++;
 			} else
-				order = 0;
+				order = false;
 
 			what_to_sort = qgroup_get_sort_item(p);
 			if (what_to_sort < 0) {
@@ -1434,7 +1628,7 @@ static int qgroup_inherit_realloc(struct btrfs_qgroup_inherit **inherit, int n,
 
 	out = calloc(sizeof(*out) + sizeof(out->qgroups[0]) * (nitems + n), 1);
 	if (out == NULL) {
-		error("not enough memory");
+		error_msg(ERROR_MSG_MEMORY, NULL);
 		return -ENOMEM;
 	}
 
@@ -1535,7 +1729,7 @@ static int _cmd_qgroup_assign(const struct cmd_struct *cmd, int assign,
 
 	optind = 0;
 	while (1) {
-		enum { GETOPT_VAL_RESCAN = 256, GETOPT_VAL_NO_RESCAN };
+		enum { GETOPT_VAL_RESCAN = GETOPT_VAL_FIRST, GETOPT_VAL_NO_RESCAN };
 		static const struct option long_options[] = {
 			{ "rescan", no_argument, NULL, GETOPT_VAL_RESCAN },
 			{ "no-rescan", no_argument, NULL, GETOPT_VAL_NO_RESCAN },
@@ -1653,10 +1847,13 @@ static int _cmd_qgroup_create(int create, int argc, char **argv)
 
 static const char * const cmd_qgroup_assign_usage[] = {
 	"btrfs qgroup assign [options] <src> <dst> <path>",
-	"Assign SRC as the child qgroup of DST",
+	"Assign SRC as the child qgroup of DST.",
+	"Assign SRC qgroup as the child qgroup of DST, where the level of DST",
+	"must be higher than SRC. The quota accounting will be inconsistent",
+	"until the next rescan.",
 	"",
-	"--rescan       schedule qutoa rescan if needed",
-	"--no-rescan    don't schedule quota rescan",
+	OPTLINE("--rescan", "schedule quota rescan if needed"),
+	OPTLINE("--no-rescan", "don't schedule quota rescan"),
 	NULL
 };
 
@@ -1669,10 +1866,12 @@ static DEFINE_SIMPLE_COMMAND(qgroup_assign, "assign");
 
 static const char * const cmd_qgroup_remove_usage[] = {
 	"btrfs qgroup remove [options] <src> <dst> <path>",
-	"Remove a child qgroup SRC from DST.",
+	"Remove the relation between child qgroup SRC from DST.",
+	"Remove the relation between SRC and DST qgroups. The quota accounting",
+	"will be inconsistent until the next rescan.",
 	"",
-	"--rescan       schedule qutoa rescan if needed",
-	"--no-rescan    don't schedule quota rescan",
+	OPTLINE("--rescan", "schedule quota rescan if needed"),
+	OPTLINE("--no-rescan", "don't schedule quota rescan"),
 	NULL
 };
 
@@ -1686,6 +1885,9 @@ static DEFINE_SIMPLE_COMMAND(qgroup_remove, "remove");
 static const char * const cmd_qgroup_create_usage[] = {
 	"btrfs qgroup create <qgroupid> <path>",
 	"Create a subvolume quota group.",
+	"Create a subvolume quota group. The level can't be 0 as such qgroup is",
+	"created automatically for a subvolume. Higher level qgroups are supposed",
+	"to provide accounting for qgroups in a tree structure.",
 	NULL
 };
 
@@ -1715,22 +1917,23 @@ static DEFINE_SIMPLE_COMMAND(qgroup_destroy, "destroy");
 
 static const char * const cmd_qgroup_show_usage[] = {
 	"btrfs qgroup show [options] <path>",
-	"Show subvolume quota groups.",
+	"List subvolume quota groups.",
+	"List subvolume quota groups, accounted size, limits and path.",
 	"",
-	"-p             print parent qgroup id",
-	"-c             print child qgroup id",
-	"-r             print limit of referenced size of qgroup",
-	"-e             print limit of exclusive size of qgroup",
-	"-F             list all qgroups which impact the given path",
-	"               (including ancestral qgroups)",
-	"-f             list all qgroups which impact the given path",
-	"               (excluding ancestral qgroups)",
+	OPTLINE("-p", "print parent qgroup id"),
+	OPTLINE("-c", "print child qgroup id"),
+	OPTLINE("-r", "print limit of referenced size of qgroup"),
+	OPTLINE("-e", "print limit of exclusive size of qgroup"),
+	OPTLINE("-F", "list all qgroups which impact the given path (including ancestral qgroups)"),
+	OPTLINE("-f", "list all qgroups which impact the given path (excluding ancestral qgroups)"),
 	HELPINFO_UNITS_LONG,
-	"--sort=qgroupid,rfer,excl,max_rfer,max_excl",
-	"               list qgroups sorted by specified items",
-	"               you can use '+' or '-' in front of each item.",
-	"               (+:ascending, -:descending, ascending default)",
-	"--sync         force sync of the filesystem before getting info",
+	OPTLINE("--sort=qgroupid,rfer,excl,max_rfer,max_excl,path",
+		"list qgroups sorted by specified items "
+		"you can use '+' or '-' in front of each item. "
+		"(+:ascending, -:descending, ascending default)"),
+	OPTLINE("--sync", "force sync of the filesystem before getting info"),
+	HELPINFO_INSERT_GLOBALS,
+	HELPINFO_INSERT_FORMAT,
 	NULL
 };
 
@@ -1743,9 +1946,8 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 	u64 qgroupid;
 	int filter_flag = 0;
 	unsigned unit_mode;
-	int sync = 0;
+	bool sync = false;
 	enum btrfs_util_error err;
-
 	struct btrfs_qgroup_comparer_set *comparer_set;
 	struct btrfs_qgroup_filter_set *filter_set;
 	filter_set = qgroup_alloc_filter_set();
@@ -1757,7 +1959,7 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 	while (1) {
 		int c;
 		enum {
-			GETOPT_VAL_SORT = 256,
+			GETOPT_VAL_SORT = GETOPT_VAL_FIRST,
 			GETOPT_VAL_SYNC
 		};
 		static const struct option long_options[] = {
@@ -1801,7 +2003,7 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 			}
 			break;
 		case GETOPT_VAL_SYNC:
-			sync = 1;
+			sync = true;
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -1851,15 +2053,14 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 out:
 	return !!ret;
 }
-static DEFINE_SIMPLE_COMMAND(qgroup_show, "show");
+static DEFINE_COMMAND_WITH_FLAGS(qgroup_show, "show", CMD_FORMAT_JSON);
 
 static const char * const cmd_qgroup_limit_usage[] = {
 	"btrfs qgroup limit [options] <size>|none [<qgroupid>] <path>",
 	"Set the limits a subvolume quota group.",
 	"",
-	"-c   limit amount of data after compression. This is the default,",
-	"     it is currently not possible to turn off this option.",
-	"-e   limit space exclusively assigned to this qgroup",
+	OPTLINE("-c", "limit amount of data after compression. This is the default, it is currently not possible to turn off this option"),
+	OPTLINE("-e", "limit space exclusively assigned to this qgroup"),
 	NULL
 };
 
@@ -1870,8 +2071,8 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 	char *path = NULL;
 	struct btrfs_ioctl_qgroup_limit_args args;
 	unsigned long long size;
-	int compressed = 0;
-	int exclusive = 0;
+	bool compressed = false;
+	bool exclusive = false;
 	DIR *dirstream = NULL;
 	enum btrfs_util_error err;
 
@@ -1882,10 +2083,10 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 			break;
 		switch (c) {
 		case 'c':
-			compressed = 1;
+			compressed = true;
 			break;
 		case 'e':
-			exclusive = 1;
+			exclusive = true;
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -1928,7 +2129,7 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 		args.qgroupid = parse_qgroupid_or_path(argv[optind + 1]);
 		path = argv[optind + 2];
 	} else
-		usage(cmd);
+		usage(cmd, 1);
 
 	fd = btrfs_open_dir(path, &dirstream, 1);
 	if (fd < 0)
@@ -1947,6 +2148,73 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 }
 static DEFINE_SIMPLE_COMMAND(qgroup_limit, "limit");
 
+static const char * const cmd_qgroup_clear_stale_usage[] = {
+	"btrfs qgroup clear-stale <path>",
+	"Clear all stale qgroups (level 0/subvolid), without a subvolume.",
+	"Clear all stale qgroups whose subvolume does not exist anymore, this is the",
+	"level 0 qgroup like 0/subvolid. Higher level qgroups are not deleted even",
+	"if they don't have any child qgroups.",
+	HELPINFO_INSERT_GLOBALS,
+	HELPINFO_INSERT_QUIET,
+	NULL
+};
+
+static int cmd_qgroup_clear_stale(const struct cmd_struct *cmd, int argc, char **argv)
+{
+	int ret = 0;
+	int fd;
+	char *path = NULL;
+	DIR *dirstream = NULL;
+	struct qgroup_lookup qgroup_lookup;
+	struct rb_node *node;
+	struct btrfs_qgroup *entry;
+
+	if (check_argc_exact(argc - optind, 1))
+		return 1;
+
+	path = argv[optind];
+
+	fd = btrfs_open_dir(path, &dirstream, 1);
+	if (fd < 0)
+		return 1;
+
+	ret = qgroups_search_all(fd, &qgroup_lookup);
+	if (ret == -ENOTTY) {
+		error("can't list qgroups: quotas not enabled");
+		goto out;
+	} else if (ret < 0) {
+		errno = -ret;
+		error("can't list qgroups: %m");
+		goto out;
+	}
+
+	node = rb_first(&qgroup_lookup.root);
+	while (node) {
+		u64 level;
+		struct btrfs_ioctl_qgroup_create_args args = { .create = false };
+
+		entry = rb_entry(node, struct btrfs_qgroup, rb_node);
+		level = btrfs_qgroup_level(entry->qgroupid);
+		if (!entry->path && level == 0) {
+			pr_verbose(LOG_DEFAULT, "Delete stale qgroup %llu/%llu\n",
+					level, btrfs_qgroup_subvolid(entry->qgroupid));
+			args.qgroupid = entry->qgroupid;
+			ret = ioctl(fd, BTRFS_IOC_QGROUP_CREATE, &args);
+			if (ret < 0) {
+				error("cannot delete qgroup %llu/%llu: %m",
+					level,
+					btrfs_qgroup_subvolid(entry->qgroupid));
+			}
+		}
+		node = rb_next(node);
+	}
+
+out:
+	close_file_or_dir(fd, dirstream);
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(qgroup_clear_stale, "clear-stale");
+
 static const char qgroup_cmd_group_info[] =
 "manage quota groups";
 
@@ -1955,6 +2223,7 @@ static const struct cmd_group qgroup_cmd_group = {
 		&cmd_struct_qgroup_assign,
 		&cmd_struct_qgroup_remove,
 		&cmd_struct_qgroup_create,
+		&cmd_struct_qgroup_clear_stale,
 		&cmd_struct_qgroup_destroy,
 		&cmd_struct_qgroup_show,
 		&cmd_struct_qgroup_limit,

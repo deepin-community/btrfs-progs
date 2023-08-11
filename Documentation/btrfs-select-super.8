@@ -1,111 +1,80 @@
-'\" t
-.\"     Title: btrfs-select-super
-.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 11/05/2021
-.\"    Manual: Btrfs Manual
-.\"    Source: Btrfs v5.15
-.\"  Language: English
-.\"
-.TH "BTRFS\-SELECT\-SUPER" "8" "11/05/2021" "Btrfs v5\&.15" "Btrfs Manual"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
-.SH "NAME"
+.\" Man page generated from reStructuredText.
+.
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.TH "BTRFS-SELECT-SUPER" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.SH NAME
 btrfs-select-super \- overwrite primary superblock with a backup copy
-.SH "SYNOPSIS"
+.SH SYNOPSIS
 .sp
-\fBbtrfs\-select\-super\fR \-s number \fI<device>\fR
-.SH "DESCRIPTION"
+\fBbtrfs\-select\-super\fP \-s number <device>
+.SH DESCRIPTION
 .sp
-Destructively overwrite all copies of the superblock with a specified copy\&. This helps in certain cases, for example when write barriers were disabled during a power failure and not all superblocks were written, or if the primary superblock is damaged, eg\&. accidentally overwritten\&.
+Destructively overwrite all copies of the superblock with a specified copy.
+This helps in certain cases, for example when write barriers were disabled
+during a power failure and not all superblocks were written, or if the primary
+superblock is damaged, e.g. accidentally overwritten.
 .sp
-The filesystem specified by \fIdevice\fR must not be mounted\&.
-.if n \{\
+The filesystem specified by \fIdevice\fP must not be mounted.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
+\fBNOTE:\fP
+.INDENT 0.0
+.INDENT 3.5
+Prior to overwriting the primary superblock, please make sure that the
+backup copies are valid!
+.UNINDENT
+.UNINDENT
 .sp
-\fBPrior to overwriting the primary superblock, please make sure that the backup copies are valid!\fR
-.sp .5v
-.RE
+To dump a superblock use the \fBbtrfs inspect\-internal dump\-super\fP command.
 .sp
-To dump a superblock use the \fBbtrfs inspect\-internal dump\-super\fR command\&.
-.sp
-Then run the check (in the non\-repair mode) using the command \fBbtrfs check \-s\fR where \fI\-s\fR specifies the superblock copy to use\&.
+Then run the check (in the non\-repair mode) using the command \fBbtrfs check \-s\fP
+where \fI\-s\fP specifies the superblock copy to use.
 .sp
 Superblock copies exist in the following offsets on the device:
+.INDENT 0.0
+.IP \(bu 2
+primary: 64KiB (65536)
+.IP \(bu 2
+1st copy: 64MiB (67108864)
+.IP \(bu 2
+2nd copy: 256GiB (274877906944)
+.UNINDENT
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-primary:
-\fI64KiB\fR
-(65536)
-.RE
+A superblock size is 4KiB (4096).
+.SH OPTIONS
+.INDENT 0.0
+.TP
+.B \-s|\-\-super <N>
+use Nth superblock copy, valid values are 0 1 or 2 if the
+respective superblock offset is within the device size
+.UNINDENT
+.SH SEE ALSO
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-1st copy:
-\fI64MiB\fR
-(67108864)
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-2nd copy:
-\fI256GiB\fR
-(274877906944)
-.RE
-.sp
-A superblock size is \fI4KiB\fR (4096)\&.
-.SH "OPTIONS"
-.PP
-\-s|\-\-super \fI<superblock>\fR
-.RS 4
-use \*(Aqsuperblock\(cqth superblock copy, valid values are 0 1 or 2 if the respective superblock offset is within the device size
-.RE
-.SH "SEE ALSO"
-.sp
-\fBbtrfs\-inspect\-internal\fR(8), \fBbtrfsck check\fR(8)
+\fI\%btrfs(8)\fP
+.\" Generated by docutils manpage writer.
+.

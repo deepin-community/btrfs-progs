@@ -1,15 +1,15 @@
 #!/bin/bash
 # test for 'filesystem show' on fresh local file
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq mkfs.btrfs
 check_prereq btrfs
 
-IMAGE=$(mktemp -u btrfs-progs-image.XXXXXX)
+setup_root_helper
 
-run_check truncate -s3g "$IMAGE"
-run_check $SUDO_HELPER "$TOP/mkfs.btrfs" -f "$IMAGE"
-run_check $SUDO_HELPER "$TOP/btrfs" filesystem show "$IMAGE"
+_mktemp_local img 3g
+run_check $SUDO_HELPER "$TOP/mkfs.btrfs" -f img
+run_check $SUDO_HELPER "$TOP/btrfs" filesystem show img
 
-rm -f "$IMAGE"
+rm -f img

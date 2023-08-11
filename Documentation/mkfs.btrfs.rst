@@ -9,38 +9,43 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-**mkfs.btrfs** is used to create the btrfs filesystem on a single or multiple
+:command:`mkfs.btrfs` is used to create the btrfs filesystem on a single or multiple
 devices.  The *device* is typically a block device but can be a file-backed image
 as well. Multiple devices are grouped by UUID of the filesystem.
 
 Before mounting such filesystem, the kernel module must know all the devices
-either via preceding execution of **btrfs device scan** or using the *device*
-mount option. See section *MULTIPLE DEVICES* for more details.
+either via preceding execution of :command:`btrfs device scan` or using the *device*
+mount option. See section :ref:`MULTIPLE DEVICES<man-mkfs-multiple-devices>`
+for more details.
 
 The default block group profiles for data and metadata depend on number of
 devices and possibly other factors. It's recommended to use specific profiles
 but the defaults should be OK and allowing future conversions to other profiles.
-Please see options *-d* and *-m* for further detals and ``btrfs-balance(8)`` for
+Please see options *-d* and *-m* for further details and :doc:`btrfs-balance(8)<btrfs-balance>` for
 the profile conversion post mkfs.
 
 OPTIONS
 -------
 
 -b|--byte-count <size>
-        Specify the size of the filesystem. If this option is not used, then
-        mkfs.btrfs uses the entire device space for the filesystem.
+        Specify the size of each device as seen by the filesystem. If not set,
+        the entire device size is used. The total filesystem size will be sum
+        of all device sizes, for a single device filesystem the option
+        effectively specifies the size of the filesystem.
 
 --csum <type>, --checksum <type>
         Specify the checksum algorithm. Default is *crc32c*. Valid values are *crc32c*,
         *xxhash*, *sha256* or *blake2*. To mount such filesystem kernel must support the
-        checksums as well. See *CHECKSUM ALGORITHMS* in ``btrfs(5)``.
+        checksums as well. See section :ref:`CHECKSUM ALGORITHMS<man-mkfs-checksum-algorithms>`
+        in :doc:`btrfs(5)<btrfs-man5>`.
 
 -d|--data <profile>
         Specify the profile for the data block groups.  Valid values are *raid0*,
         *raid1*, *raid1c3*, *raid1c4*, *raid5*, *raid6*, *raid10* or *single* or *dup*
         (case does not matter).
 
-        See *DUP PROFILES ON A SINGLE DEVICE* for more details.
+        See section :ref:`DUP PROFILES ON A SINGLE DEVICE<man-mkfs-dup-profiles-on-a-single-device>`
+        for more details.
 
         On multiple devices, the default was *raid0* until version 5.7, while it is
         *single* since version 5.8. You can still select *raid0* manually, but it was not
@@ -60,16 +65,17 @@ OPTIONS
         .. note::
                 Up to version 5.14 there was a detection of a SSD device (more precisely
                 if it's a rotational device, determined by the contents of file
-                */sys/block/DEV/queue/rotational*) that used to select *single*. This has
+                :file:`/sys/block/DEV/queue/rotational`) that used to select *single*. This has
                 changed in version 5.15 to be always *dup*.
 
                 Note that the rotational status can be arbitrarily set by the underlying block
                 device driver and may not reflect the true status (network block device, memory-backed
-                SCSI devices, real block device behind some additonal device mapper layer,
+                SCSI devices, real block device behind some additional device mapper layer,
                 etc). It's recommended to always set the options *--data/--metadata* to avoid
                 confusion and unexpected results.
 
-                See *DUP PROFILES ON A SINGLE DEVICE* for more details.
+                See section :ref:`DUP PROFILES ON A SINGLE DEVICE<man-mkfs-dup-profiles-on-a-single-device>`
+                for more details.
 
         On multiple devices the default is *raid1*.
 
@@ -93,8 +99,9 @@ OPTIONS
                 Versions up to 4.2.x forced the mixed mode for devices smaller than 1GiB.
                 This has been removed in 4.3+ as it caused some usability issues.
 
--l|--leafsize <size>
-        Alias for *--nodesize*. Deprecated.
+                Mixed profile cannot be used together with other profiles. It can only
+                be set at creation time. Conversion to or from mixed profile is not
+                implemented.
 
 -n|--nodesize <size>
         Specify the nodesize, the tree block size in which btrfs stores metadata. The
@@ -125,7 +132,7 @@ OPTIONS
 -K|--nodiscard
         Do not perform whole device TRIM operation on devices that are capable of that.
         This does not affect discard/trim operation when the filesystem is mounted.
-        Please see the mount option *discard* for that in ``btrfs(5)``.
+        Please see the mount option *discard* for that in :doc:`btrfs(5)<btrfs-man5>`.
 
 -r|--rootdir <rootdir>
         Populate the toplevel subvolume with files from *rootdir*.  This does not
@@ -142,7 +149,7 @@ OPTIONS
         If the destination block device is a regular file, this option will also
         truncate the file to the minimal size. Otherwise it will reduce the filesystem
         available space.  Extra space will not be usable unless the filesystem is
-        mounted and resized using **btrfs filesystem resize**.
+        mounted and resized using :command:`btrfs filesystem resize`.
 
         .. note::
                 Prior to version 4.14.1, the shrinking was done automatically.
@@ -151,30 +158,18 @@ OPTIONS
         A list of filesystem features turned on at mkfs time. Not all features are
         supported by old kernels. To disable a feature, prefix it with *^*.
 
-        See section *FILESYSTEM FEATURES* for more details.  To see all available
-        features that **mkfs.btrfs** supports run:
+        See section :ref:`FILESYSTEM FEATURES<man-mkfs-filesystem-features>`
+        for more details.  To see all available features that
+        :command:`mkfs.btrfs` supports run:
 
         .. code-block:: bash
 
                 $ mkfs.btrfs -O list-all
 
--R|--runtime-features <feature1>[,<feature2>...]
-        A list of features that be can enabled at mkfs time, otherwise would have
-        to be turned on on a mounted filesystem.
-        Although no runtime feature is enabled by default,
-        to disable a feature, prefix it with *^*.
-
-        See section *RUNTIME FEATURES* for more details.  To see all available
-        runtime features that **mkfs.btrfs** supports run:
-
-        .. code-block:: bash
-
-                $ mkfs.btrfs -R list-all
-
 -f|--force
         Forcibly overwrite the block devices when an existing filesystem is detected.
-        By default, **mkfs.btrfs** will utilize *libblkid* to check for any known
-        filesystem on the devices. Alternatively you can use the **wipefs** utility
+        By default, :command:`mkfs.btrfs` will utilize *libblkid* to check for any known
+        filesystem on the devices. Alternatively you can use the :command:`wipefs` utility
         to clear the devices.
 
 -q|--quiet
@@ -189,10 +184,18 @@ OPTIONS
         Increase verbosity level, default is 1.
 
 -V|--version
-        Print the **mkfs.btrfs** version and exit.
+        Print the :command:`mkfs.btrfs` version and exit.
 
 --help
         Print help.
+
+-l|--leafsize <size>
+        Removed in 6.0, used to be alias for *--nodesize*.
+
+-R|--runtime-features <feature1>[,<feature2>...]
+        Removed in 6.3, was used to specify features not affecting on-disk format.
+        Now all such features are merged into `-O|--features` option. The option
+        -R will stay for backward compatibility.
 
 SIZE UNITS
 ----------
@@ -200,6 +203,8 @@ SIZE UNITS
 The default unit is *byte*. All size parameters accept suffixes in the 1024
 base. The recognized suffixes are: *k*, *m*, *g*, *t*, *p*, *e*, both uppercase
 and lowercase.
+
+.. _man-mkfs-multiple-devices:
 
 MULTIPLE DEVICES
 ----------------
@@ -209,7 +214,7 @@ association of the block devices that are attached to the filesystem UUID.
 
 There is typically no action needed from the user.  On a system that utilizes a
 udev-like daemon, any new block device is automatically registered. The rules
-call **btrfs device scan**.
+call :command:`btrfs device scan`.
 
 The same command can be used to trigger the device scanning if the btrfs kernel
 module is reloaded (naturally all previous information about the device
@@ -232,16 +237,20 @@ devices to scan at the time of mount.
 .. warning::
         RAID5/6 has known problems and should not be used in production.
 
+.. _man-mkfs-filesystem-features:
+
 FILESYSTEM FEATURES
 -------------------
 
-Features that can be enabled during creation time. See also ``btrfs(5)`` section
-*FILESYSTEM FEATURES*.
+Features that can be enabled during creation time. See also :doc:`btrfs(5)<btrfs-man5>` section
+:ref:`FILESYSTEM FEATURES<man-btrfs5-filesystem-features>`.
 
 mixed-bg
         (kernel support since 2.6.37)
 
         mixed data and metadata block groups, also set by option *--mixed*
+
+.. _mkfs-feature-extended-refs:
 
 extref
         (default since btrfs-progs 3.12, kernel support since 3.7)
@@ -253,13 +262,17 @@ extref
 raid56
         (kernel support since 3.9)
 
-        extended format for RAID5/6, also enabled if raid5 or raid6 block groups
+        extended format for RAID5/6, also enabled if RAID5 or RAID6 block groups
         are selected
+
+.. _mkfs-feature-skinny-metadata:
 
 skinny-metadata
         (default since btrfs-progs 3.18, kernel support since 3.10)
 
         reduced-size metadata for extent references, saves a few percent of metadata
+
+.. _mkfs-feature-no-holes:
 
 no-holes
         (default since btrfs-progs 5.15, kernel support since 3.14)
@@ -271,29 +284,30 @@ zoned
         (kernel support since 5.12)
 
         zoned mode, data allocation and write friendly to zoned/SMR/ZBC/ZNS devices,
-        see *ZONED MODE* in ``btrfs(5)``, the mode is automatically selected when
-        a zoned device is detected
-
-
-RUNTIME FEATURES
-----------------
-
-Features that are typically enabled on a mounted filesystem, eg. by a mount
-option or by an ioctl. Some of them can be enabled early, at mkfs time.  This
-applies to features that need to be enabled once and then the status is
-permanent, this does not replace mount options.
+        see :ref:`ZONED MODE<man-btrfs5-zoned-mode>` in
+        :doc:`btrfs(5)<btrfs-man5>`, the mode is automatically selected when a
+        zoned device is detected
 
 quota
         (kernel support since 3.4)
 
         Enable quota support (qgroups). The qgroup accounting will be consistent,
-        can be used together with *--rootdir*.  See also ``btrfs-quota(8)``.
+        can be used together with *--rootdir*.  See also :doc:`btrfs-quota(8)<btrfs-quota>`.
+
+.. _mkfs-feature-free-space-tree:
 
 free-space-tree
         (default since btrfs-progs 5.15, kernel support since 4.5)
 
         Enable the free space tree (mount option *space_cache=v2*) for persisting the
         free space cache.
+
+block-group-tree
+        (kernel support since 6.1)
+
+        Enable the block group tree to greatly reduce mount time for large filesystems.
+
+.. _mkfs-section-profiles:
 
 BLOCK GROUPS, CHUNKS, RAID
 --------------------------
@@ -328,36 +342,38 @@ RAID
 
 profile
         when used in connection with block groups refers to the allocation strategy
-        and constraints, see the section *PROFILES* for more details
+        and constraints, see the section :ref:`PROFILES<man-mkfs-profiles>` for more details
+
+.. _man-mkfs-profiles:
 
 PROFILES
 --------
 
 There are the following block group types available:
 
-+----------+--------------------------------------+-------------------+--------------------+
-| Profiles |    Redundancy                        | Space utilization |    Min/max devices |
-+          +---------------+---------+------------+                   |                    |
-|          | Copies        | Parity  | Striping   |                   |                    |
-+==========+===============+=========+============+===================+====================+
-| single   |  1            |         |            | 100%              | 1/any              |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| DUP      |  2 / 1 device |         |            |  50%              | 1/any (see note 1) |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| RAID0    |  1            |         |  1 to N    | 100%              | 1/any (see note 5) |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| RAID1    |  2            |         |            |  50%              | 2/any              |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| RAID1C3  |  3            |         |            |  33%              | 3/any              |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| RAID1C4  |  4            |         |            |  25%              | 4/any              |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| RAID10   |  2            |         |  1 to N    |  50%              | 2/any (see note 5) |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| RAID5    |  1            | 1       |  2 to N-1  | (N-1)/N           | 2/any (see note 2) |
-+----------+---------------+---------+------------+-------------------+--------------------+
-| RAID6    |  1            | 2       |  3 to N-2  | (N-2)/N           | 3/any (see note 3) |
-+----------+---------------+---------+------------+-------------------+--------------------+
++----------+---------------+------------+------------+-------------------+--------------------+
+| Profiles | Redundancy    | Redundancy | Redundancy | Space utilization |    Min/max devices |
+|          |               |            |            |                   |                    |
+|          | Copies        | Parity     | Striping   |                   |                    |
++==========+===============+============+============+===================+====================+
+| single   |  1            |            |            | 100%              | 1/any              |
++----------+---------------+------------+------------+-------------------+--------------------+
+| DUP      |  2 / 1 device |            |            |  50%              | 1/any (see note 1) |
++----------+---------------+------------+------------+-------------------+--------------------+
+| RAID0    |  1            |            |  1 to N    | 100%              | 1/any (see note 5) |
++----------+---------------+------------+------------+-------------------+--------------------+
+| RAID1    |  2            |            |            |  50%              | 2/any              |
++----------+---------------+------------+------------+-------------------+--------------------+
+| RAID1C3  |  3            |            |            |  33%              | 3/any              |
++----------+---------------+------------+------------+-------------------+--------------------+
+| RAID1C4  |  4            |            |            |  25%              | 4/any              |
++----------+---------------+------------+------------+-------------------+--------------------+
+| RAID10   |  2            |            |  1 to N    |  50%              | 2/any (see note 5) |
++----------+---------------+------------+------------+-------------------+--------------------+
+| RAID5    |  1            | 1          |  2 to N-1  | (N-1)/N           | 2/any (see note 2) |
++----------+---------------+------------+------------+-------------------+--------------------+
+| RAID6    |  1            | 2          |  3 to N-2  | (N-2)/N           | 3/any (see note 3) |
++----------+---------------+------------+------------+-------------------+--------------------+
 
 .. warning::
    It's not recommended to create filesystems with RAID0/1/10/5/6
@@ -365,7 +381,7 @@ There are the following block group types available:
    performance will be improved.
 
 *Note 1:* DUP may exist on more than 1 device if it starts on a single device and
-another one is added. Since version 4.5.1, **mkfs.btrfs** will let you create DUP
+another one is added. Since version 4.5.1, :command:`mkfs.btrfs` will let you create DUP
 on multiple devices without restrictions.
 
 *Note 2:* It's not recommended to use 2 devices with RAID5. In that case,
@@ -385,8 +401,8 @@ PROFILE LAYOUT
 ^^^^^^^^^^^^^^
 
 For the following examples, assume devices numbered by 1, 2, 3 and 4, data or
-metadata blocks A, B, C, D, with possible stripes eg. A1, A2 that would be
-logically A, etc. For parity profiles PA and QA are parity and syndrom,
+metadata blocks A, B, C, D, with possible stripes e.g. A1, A2 that would be
+logically A, etc. For parity profiles PA and QA are parity and syndrome,
 associated with the given stripe.  The simple layouts single or DUP are left
 out.  Actual physical block placement on devices depends on current state of
 the free/allocated space and may appear random. All devices are assumed to be
@@ -452,6 +468,8 @@ C1        QD        PB        D1
 PD        B2        PC        PA
 ========  ========  ========  ========
 
+.. _man-mkfs-dup-profiles-on-a-single-device:
+
 DUP PROFILES ON A SINGLE DEVICE
 -------------------------------
 
@@ -504,7 +522,7 @@ to be created and could end up in the following situation:
 
        # mkfs.btrfs -f -n 65536 /dev/loop0
        btrfs-progs v3.19-rc2-405-g976307c
-       See http://btrfs.wiki.kernel.org for more information.
+       See https://btrfs.readthedocs.io for more information.
 
        Performing full device TRIM (512.00MiB) ...
        Label:              (null)
@@ -534,14 +552,13 @@ than can fit into the filesystem.
 AVAILABILITY
 ------------
 
-**mkfs.btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``btrfs(5)``,
-``btrfs(8)``,
-``btrfs-balance(8)``,
+:doc:`btrfs(5)<btrfs-man5>`,
+:doc:`btrfs(8)<btrfs>`,
+:doc:`btrfs-balance(8)<btrfs-balance>`,
 ``wipefs(8)``

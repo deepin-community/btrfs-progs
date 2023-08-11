@@ -1,20 +1,19 @@
 #!/bin/sh
-# test various compilation options
-# - 32bit, 64bit
+# Usage: $0 [--ccache] [make options]
+#
+# Test various compilation options:
+# - native arch
 # - dynamic, static
 # - various configure options
 #
-# Arguments: anything will be passed to 'make', eg. define CC, D, V
+# Arguments:
+# - (first arugment) --ccache - enable ccache for build which can speed up
+#    rebuilding same files if the options do not affect them, the ccache will
+#    be created in the toplevel git directory
+# - anything else will be passed to 'make', eg. define CC, D, V
 #
 # Requirements for full coverage:
 # - static version of all libs
-# - 32bit/64bit libraries, also the static variants
-
-make=make
-opts="-j16 $@"
-
-conf=
-target=
 
 die() {
 	echo "ERROR: $@"
@@ -27,7 +26,7 @@ check_result() {
 
 	ret=$1
 
-	str="RESULT of target($target) conf($conf): "
+	str="RESULT of target($target) conf($conf) CFLAGS($CFLAGS): "
 	case $ret in
 		0) str="$str OK";;
 		*) str="$str FAIL";;
@@ -40,11 +39,17 @@ $str"
 buildme() {
 	make clean-all
 
-	./autogen.sh && configure "$conf" || die "configure not working with: $@"
+	./autogen.sh && CFLAGS="$CFLAGS" configure "$conf" || die "configure not working with: $@"
 	$make clean
 	$make $opts $target
 	check_result "$?"
 	echo "VERDICT: $verdict"
+}
+
+buildme_cflags() {
+	CFLAGS="$1"
+	buildme
+	CFLAGS=''
 }
 
 build_make_targets() {
@@ -56,12 +61,6 @@ build_make_targets() {
 	buildme
 	# defaults, busybox
 	target='btrfs.box btrfs.box.static'
-	buildme
-	# defaults, 32bit
-	target="EXTRA_CFLAGS=-m32"
-	buildme
-	# defaults, 64bit
-	target="EXTRA_CFLAGS=-m64"
 	buildme
 	# defaults, library
 	target="library-test"
@@ -77,7 +76,24 @@ if ! [ -f configure.ac ]; then
 	exit 1
 fi
 
+if [ "$1" = "--ccache" ]; then
+	shift
+	ccache=true
+	export CCACHE_DIR=`pwd`/.ccache
+	mkdir -p -- "$CCACHE_DIR"
+	PATH="/usr/lib64/ccache:$PATH"
+	echo "Enable ccache at CCACHE_DIR=$CCACHE_DIR"
+	ccache -s
+fi
+
+make=make
+jobs=16
+opts="-j${jobs} $@"
 verdict=
+target=
+export CLFAGS
+CFLAGS=
+
 conf=
 build_make_targets
 
@@ -90,14 +106,36 @@ build_make_targets
 conf='--disable-convert'
 build_make_targets
 
-conf='--with-convert=ext2'
+conf='--disable-zoned'
 build_make_targets
 
-conf='--with-convert=ext2,reiserfs'
+conf='--disable-libudev'
+build_make_targets
+
+conf='--disable-python'
+build_make_targets
+
+conf='--with-convert=ext2'
 build_make_targets
 
 conf='--enable-zstd'
 build_make_targets
+
+conf='--with-crypto=libgcrypt'
+build_make_targets
+
+conf='--with-crypto=libsodium'
+build_make_targets
+
+conf='--with-crypto=libkcapi'
+build_make_targets
+
+# Old architectures
+conf='--with-crypto=builtin'
+buildme_cflags '-march=core2'
+
+conf='--with-crypto=builtin'
+buildme_cflags '-march=x86-64-v3'
 
 # debugging builds, just the default targets
 target='D=1'

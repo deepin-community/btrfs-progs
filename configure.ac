@@ -1,10 +1,10 @@
 AC_INIT([btrfs-progs],
 	m4_flatten(m4_include([VERSION])),
 	[linux-btrfs@vger.kernel.org],,
-	[http://btrfs.wiki.kernel.org])
+	[https://btrfs.readthedocs.io])
 
 if test "x$PACKAGE_URL" = "x"; then
-	AC_DEFINE([PACKAGE_URL], ["http://btrfs.wiki.kernel.org"], [URL])
+	AC_DEFINE([PACKAGE_URL], ["https://btrfs.readthedocs.io"], [URL])
 fi
 
 dnl Package version
@@ -30,6 +30,7 @@ AC_SUBST([CFLAGS])
 AC_PREREQ([2.60])
 
 AC_CONFIG_AUX_DIR([config])
+AC_CONFIG_MACRO_DIR([config])
 dnl AC_USE_SYSTEM_EXTENSIONS must be called before any macros that run
 dnl the compiler (like AC_PROG_LIBTOOL) to avoid autoconf errors.
 AC_USE_SYSTEM_EXTENSIONS
@@ -38,11 +39,29 @@ AC_CONFIG_SRCDIR([btrfs.c])
 AC_PREFIX_DEFAULT([/usr/local])
 
 AC_PROG_CC
-BTRFS_DETECT_CSTD
 AC_CANONICAL_HOST
 AC_C_CONST
 AC_C_VOLATILE
 AC_C_BIGENDIAN
+
+AX_CHECK_COMPILE_FLAG([-msse2], [HAVE_CFLAG_msse2=1], [HAVE_CFLAG_msse2=0])
+AC_SUBST([HAVE_CFLAG_msse2])
+AC_DEFINE_UNQUOTED([HAVE_CFLAG_msse2], [$HAVE_CFLAG_msse2], [Compiler supports -msse2])
+
+AX_CHECK_COMPILE_FLAG([-msse4.1], [HAVE_CFLAG_msse41=1], [HAVE_CFLAG_msse41=0])
+AC_SUBST([HAVE_CFLAG_msse41])
+AC_DEFINE_UNQUOTED([HAVE_CFLAG_msse41], [$HAVE_CFLAG_msse41], [Compiler supports -msse4.1])
+
+AX_CHECK_COMPILE_FLAG([-mavx2], [HAVE_CFLAG_mavx2=1], [HAVE_CFLAG_mavx2=0])
+AC_SUBST([HAVE_CFLAG_mavx2])
+AC_DEFINE_UNQUOTED([HAVE_CFLAG_mavx2], [$HAVE_CFLAG_mavx2], [Compiler supports -mavx2])
+
+AX_CHECK_COMPILE_FLAG([-msha], [HAVE_CFLAG_msha=1], [HAVE_CFLAG_msha=0])
+AC_SUBST([HAVE_CFLAG_msha])
+AC_DEFINE_UNQUOTED([HAVE_CFLAG_msha], [$HAVE_CFLAG_msha], [Compiler supports -msha])
+
+AX_CHECK_COMPILE_FLAG([-std=gnu11], [],
+	[AC_MSG_ERROR([std=gnu11 compiler required])])
 
 AC_SYS_LARGEFILE
 
@@ -60,8 +79,20 @@ AC_CHECK_FUNCS([reallocarray])
 
 AC_CHECK_FUNCS([clock_gettime])
 
+AX_GCC_BUILTIN([__builtin_add_overflow])
+AX_GCC_BUILTIN([__builtin_sub_overflow])
+AX_GCC_BUILTIN([__builtin_mul_overflow])
+
 AC_CHECK_HEADERS([linux/perf_event.h])
 AC_CHECK_HEADERS([linux/hw_breakpoint.h])
+AC_CHECK_HEADERS([linux/fsverity.h])
+AC_CHECK_HEADERS([printf.h])
+
+if grep -q 'HAVE_LINUX_FSVERITY_H.*1' confdefs.h; then
+	have_fsverity='yes'
+else
+	have_fsverity='no'
+fi
 
 m4_ifndef([PKG_PROG_PKG_CONFIG],
   [m4_fatal([Could not locate the pkg-config autoconf
@@ -109,30 +140,17 @@ AS_IF([test "x$enable_documentation" = xyes], [DISABLE_DOCUMENTATION=0], [DISABL
 AC_SUBST([DISABLE_DOCUMENTATION])
 
 dnl detect tools to build documentation
-ASCIIDOC_TOOL="none"
+DOC_TOOL="none"
 if test "x$enable_documentation" = xyes; then
-	AC_PATH_PROG([XMLTO], [xmlto])
-	if test -z "$XMLTO"; then
-		AC_MSG_ERROR([cannot find xmlto, cannot build documentation])
-	fi
-
-	AC_PATH_PROG([MV], [mv], [mv])
+	DOC_TOOL='sphinx'
+	AC_PATH_PROG([SPHINX], [sphinx-build])
 	AC_PROG_SED
-	AC_PATH_PROG([ASCIIDOC], [asciidoc])
-	AC_PATH_PROG([ASCIIDOCTOR], [asciidoctor])
 
-	dnl asciidoc is preferred
-	if test -n "$ASCIIDOC"; then
-		ASCIIDOC_TOOL="asciidoc"
-	else
-		if test -n "$ASCIIDOCTOR"; then
-			ASCIIDOC_TOOL="asciidoctor"
-		else
-			AC_MSG_ERROR([cannot find asciidoc or asciidoctor, cannot build documentation])
-		fi
+	if test -z "$SPHINX"; then
+		AC_MSG_ERROR([cannot find sphinx-build, cannot build documentation])
 	fi
 fi
-AC_SUBST([ASCIIDOC_TOOL])
+AC_SUBST([DOC_TOOL])
 
 AC_ARG_ENABLE([programs],
 	      AS_HELP_STRING([--disable-programs], [do not build utility programs]),
@@ -220,29 +238,38 @@ AC_ARG_WITH([crypto],
 cryptoprovider=
 cryptoproviderversion=
 CRYPTOPROVIDER_BUILTIN=0
+CRYPTOPROVIDER_LIBGCRYPT=0
+CRYPTOPROVIDER_LIBSODIUM=0
+CRYPTOPROVIDER_LIBKCAPI=0
 if test "$with_crypto" = "builtin"; then
 	cryptoprovider="builtin"
 	CRYPTOPROVIDER_BUILTIN=1
-	AC_DEFINE([CRYPTOPROVIDER_BUILTIN],[1],[Use builtin implementation])
 elif test "$with_crypto" = "libgcrypt"; then
 	cryptoprovider="libgcrypt"
 	PKG_CHECK_MODULES(GCRYPT, [libgcrypt >= 1.8.0])
-	AC_DEFINE([CRYPTOPROVIDER_LIBGCRYPT],[1],[Use libcrypt])
+	CRYPTOPROVIDER_LIBGCRYPT=1
 	cryptoproviderversion=`${PKG_CONFIG} libgcrypt --version`
 elif test "$with_crypto" = "libsodium"; then
 	cryptoprovider="libsodium"
 	PKG_CHECK_MODULES(SODIUM, [libsodium >= 1.0.4])
-	AC_DEFINE([CRYPTOPROVIDER_LIBSODIUM],[1],[Use libsodium])
+	CRYPTOPROVIDER_LIBSODIUM=1
 	cryptoproviderversion=`${PKG_CONFIG} libsodium --version`
 elif test "$with_crypto" = "libkcapi"; then
 	cryptoprovider="libkcapi"
 	PKG_CHECK_MODULES(KCAPI, [libkcapi >= 1.0.0])
-	AC_DEFINE([CRYPTOPROVIDER_LIBKCAPI],[1],[Use libkcapi])
+	CRYPTOPROVIDER_LIBKCAPI=1
 	cryptoproviderversion=`${PKG_CONFIG} libkcapi --version`
 else
 	AC_MSG_ERROR([unrecognized crypto provider: $with_crypto])
 fi
 AC_SUBST([CRYPTOPROVIDER_BUILTIN])
+AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_BUILTIN],[$CRYPTOPROVIDER_BUILTIN],[Use builtin implementation])
+AC_SUBST([CRYPTOPROVIDER_LIBGCRYPT])
+AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_LIBGCRYPT],[$CRYPTOPROVIDER_LIBGCRYPT],[Use libcrypt])
+AC_SUBST([CRYPTOPROVIDER_LIBSODIUM])
+AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_LIBSODIUM],[$CRYPTOPROVIDER_LIBSODIUM],[Use libsodium])
+AC_SUBST([CRYPTOPROVIDER_LIBKCAPI])
+AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_LIBKCAPI],[$CRYPTOPROVIDER_LIBKCAPI],[Use libkcapi])
 AC_DEFINE_UNQUOTED([CRYPTOPROVIDER],["$cryptoprovider"],[Crypto implementation source name])
 
 AX_CHECK_DEFINE([linux/fiemap.h], [FIEMAP_EXTENT_SHARED], [],
@@ -273,10 +300,31 @@ AC_CHECK_HEADER(linux/blkzoned.h, [blkzoned_found=yes], [blkzoned_found=no])
 AC_CHECK_MEMBER([struct blk_zone.capacity], [blkzoned_capacity=yes], [blkzoned_capacity=no], [[#include <linux/blkzoned.h>]])
 AX_CHECK_DEFINE([linux/blkzoned.h], [BLKGETZONESZ], [blkzoned_getzonesz=yes], [blkzoned_getzonesz=no])
 AC_ARG_ENABLE([zoned],
-	      AS_HELP_STRING([--disable-zoned], [disable zoned block device support]),
-	      [], [enable_zoned=$blkzoned_found]
+	      AS_HELP_STRING([--disable-zoned], [disable zoned block device support (default: detect)]),
+	      [], [enable_zoned=$blkzoned_capacity]
 )
 
+# Autodetect zoned support
+AS_IF([test "x$enableval" = "x"], [
+       cansupportzoned=yes
+       if test "x$blkzoned_found" = xno; then
+	       cansupportzoned=no
+       fi
+       if test "x$blkzoned_capacity" = xno; then
+	       cansupportzoned=no
+       fi
+       if test "x$blkzoned_getzonesz" = xno; then
+	       cansupportzoned=no
+       fi
+       if test "x$cansupportzoned" = xno; then
+	       AC_MSG_NOTICE([insufficient support for zoned mode, cannot enable])
+	       enable_zoned=no
+       else
+	       enable_zoned=yes
+       fi
+])
+
+# Explicitly requested by --enable-zoned
 AS_IF([test "x$enable_zoned" = xyes], [
        if test "x$blkzoned_found" = xno; then
 	       AC_MSG_ERROR([Couldn't find linux/blkzoned.h])
@@ -305,7 +353,7 @@ PKG_CHECK_MODULES(ZLIB, [zlib])
 PKG_STATIC(ZLIB_LIBS_STATIC, [zlib])
 
 AC_ARG_ENABLE([zstd],
-	AS_HELP_STRING([--disable-zstd], [build without zstd support]),
+	AS_HELP_STRING([--disable-zstd], [build without zstd support for restore and receive (default: enabled)]),
 	[], [enable_zstd=yes]
 )
 
@@ -314,8 +362,8 @@ if test "x$enable_zstd" = xyes; then
 	PKG_STATIC(ZSTD_LIBS_STATIC, [libzstd])
 fi
 
-AS_IF([test "x$enable_zstd" = xyes], [BTRFSRESTORE_ZSTD=1], [BTRFSRESTORE_ZSTD=0])
-AC_SUBST(BTRFSRESTORE_ZSTD)
+AS_IF([test "x$enable_zstd" = xyes], [COMPRESSION_ZSTD=1], [COMPRESSION_ZSTD=0])
+AC_SUBST(COMPRESSION_ZSTD)
 
 AC_ARG_ENABLE([libudev],
       AS_HELP_STRING([--disable-libudev], [build without libudev support (for multipath)]),
@@ -364,16 +412,26 @@ if ${PKG_CONFIG} udev --atleast-version 190; then
 fi
 AC_SUBST(UDEVDIR)
 
-dnl lzo library does not provide pkg-config, let use classic way
-AC_CHECK_LIB([lzo2], [lzo_version], [
-	LZO2_LIBS="-llzo2"
-	LZO2_CFLAGS=""
-	LZO2_LIBS_STATIC="-llzo2"],[
-	AC_MSG_ERROR([cannot find lzo2 library])
-])
-AC_SUBST([LZO2_LIBS])
-AC_SUBST([LZO2_LIBS_STATIC])
-AC_SUBST([LZO2_CFLAGS])
+AC_ARG_ENABLE([lzo],
+	AS_HELP_STRING([--disable-lzo], [build without lzo support for restore and receive (default: enabled)]),
+	[], [enable_lzo=yes]
+)
+
+if test "x$enable_lzo" = xyes; then
+	dnl lzo library does not provide pkg-config, use classic way
+	AC_CHECK_LIB([lzo2], [lzo_version], [
+		LZO2_LIBS="-llzo2"
+		LZO2_CFLAGS=""
+		LZO2_LIBS_STATIC="-llzo2"],[
+		AC_MSG_ERROR([cannot find lzo2 library])
+	])
+	AC_SUBST([LZO2_LIBS])
+	AC_SUBST([LZO2_LIBS_STATIC])
+	AC_SUBST([LZO2_CFLAGS])
+fi
+
+AS_IF([test "x$enable_lzo" = xyes], [COMPRESSION_LZO=1], [COMPRESSION_LZO=0])
+AC_SUBST(COMPRESSION_LZO)
 
 dnl call PKG_INSTALLDIR from pkg.m4 to set pkgconfigdir
 m4_ifdef([PKG_INSTALLDIR], [PKG_INSTALLDIR], [AC_MSG_ERROR([please install pkgconf])])
@@ -392,12 +450,12 @@ AC_SUBST([BTRFS_UTIL_VERSION_MAJOR])
 AC_SUBST([BTRFS_UTIL_VERSION_MINOR])
 AC_SUBST([BTRFS_UTIL_VERSION_PATCH])
 
-AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_HEADERS([include/config.h])
 
 AC_CONFIG_FILES([
 Makefile.inc
 Documentation/Makefile
-version.h
+libbtrfs/version.h
 libbtrfsutil/libbtrfsutil.pc
 ])
 
@@ -424,10 +482,12 @@ AC_MSG_RESULT([
 	shared libraries:   ${enable_shared}
 	static libraries:   ${enable_static}
 	documentation:      ${enable_documentation}
-	doc generator:      ${ASCIIDOC_TOOL}
+	doc generator:      ${DOC_TOOL}
 	backtrace support:  ${enable_backtrace}
 	btrfs-convert:      ${enable_convert} ${convertfs:+($convertfs)}
-	btrfs-restore zstd: ${enable_zstd}
+	zstd support:       ${enable_zstd}
+	lzo support:        ${enable_lzo}
+	fsverity support:   ${have_fsverity}
 	Python bindings:    ${enable_python}
 	Python interpreter: ${PYTHON}
 	crypto provider:    ${cryptoprovider} ${cryptoproviderversion}

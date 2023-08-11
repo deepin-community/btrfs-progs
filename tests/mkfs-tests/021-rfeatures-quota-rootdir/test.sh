@@ -1,19 +1,18 @@
 #!/bin/bash
-# Check if mkfs runtime feature quota can handle --rootdir
+# Check if mkfs feature quota can handle --rootdir
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq mkfs.btrfs
 check_prereq btrfs
-
-setup_root_helper
-prepare_test_dev
-
 # mknod can create FIFO/CHAR/BLOCK file but not SOCK.
 # No neat tool to create socket file, unless using python or similar.
 # So no SOCK is tested here
 check_global_prereq mknod
 check_global_prereq dd
+
+setup_root_helper
+prepare_test_dev
 
 tmp=$(_mktemp_dir mkfs-rootdir)
 
@@ -39,7 +38,7 @@ run_check dd if=/dev/zero bs=2K count=1 of="$tmp/2K"
 run_check dd if=/dev/zero bs=4K count=1 of="$tmp/4K"
 run_check dd if=/dev/zero bs=8K count=1 of="$tmp/8K"
 
-run_check $SUDO_HELPER "$TOP/mkfs.btrfs" -f --rootdir "$tmp" -R quota "$TEST_DEV"
+run_check $SUDO_HELPER "$TOP/mkfs.btrfs" -f --rootdir "$tmp" -O quota "$TEST_DEV"
 
 rm -rf -- "$tmp"
 

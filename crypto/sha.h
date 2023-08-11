@@ -209,4 +209,9 @@ extern int hmacFinalBits(HMACContext *context, uint8_t bits,
 extern int hmacResult(HMACContext *context,
                       uint8_t digest[USHAMaxHashSize]);
 
+void sha256_init_accel(void);
+
+/* Export for optimized version to silent -Wmissing-prototypes. */
+void sha256_process_x86(uint32_t state[8], const uint8_t data[], uint32_t length);
+
 #endif /* _SHA_H_ */

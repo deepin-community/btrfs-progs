@@ -17,14 +17,12 @@
  */
 
 #if BTRFS_FLAT_INCLUDES
-#include "kerncompat.h"
-#include "version.h"
+#include "libbtrfs/kerncompat.h"
+#include "libbtrfs/version.h"
+#include "libbtrfs/ioctl.h"
 #include "kernel-lib/rbtree.h"
 #include "kernel-lib/list.h"
 #include "kernel-shared/ctree.h"
-#include "kernel-shared/extent_io.h"
-#include "ioctl.h"
-#include "common/extent-cache.h"
 #include "kernel-shared/send.h"
 #include "common/send-stream.h"
 #include "common/send-utils.h"
@@ -38,9 +36,7 @@
 #include "btrfs/rbtree.h"
 #include "btrfs/list.h"
 #include "btrfs/ctree.h"
-#include "btrfs/extent_io.h"
 #include "btrfs/ioctl.h"
-#include "btrfs/extent-cache.h"
 #include "btrfs/send.h"
 #include "btrfs/send-stream.h"
 #include "btrfs/send-utils.h"

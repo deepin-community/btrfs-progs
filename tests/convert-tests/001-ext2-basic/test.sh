@@ -1,14 +1,17 @@
 #!/bin/bash
 
-source "$TEST_TOP/common"
-source "$TEST_TOP/common.convert"
+source "$TEST_TOP/common" || exit
+source "$TEST_TOP/common.convert" || exit
 
-setup_root_helper
-prepare_test_dev
 check_prereq btrfs-convert
 check_global_prereq mke2fs
 
-for feature in '' 'extref' 'skinny-metadata' 'no-holes'; do
+setup_root_helper
+prepare_test_dev
+
+# Iterate over defaults and options that are not tied to hardware capabilities
+# or number of devices
+for feature in '' 'block-group-tree' ; do
 	convert_test ext2 "$feature" "ext2 4k nodesize" 4096 mke2fs -b 4096
 	convert_test ext2 "$feature" "ext2 8k nodesize" 8192 mke2fs -b 4096
 	convert_test ext2 "$feature" "ext2 16k nodesize" 16384 mke2fs -b 4096

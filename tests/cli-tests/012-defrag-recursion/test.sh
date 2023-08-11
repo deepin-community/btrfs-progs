@@ -2,7 +2,7 @@
 # check how deep does recursive 'fi du' go, currently it has to stop at
 # mountpoint and can continue to subvolumes
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq mkfs.btrfs
 check_prereq btrfs
@@ -13,9 +13,7 @@ prepare_test_dev
 run_check_mkfs_test_dev
 run_check_mount_test_dev
 
-run_check truncate -s 0 img2
-run_check truncate -s 1G img2
-chmod a+w img2
+_mktemp_local img2 1G
 
 # create second mount with btrfs, create a file in the target mount path, the
 # mount must hide that

@@ -16,37 +16,37 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
+#include <sys/ioctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/ioctl.h>
 #include <errno.h>
-#include <sys/stat.h>
 #include <time.h>
-#include <assert.h>
-#include <inttypes.h>
-#include <sys/wait.h>
 #include <getopt.h>
-
-#include "kerncompat.h"
+#include <dirent.h>
+#include <signal.h>
+#include <stdbool.h>
+#include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
-#include "ioctl.h"
 #include "common/utils.h"
-#include "kernel-shared/volumes.h"
-#include "kernel-shared/disk-io.h"
 #include "common/open-utils.h"
-#include "cmds/commands.h"
 #include "common/help.h"
 #include "common/path-utils.h"
 #include "common/device-utils.h"
+#include "common/string-utils.h"
+#include "common/messages.h"
+#include "cmds/commands.h"
 #include "mkfs/common.h"
 
 static int print_replace_status(int fd, const char *path, int once);
 static char *time2string(char *buf, size_t s, __u64 t);
 static char *progress2string(char *buf, size_t s, int progress_1000);
 
+/* Used to separate internal errors from actual dev replace ioctl results. */
+#define BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT		-1
 
 static const char *replace_dev_result2string(__u64 result)
 {
@@ -105,18 +105,17 @@ static const char *const cmd_replace_start_usage[] = {
 	"from the system, you have to use the <devid> parameter format.",
 	"The <targetdev> needs to be same size or larger than the <srcdev>.",
 	"",
-	"-r     only read from <srcdev> if no other zero-defect mirror exists",
-	"       (enable this if your drive has lots of read errors, the access",
-	"       would be very slow)",
-	"-f     force using and overwriting <targetdev> even if it looks like",
-	"       containing a valid btrfs filesystem. A valid filesystem is",
-	"       assumed if a btrfs superblock is found which contains a",
-	"       correct checksum. Devices which are currently mounted are",
-	"       never allowed to be used as the <targetdev>",
-	"-B     do not background",
-	"--enqueue       wait if there's another exclusive operation running,",
-	"                otherwise continue",
-	"-K|--nodiscard  do not perform whole device TRIM",
+	OPTLINE("-r", "only read from <srcdev> if no other zero-defect mirror exists "
+		"(enable this if your drive has lots of read errors, the access "
+		"would be very slow)"),
+	OPTLINE("-f", "force using and overwriting <targetdev> even if it looks like "
+		"containing a valid btrfs filesystem. A valid filesystem is "
+		"assumed if a btrfs superblock is found which contains a "
+		"correct checksum. Devices which are currently mounted are "
+		"never allowed to be used as the <targetdev>"),
+	OPTLINE("-B", "do not background"),
+	OPTLINE("--enqueue", "wait if there's another exclusive operation running, otherwise continue"),
+	OPTLINE("-K|--nodiscard", "do not perform whole device TRIM"),
 	NULL
 };
 
@@ -134,10 +133,10 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	char *path;
 	char *srcdev;
 	char *dstdev = NULL;
-	int avoid_reading_from_srcdev = 0;
-	int force_using_targetdev = 0;
+	bool avoid_reading_from_srcdev = false;
+	bool force_using_targetdev = false;
 	u64 dstdev_block_count;
-	int do_not_background = 0;
+	bool do_not_background = false;
 	DIR *dirstream = NULL;
 	u64 srcdev_size;
 	u64 dstdev_size;
@@ -147,7 +146,7 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	optind = 0;
 	while (1) {
 		int c;
-		enum { GETOPT_VAL_ENQUEUE = 256 };
+		enum { GETOPT_VAL_ENQUEUE = GETOPT_VAL_FIRST };
 		static const struct option long_options[] = {
 			{ "enqueue", no_argument, NULL, GETOPT_VAL_ENQUEUE},
 			{ "nodiscard", no_argument, NULL, 'K' },
@@ -159,16 +158,16 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 			break;
 		switch (c) {
 		case 'B':
-			do_not_background = 1;
+			do_not_background = true;
 			break;
 		case 'K':
 			discard = false;
 			break;
 		case 'r':
-			avoid_reading_from_srcdev = 1;
+			avoid_reading_from_srcdev = true;
 			break;
 		case 'f':
-			force_using_targetdev = 1;
+			force_using_targetdev = true;
 			break;
 		case GETOPT_VAL_ENQUEUE:
 			enqueue = true;
@@ -203,14 +202,12 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	status_args.result = BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT;
 	ret = ioctl(fdmnt, BTRFS_IOC_DEV_REPLACE, &status_args);
 	if (ret < 0) {
-		fprintf(stderr,
-			"ERROR: ioctl(DEV_REPLACE_STATUS) failed on \"%s\": %m",
-			path);
+		error("ioctl(DEV_REPLACE_STATUS) failed on \"%s\": %m", path);
 		if (status_args.result != BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT)
-			fprintf(stderr, ", %s\n",
+			pr_stderr(LOG_DEFAULT, ", %s\n",
 				replace_dev_result2string(status_args.result));
 		else
-			fprintf(stderr, "\n");
+			pr_stderr(LOG_DEFAULT, "\n");
 		goto leave_with_error;
 	}
 
@@ -326,14 +323,12 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	ret = ioctl(fdmnt, BTRFS_IOC_DEV_REPLACE, &start_args);
 	if (do_not_background) {
 		if (ret < 0) {
-			fprintf(stderr,
-				"ERROR: ioctl(DEV_REPLACE_START) failed on \"%s\": %m",
-				path);
+			error("ioctl(DEV_REPLACE_START) failed on \"%s\": %m", path);
 			if (start_args.result != BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT)
-				fprintf(stderr, ", %s\n",
+				pr_stderr(LOG_DEFAULT, ", %s\n",
 					replace_dev_result2string(start_args.result));
 			else
-				fprintf(stderr, "\n");
+				pr_stderr(LOG_DEFAULT, "\n");
 
 			if (errno == EOPNOTSUPP)
 				warning("device replace of RAID5/6 not supported with this kernel");
@@ -373,8 +368,7 @@ static const char *const cmd_replace_status_usage[] = {
 	"btrfs replace status [-1] <mount_point>",
 	"Print status and progress information of a running device replace operation",
 	"",
-	"-1     print once instead of print continuously until the replace",
-	"       operation finishes (or is canceled)",
+	OPTLINE("-1", "print once instead of print continuously until the replace operation finishes (or is canceled)"),
 	NULL
 };
 
@@ -430,13 +424,12 @@ static int print_replace_status(int fd, const char *path, int once)
 		args.result = BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT;
 		ret = ioctl(fd, BTRFS_IOC_DEV_REPLACE, &args);
 		if (ret < 0) {
-			fprintf(stderr, "ERROR: ioctl(DEV_REPLACE_STATUS) failed on \"%s\": %m",
-				path);
+			error("ioctl(DEV_REPLACE_STATUS) failed on \"%s\": %m", path);
 			if (args.result != BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT)
-				fprintf(stderr, ", %s\n",
+				pr_stderr(LOG_DEFAULT, ", %s\n",
 					replace_dev_result2string(args.result));
 			else
-				fprintf(stderr, "\n");
+				pr_stderr(LOG_DEFAULT, "\n");
 			return ret;
 		}
 
@@ -501,9 +494,8 @@ static int print_replace_status(int fd, const char *path, int once)
 		if (!skip_stats)
 			num_chars += printf(
 				", %llu write errs, %llu uncorr. read errs",
-				(unsigned long long)status->num_write_errors,
-				(unsigned long long)
-				 status->num_uncorrectable_read_errors);
+				status->num_write_errors,
+				status->num_uncorrectable_read_errors);
 		if (once || prevent_loop) {
 			printf("\n");
 			break;
@@ -527,7 +519,7 @@ time2string(char *buf, size_t s, __u64 t)
 	time_t t_time_t;
 
 	t_time_t = (time_t)t;
-	assert((__u64)t_time_t == t);
+	UASSERT((__u64)t_time_t == t);
 	localtime_r(&t_time_t, &t_tm);
 	strftime(buf, s, "%e.%b %T", &t_tm);
 	return buf;
@@ -537,7 +529,7 @@ static char *
 progress2string(char *buf, size_t s, int progress_1000)
 {
 	snprintf(buf, s, "%d.%01d%%", progress_1000 / 10, progress_1000 % 10);
-	assert(s > 0);
+	UASSERT(s > 0);
 	buf[s - 1] = '\0';
 	return buf;
 }
@@ -580,13 +572,12 @@ static int cmd_replace_cancel(const struct cmd_struct *cmd,
 	ret = ioctl(fd, BTRFS_IOC_DEV_REPLACE, &args);
 	close_file_or_dir(fd, dirstream);
 	if (ret < 0) {
-		fprintf(stderr, "ERROR: ioctl(DEV_REPLACE_CANCEL) failed on \"%s\": %m",
-			path);
+		error("ioctl(DEV_REPLACE_CANCEL) failed on \"%s\": %m", path);
 		if (args.result != BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT)
-			fprintf(stderr, ", %s\n",
+			pr_stderr(LOG_DEFAULT, ", %s\n",
 				replace_dev_result2string(args.result));
 		else
-			fprintf(stderr, "\n");
+			pr_stderr(LOG_DEFAULT, "\n");
 		return 1;
 	}
 	if (args.result == BTRFS_IOCTL_DEV_REPLACE_RESULT_NOT_STARTED) {

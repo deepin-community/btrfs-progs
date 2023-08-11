@@ -21,7 +21,13 @@
 #ifndef __BTRFS_MKFS_ROOTDIR_H__
 #define __BTRFS_MKFS_ROOTDIR_H__
 
+#include "kerncompat.h"
+#include <sys/types.h>
+#include <stdbool.h>
 #include "kernel-lib/list.h"
+
+struct btrfs_fs_info;
+struct btrfs_root;
 
 struct directory_name_entry {
 	const char *dir_name;
@@ -30,8 +36,7 @@ struct directory_name_entry {
 	struct list_head list;
 };
 
-int btrfs_mkfs_fill_dir(const char *source_dir, struct btrfs_root *root,
-			bool verbose);
+int btrfs_mkfs_fill_dir(const char *source_dir, struct btrfs_root *root);
 u64 btrfs_mkfs_size_dir(const char *dir_name, u32 sectorsize, u64 min_dev_size,
 			u64 meta_profile, u64 data_profile);
 int btrfs_mkfs_shrink_fs(struct btrfs_fs_info *fs_info, u64 *new_size_ret,

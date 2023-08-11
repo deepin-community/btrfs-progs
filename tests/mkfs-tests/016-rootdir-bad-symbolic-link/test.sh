@@ -5,9 +5,10 @@
 # Since mkfs.btrfs --rootdir will just create symbolic link rather than
 # follow it, we shouldn't hit any problem
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq mkfs.btrfs
+
 prepare_test_dev
 
 tmp=$(_mktemp_dir mkfs-rootdir)

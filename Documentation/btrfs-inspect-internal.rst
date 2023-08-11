@@ -18,8 +18,6 @@ SUBCOMMAND
 ----------
 
 dump-super [options] <device> [device...]
-        (replaces the standalone tool **btrfs-show-super**)
-
         Show btrfs superblock information stored on given devices in textual form.
         By default the first superblock is printed, more details about all copies or
         additional backup data can be printed.
@@ -62,8 +60,6 @@ dump-super [options] <device> [device...]
                 *--force*
 
 dump-tree [options] <device> [device...]
-        (replaces the standalone tool **btrfs-debug-tree**)
-
         Dump tree structures from a given device in textual form, expand keys to human
         readable equivalents where possible.
         This is useful for analyzing filesystem state or inconsistencies and has
@@ -80,9 +76,9 @@ dump-tree [options] <device> [device...]
         -d|--device
                 print only device-related information: tree root, chunk and device trees
         -r|--roots
-                print only short root node information, ie. the root tree keys
+                print only short root node information, i.e. the root tree keys
         -R|--backups
-                same as *--roots* plus print backup root info, ie. the backup root keys and
+                same as *--roots* plus print backup root info, i.e. the backup root keys and
                 the respective tree root block offset
         -u|--uuid
                 print only the uuid tree information, empty output if the tree does not exist
@@ -132,16 +128,16 @@ dump-tree [options] <device> [device...]
                 The tree id name recognition rules:
 
                 * case does not matter
-                * the C source definition, eg. BTRFS_ROOT_TREE_OBJECTID
-                * short forms without BTRFS\_ prefix, without _TREE and _OBJECTID suffix, eg. ROOT_TREE, ROOT
-                * convenience aliases, eg. DEVICE for the DEV tree, CHECKSUM for CSUM
+                * the C source definition, e.g. BTRFS_ROOT_TREE_OBJECTID
+                * short forms without BTRFS\_ prefix, without _TREE and _OBJECTID suffix, e.g. ROOT_TREE, ROOT
+                * convenience aliases, e.g. DEVICE for the DEV tree, CHECKSUM for CSUM
                 * unrecognized ID is an error
 
 inode-resolve [-v] <ino> <path>
         (needs root privileges)
 
         resolve paths to all files with given inode number *ino* in a given subvolume
-        at *path*, ie. all hardlinks
+        at *path*, i.e. all hardlinks
 
         ``Options``
 
@@ -169,6 +165,24 @@ logical-resolve [-Pvo] [-s <bufsize>] <logical> <path>
         -v
                 (deprecated) alias for global *-v* option
 
+map-swapfile [options] <file>
+        (needs root privileges)
+
+        Find device-specific physical offset of *file* that can be used for
+        hibernation. Also verify that the *file* is suitable as a swapfile.
+        See also command :command:`btrfs filesystem mkswapfile` and the
+        :doc:`Swapfile feature<Swapfile>` description.
+
+        .. note::
+                Do not use :command:`filefrag` or *FIEMAP* ioctl values reported as
+                physical, this is different due to internal filesystem mappings.
+                The hibernation expects offset relative to the physical block device.
+
+        ``Options``
+
+        -r|--resume-offset
+                print only the value suitable as resume offset for file */sys/power/resume_offset*
+
 min-dev-size [options] <path>
         (needs root privileges)
 
@@ -182,7 +196,7 @@ min-dev-size [options] <path>
 
 rootid <path>
         for a given file or directory, return the containing tree root id, but for a
-        subvolume itself return its own tree id (ie. subvol id)
+        subvolume itself return its own tree id (i.e. subvol id)
 
         .. note::
                 The result is undefined for the so-called empty subvolumes (identified by
@@ -196,7 +210,14 @@ subvolid-resolve <subvolid> <path>
 tree-stats [options] <device>
         (needs root privileges)
 
-        Print sizes and statistics of trees.
+        Print sizes and statistics of trees. This takes a device as an argument
+        and not a mount point unlike other commands.
+
+        .. note::
+                In case the the filesystem is still mounted it's possible to
+                run the command but the results may be inaccurate or various
+                errors may be printed in case there are ongoing writes to the
+                filesystem. A warning is printed in such case.
 
         ``Options``
 
@@ -212,11 +233,10 @@ returned in case of failure.
 AVAILABILITY
 ------------
 
-**btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`

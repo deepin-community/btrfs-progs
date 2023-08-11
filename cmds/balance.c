@@ -14,30 +14,30 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
+#include <sys/ioctl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-
-#include "kerncompat.h"
+#include <dirent.h>
+#include <stdbool.h>
+#include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
-#include "ioctl.h"
 #include "kernel-shared/volumes.h"
 #include "common/open-utils.h"
-#include "cmds/commands.h"
 #include "common/utils.h"
 #include "common/parse-utils.h"
+#include "common/messages.h"
 #include "common/help.h"
+#include "cmds/commands.h"
 
 static const char * const balance_cmd_group_usage[] = {
 	"btrfs balance <command> [options] <path>",
-	"btrfs balance <path>",
+	"btrfs balance <path>        (deprecated, use 'btrfs balance start')",
 	NULL
 };
 
@@ -76,10 +76,10 @@ __attribute__ ((unused))
 static void print_range(u64 start, u64 end)
 {
 	if (start)
-		printf("%llu", (unsigned long long)start);
+		printf("%llu", start);
 	printf("..");
 	if (end != (u64)-1)
-		printf("%llu", (unsigned long long)end);
+		printf("%llu", end);
 }
 
 __attribute__ ((unused))
@@ -228,32 +228,28 @@ static void dump_balance_args(struct btrfs_balance_args *args)
 {
 	if (args->flags & BTRFS_BALANCE_ARGS_CONVERT) {
 		printf("converting, target=%llu, soft is %s",
-		       (unsigned long long)args->target,
+		       args->target,
 		       (args->flags & BTRFS_BALANCE_ARGS_SOFT) ? "on" : "off");
 	} else {
 		printf("balancing");
 	}
 
 	if (args->flags & BTRFS_BALANCE_ARGS_PROFILES)
-		printf(", profiles=%llu", (unsigned long long)args->profiles);
+		printf(", profiles=%llu", args->profiles);
 	if (args->flags & BTRFS_BALANCE_ARGS_USAGE)
-		printf(", usage=%llu", (unsigned long long)args->usage);
+		printf(", usage=%llu", args->usage);
 	if (args->flags & BTRFS_BALANCE_ARGS_USAGE_RANGE) {
 		printf(", usage=");
 		print_range_u32(args->usage_min, args->usage_max);
 	}
 	if (args->flags & BTRFS_BALANCE_ARGS_DEVID)
-		printf(", devid=%llu", (unsigned long long)args->devid);
+		printf(", devid=%llu", args->devid);
 	if (args->flags & BTRFS_BALANCE_ARGS_DRANGE)
-		printf(", drange=%llu..%llu",
-		       (unsigned long long)args->pstart,
-		       (unsigned long long)args->pend);
+		printf(", drange=%llu..%llu", args->pstart, args->pend);
 	if (args->flags & BTRFS_BALANCE_ARGS_VRANGE)
-		printf(", vrange=%llu..%llu",
-		       (unsigned long long)args->vstart,
-		       (unsigned long long)args->vend);
+		printf(", vrange=%llu..%llu", args->vstart, args->vend);
 	if (args->flags & BTRFS_BALANCE_ARGS_LIMIT)
-		printf(", limit=%llu", (unsigned long long)args->limit);
+		printf(", limit=%llu", args->limit);
 	if (args->flags & BTRFS_BALANCE_ARGS_LIMIT_RANGE) {
 		printf(", limit=");
 		print_range_u32(args->limit_min, args->limit_max);
@@ -269,21 +265,18 @@ static void dump_balance_args(struct btrfs_balance_args *args)
 static void dump_ioctl_balance_args(struct btrfs_ioctl_balance_args *args)
 {
 	printf("Dumping filters: flags 0x%llx, state 0x%llx, force is %s\n",
-	       (unsigned long long)args->flags, (unsigned long long)args->state,
+	       args->flags, args->state,
 	       (args->flags & BTRFS_BALANCE_FORCE) ? "on" : "off");
 	if (args->flags & BTRFS_BALANCE_DATA) {
-		printf("  DATA (flags 0x%llx): ",
-		       (unsigned long long)args->data.flags);
+		printf("  DATA (flags 0x%llx): ", args->data.flags);
 		dump_balance_args(&args->data);
 	}
 	if (args->flags & BTRFS_BALANCE_METADATA) {
-		printf("  METADATA (flags 0x%llx): ",
-		       (unsigned long long)args->meta.flags);
+		printf("  METADATA (flags 0x%llx): ", args->meta.flags);
 		dump_balance_args(&args->meta);
 	}
 	if (args->flags & BTRFS_BALANCE_SYSTEM) {
-		printf("  SYSTEM (flags 0x%llx): ",
-		       (unsigned long long)args->sys.flags);
+		printf("  SYSTEM (flags 0x%llx): ", args->sys.flags);
 		dump_balance_args(&args->sys);
 	}
 }
@@ -337,24 +330,23 @@ static int do_balance(const char *path, struct btrfs_ioctl_balance_args *args,
 
 		if (errno == ECANCELED) {
 			if (args->state & BTRFS_BALANCE_STATE_PAUSE_REQ)
-				fprintf(stderr, "balance paused by user\n");
+				pr_stderr(LOG_DEFAULT, "balance paused by user\n");
 			if (args->state & BTRFS_BALANCE_STATE_CANCEL_REQ)
-				fprintf(stderr, "balance canceled by user\n");
+				pr_stderr(LOG_DEFAULT, "balance canceled by user\n");
 			ret = 0;
 		} else {
 			error("error during balancing '%s': %m", path);
 			if (errno != EINPROGRESS)
-				fprintf(stderr,
-			"There may be more info in syslog - try dmesg | tail\n");
+				pr_stderr(LOG_DEFAULT,
+				"There may be more info in syslog - try dmesg | tail\n");
 			ret = 1;
 		}
 	} else if (ret > 0) {
 		error("balance: %s", btrfs_err_str(ret));
 	} else {
-		pr_verbose(MUST_LOG,
+		pr_verbose(LOG_DEFAULT,
 			   "Done, had to relocate %llu out of %llu chunks\n",
-			   (unsigned long long)args->stat.completed,
-			   (unsigned long long)args->stat.considered);
+			   args->stat.completed, args->stat.considered);
 	}
 
 out:
@@ -373,17 +365,14 @@ static const char * const cmd_balance_start_usage[] = {
 	"long operation and the user is warned before this start, with",
 	"a delay to stop it.",
 	"",
-	"-d[filters]    act on data chunks",
-	"-m[filters]    act on metadata chunks",
-	"-s[filters]    act on system chunks (only under -f)",
-	"-f             force a reduction of metadata integrity, or",
-	"               skip timeout when converting to RAID56 profiles",
-	"--full-balance do not print warning and do not delay start",
-	"--background|--bg",
-	"               run the balance as a background process",
-	"--enqueue      wait if there's another exclusive operation running,",
-	"               otherwise continue",
-	"-v|--verbose   deprecated, alias for global -v option",
+	OPTLINE("-d[filters]", "act on data chunks with optional filters (no space in between)"),
+	OPTLINE("-m[filters]", "act on metadata chunks with optinal filters (no space in between)"),
+	OPTLINE("-s[filters]", "act on system chunks (only under -f) with optional filters (no space in between)"),
+	OPTLINE("-f", "force a reduction of metadata integrity, or skip timeout when converting to RAID56 profiles"),
+	OPTLINE("--full-balance", "do not print warning and do not delay start"),
+	OPTLINE("--background|--bg", "run the balance as a background process"),
+	OPTLINE("--enqueue", "wait if there's another exclusive operation running, otherwise continue"),
+	OPTLINE("-v|--verbose", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
 	HELPINFO_INSERT_QUIET,
@@ -396,8 +385,8 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 	struct btrfs_ioctl_balance_args args;
 	struct btrfs_balance_args *ptrs[] = { &args.data, &args.sys,
 						&args.meta, NULL };
-	int force = 0;
-	int background = 0;
+	bool force = false;
+	bool background = false;
 	bool enqueue = false;
 	unsigned start_flags = 0;
 	bool raid56_warned = false;
@@ -407,9 +396,8 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 
 	optind = 0;
 	while (1) {
-		enum { GETOPT_VAL_FULL_BALANCE = 256,
-			GETOPT_VAL_BACKGROUND = 257,
-			GETOPT_VAL_ENQUEUE };
+		enum { GETOPT_VAL_FULL_BALANCE = GETOPT_VAL_FIRST,
+			GETOPT_VAL_BACKGROUND, GETOPT_VAL_ENQUEUE };
 		static const struct option longopts[] = {
 			{ "data", optional_argument, NULL, 'd'},
 			{ "metadata", optional_argument, NULL, 'm' },
@@ -452,7 +440,7 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 				return 1;
 			break;
 		case 'f':
-			force = 1;
+			force = true;
 			break;
 		case 'v':
 			bconf_be_verbose();
@@ -461,7 +449,7 @@ static int cmd_balance_start(const struct cmd_struct *cmd,
 			start_flags |= BALANCE_START_NOWARN;
 			break;
 		case GETOPT_VAL_BACKGROUND:
-			background = 1;
+			background = true;
 			break;
 		case GETOPT_VAL_ENQUEUE:
 			enqueue = true;
@@ -725,9 +713,9 @@ static int cmd_balance_resume(const struct cmd_struct *cmd,
 	if (ret < 0) {
 		if (errno == ECANCELED) {
 			if (args.state & BTRFS_BALANCE_STATE_PAUSE_REQ)
-				fprintf(stderr, "balance paused by user\n");
+				pr_stderr(LOG_DEFAULT, "balance paused by user\n");
 			if (args.state & BTRFS_BALANCE_STATE_CANCEL_REQ)
-				fprintf(stderr, "balance canceled by user\n");
+				pr_stderr(LOG_DEFAULT, "balance canceled by user\n");
 		} else if (errno == ENOTCONN || errno == EINPROGRESS) {
 			error("balance resume on '%s' failed: %s", path,
 				(errno == ENOTCONN) ? "Not in progress" :
@@ -743,10 +731,9 @@ static int cmd_balance_resume(const struct cmd_struct *cmd,
 			ret = 1;
 		}
 	} else {
-		pr_verbose(MUST_LOG,
+		pr_verbose(LOG_DEFAULT,
 			   "Done, had to relocate %llu out of %llu chunks\n",
-			   (unsigned long long)args.stat.completed,
-			   (unsigned long long)args.stat.considered);
+			   args.stat.completed, args.stat.considered);
 	}
 
 	close_file_or_dir(fd, dirstream);
@@ -758,7 +745,7 @@ static const char * const cmd_balance_status_usage[] = {
 	"btrfs balance status [-v] <path>",
 	"Show status of running or paused balance",
 	"",
-	"-v|--verbose     deprecated, alias for global -v option",
+	OPTLINE("-v|--verbose", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
 	NULL
@@ -834,9 +821,8 @@ static int cmd_balance_status(const struct cmd_struct *cmd,
 	}
 
 	printf("%llu out of about %llu chunks balanced (%llu considered), "
-	       "%3.f%% left\n", (unsigned long long)args.stat.completed,
-	       (unsigned long long)args.stat.expected,
-	       (unsigned long long)args.stat.considered,
+	       "%3.f%% left\n", args.stat.completed,
+	       args.stat.expected, args.stat.considered,
 	       100 * (1 - (float)args.stat.completed/args.stat.expected));
 
 	if (bconf.verbose > BTRFS_BCONF_QUIET)
@@ -879,10 +865,27 @@ static const struct cmd_group balance_cmd_group = {
 
 static int cmd_balance(const struct cmd_struct *cmd, int argc, char **argv)
 {
-	if (argc == 2 && strcmp("start", argv[1]) != 0) {
-		/* old 'btrfs filesystem balance <path>' syntax */
+	bool old_syntax = true;
+
+	/*
+	 * Exclude all valid subcommands from being potentially confused as path
+	 * for the obsolete syntax: btrfs balance <path>
+	 */
+	if (argc == 2) {
+		for (int i = 0; balance_cmd_group.commands[i] != NULL; i++) {
+			if (strcmp(argv[1], balance_cmd_group.commands[i]->token) == 0) {
+				old_syntax = false;
+				break;
+			}
+		}
+	} else {
+		old_syntax = false;
+	}
+
+	if (old_syntax) {
 		struct btrfs_ioctl_balance_args args;
 
+		warning("deprecated syntax, please use 'btrfs balance start'");
 		memset(&args, 0, sizeof(args));
 		args.flags |= BTRFS_BALANCE_TYPE_MASK;
 

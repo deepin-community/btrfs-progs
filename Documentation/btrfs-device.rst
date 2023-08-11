@@ -9,41 +9,12 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-The **btrfs device** command group is used to manage devices of the btrfs filesystems.
+The :command:`btrfs device` command group is used to manage devices of the btrfs filesystems.
 
 DEVICE MANAGEMENT
 -----------------
 
-Btrfs filesystem can be created on top of single or multiple block devices.
-Data and metadata are organized in allocation profiles with various redundancy
-policies. There's some similarity with traditional RAID levels, but this could
-be confusing to users familiar with the traditional meaning. Due to the
-similarity, the RAID terminology is widely used in the documentation.  See
-``mkfs.btrfs(8)`` for more details and the exact profile capabilities and
-constraints.
-
-The device management works on a mounted filesystem. Devices can be added,
-removed or replaced, by commands provided by **btrfs device** and **btrfs replace**.
-
-The profiles can be also changed, provided there's enough workspace to do the
-conversion, using the **btrfs balance** command and namely the filter *convert*.
-
-Type
-        The block group profile type is the main distinction of the information stored
-        on the block device. User data are called *Data*, the internal data structures
-        managed by filesystem are *Metadata* and *System*.
-
-Profile
-        A profile describes an allocation policy based on the redundancy/replication
-        constraints in connection with the number of devices. The profile applies to
-        data and metadata block groups separately. Eg. *single*, *RAID1*.
-
-RAID level
-        Where applicable, the level refers to a profile that matches constraints of the
-        standard RAID levels. At the moment the supported ones are: RAID0, RAID1,
-        RAID10, RAID5 and RAID6.
-
-See the section *TYPICAL USECASES* for some examples.
+.. include:: ch-volume-management-intro.rst
 
 SUBCOMMAND
 ----------
@@ -54,7 +25,7 @@ add [-Kf] <device> [<device>...] <path>
         If applicable, a whole device discard (TRIM) operation is performed prior to
         adding the device. A device with existing filesystem detected by ``blkid(8)``
         will prevent device addition and has to be forced. Alternatively the filesystem
-        can be wiped from the device using eg. the ``wipefs(8)`` tool.
+        can be wiped from the device using e.g. the ``wipefs(8)`` tool.
 
         The operation is instant and does not affect existing data. The operation merely
         adds the device to the filesystem structures and creates some block groups
@@ -76,7 +47,7 @@ remove [options] <device>|<devid> [<device>|<devid>...] <path>
         Device removal must satisfy the profile constraints, otherwise the command
         fails. The filesystem must be converted to profile(s) that would allow the
         removal. This can typically happen when going down from 2 devices to 1 and
-        using the RAID1 profile. See the *TYPICAL USECASES* section below.
+        using the RAID1 profile. See the section *TYPICAL USECASES*.
 
         The operation can take long as it needs to move all data from the device.
 
@@ -102,6 +73,10 @@ remove [options] <device>|<devid> [<device>|<devid>...] <path>
 
 delete <device>|<devid> [<device>|<devid>...] <path>
         Alias of remove kept for backward compatibility
+
+replace <command> [options] <path>
+        Alias of whole command group *btrfs replace* for convenience. See
+        :doc:`btrfs-replace(8)<btrfs-replace>`.
 
 ready <device>
         Wait until all devices of a multiple-device filesystem are scanned and
@@ -137,9 +112,9 @@ scan [options] [<device> [<device>...]]
 
 stats [options] <path>|<device>
         Read and print the device IO error statistics for all devices of the given
-        filesystem identified by *path* or for a single *device>. The filesystem must
-        be mounted.  See section *DEVICE STATS* for more information about the reported
-        statistics and the meaning.
+        filesystem identified by *path* or for a single *device*. The filesystem must
+        be mounted.  See section :ref:`DEVICE STATS<man-device-device-stats>`
+        for more information about the reported statistics and the meaning.
 
         ``Options``
 
@@ -150,6 +125,9 @@ stats [options] <path>|<device>
                 Check if the stats are all zeros and return 0 if it is so. Set bit 6 of the
                 return code if any of the statistics is no-zero. The error values is 65 if
                 reading stats from at least one device failed, otherwise it's 64.
+
+        -T
+                Print stats in a tabular form, devices as rows and stats as columns
 
 usage [options] <path> [<path>...]::
         Show detailed information about internal allocations on devices.
@@ -179,14 +157,14 @@ usage [options] <path> [<path>...]::
         * *Device size* -- size of the device as seen by the filesystem (may be
           different than actual device size)
         * *Device slack* -- portion of device not used by the filesystem but
-          still available in the physical space provided by the device, eg.
+          still available in the physical space provided by the device, e.g.
           after a device shrink
         * *Data,single*, *Metadata,single*, *System,single* -- in general, list
           of block group type (Data, Metadata, System) and profile (single,
           RAID1, ...) allocated on the device
         * *Data,RAID0/3* -- in particular, striped profiles
           RAID0/RAID10/RAID5/RAID6 with the number of devices on which the
-          stripes are allocated, multiple occurences of the same profile can
+          stripes are allocated, multiple occurrences of the same profile can
           appear in case a new device has been added and all new available
           stripes have been used for writes
         * *Unallocated* -- remaining space that the filesystem can still use
@@ -217,93 +195,7 @@ usage [options] <path> [<path>...]::
 
         If conflicting options are passed, the last one takes precedence.
 
-TYPICAL USECASES
-----------------
-
-STARTING WITH A SINGLE-DEVICE FILESYSTEM
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Assume we've created a filesystem on a block device */dev/sda* with profile
-*single/single* (data/metadata), the device size is 50GiB and we've used the
-whole device for the filesystem. The mount point is */mnt*.
-
-The amount of data stored is 16GiB, metadata have allocated 2GiB.
-
-ADD NEW DEVICE
-""""""""""""""
-
-We want to increase the total size of the filesystem and keep the profiles. The
-size of the new device */dev/sdb* is 100GiB.
-
-.. code-block:: bash
-
-        $ btrfs device add /dev/sdb /mnt
-
-The amount of free data space increases by less than 100GiB, some space is
-allocated for metadata.
-
-CONVERT TO RAID1
-""""""""""""""""
-
-Now we want to increase the redundancy level of both data and metadata, but
-we'll do that in steps. Note, that the device sizes are not equal and we'll use
-that to show the capabilities of split data/metadata and independent profiles.
-
-The constraint for RAID1 gives us at most 50GiB of usable space and exactly 2
-copies will be stored on the devices.
-
-First we'll convert the metadata. As the metadata occupy less than 50GiB and
-there's enough workspace for the conversion process, we can do:
-
-.. code-block:: bash
-
-        $ btrfs balance start -mconvert=raid1 /mnt
-
-This operation can take a while, because all metadata have to be moved and all
-block pointers updated. Depending on the physical locations of the old and new
-blocks, the disk seeking is the key factor affecting performance.
-
-You'll note that the system block group has been also converted to RAID1, this
-normally happens as the system block group also holds metadata (the physical to
-logical mappings).
-
-What changed:
-
-* available data space decreased by 3GiB, usable roughly (50 - 3) + (100 - 3) = 144 GiB
-* metadata redundancy increased
-
-IOW, the unequal device sizes allow for combined space for data yet improved
-redundancy for metadata. If we decide to increase redundancy of data as well,
-we're going to lose 50GiB of the second device for obvious reasons.
-
-.. code-block:: bash
-
-        $ btrfs balance start -dconvert=raid1 /mnt
-
-The balance process needs some workspace (ie. a free device space without any
-data or metadata block groups) so the command could fail if there's too much
-data or the block groups occupy the whole first device.
-
-The device size of */dev/sdb* as seen by the filesystem remains unchanged, but
-the logical space from 50-100GiB will be unused.
-
-REMOVE DEVICE
-"""""""""""""
-
-Device removal must satisfy the profile constraints, otherwise the command
-fails. For example:
-
-.. code-block:: bash
-
-        $ btrfs device remove /dev/sda /mnt
-        ERROR: error removing device '/dev/sda': unable to go below two devices on raid1
-
-In order to remove a device, you need to convert the profile in this case:
-
-.. code-block:: bash
-
-        $ btrfs balance start -mconvert=dup -dconvert=single /mnt
-        $ btrfs device remove /dev/sda /mnt
+.. _man-device-device-stats:
 
 DEVICE STATS
 ------------
@@ -334,11 +226,11 @@ flush_io_errs
 corruption_errs
         A block checksum mismatched or a corrupted metadata header was found.
 generation_errs
-        The block generation does not match the expected value (eg. stored in the
+        The block generation does not match the expected value (e.g. stored in the
         parent node).
 
 Since kernel 5.14 the device stats are also available in textual form in
-*/sys/fs/btrfs/FSID/devinfo/DEVID/error_stats*.
+:file:`/sys/fs/btrfs/FSID/devinfo/DEVID/error_stats`.
 
 EXIT STATUS
 -----------
@@ -346,19 +238,19 @@ EXIT STATUS
 **btrfs device** returns a zero exit status if it succeeds. Non zero is
 returned in case of failure.
 
-If the *-s* option is used, *btrfs device stats* will add 64 to the
+If the *-c* option is used, *btrfs device stats* will add 64 to the
 exit status if any of the error counters is non-zero.
 
 AVAILABILITY
 ------------
 
-**btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``,
-``btrfs-replace(8)``,
-``btrfs-balance(8)``
+:doc:`btrfs-balance(8)<btrfs-balance>`
+:doc:`btrfs-device(8)<btrfs-device>`,
+:doc:`btrfs-replace(8)<btrfs-replace>`,
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`,

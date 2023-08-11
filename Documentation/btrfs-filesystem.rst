@@ -9,7 +9,7 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-**btrfs filesystem** is used to perform several whole filesystem level tasks,
+:command:`btrfs filesystem` is used to perform several whole filesystem level tasks,
 including all the regular filesystem operations like resizing, space stats,
 label setting/getting, and defragmentation. There are other whole filesystem
 tasks like scrub or balance that are grouped in separate commands.
@@ -26,7 +26,7 @@ df [options] <path>
 
         * device size: *1.9TiB*, one device, no RAID
         * filesystem size: *1.9TiB*
-        * created with: **mkfs.btrfs -d single -m single**
+        * created with: :command:`mkfs.btrfs -d single -m single`
 
         .. code-block:: none
 
@@ -41,11 +41,11 @@ df [options] <path>
           below.
         * *single* -- the allocation profile, defined at mkfs time
         * *total* -- sum of space reserved for all allocation profiles of the
-          given type, ie. all Data/single. Note that it's not total size of
+          given type, i.e. all Data/single. Note that it's not total size of
           filesystem.
-        * *used* -- sum of used space of the above, ie. file extents, metadata blocks
+        * *used* -- sum of used space of the above, i.e. file extents, metadata blocks
 
-        *GlobalReserve* is an artificial and internal emergency space. It is used eg.
+        *GlobalReserve* is an artificial and internal emergency space. It is used e.g.
         when the filesystem is full. Its *total* size is dynamic based on the
         filesystem size, usually not larger than 512MiB, *used* may fluctuate.
 
@@ -94,7 +94,7 @@ defragment [options] <file>|<dir> [<file>|<dir>...]
         .. warning::
                 Defragmenting with Linux kernel versions < 3.9 or ≥ 3.14-rc2 as well as
                 with Linux stable kernel versions ≥ 3.10.31, ≥ 3.12.12 or ≥ 3.13.4 will break up
-                the reflinks of COW data (for example files copied with **cp --reflink**,
+                the reflinks of COW data (for example files copied with :command:`cp --reflink`,
                 snapshots or de-duplicated data).
                 This may cause considerable increase of space usage depending on the broken up
                 reflinks.
@@ -124,7 +124,7 @@ defragment [options] <file>|<dir> [<file>|<dir>...]
                 This will limit the amount of dirty data to current file, otherwise the amount
                 accumulates from several files and will increase system load. This can also lead
                 to ENOSPC if there's too much dirty data to write and it's not possible to make
-                the reservations for the new data (ie. how the COW design works).
+                the reservations for the new data (i.e. how the COW design works).
 
         -s <start>[kKmMgGtTpPeE]
                 defragmentation will start from the given offset, default is beginning of a file
@@ -146,7 +146,7 @@ du [options] <path> [<path>..]
         shared) bytes. We also calculate a 'set shared' value which is
         described below.
 
-        Each argument to **btrfs filesystem du** will have a *set shared* value
+        Each argument to :command:`btrfs filesystem du` will have a *set shared* value
         calculated for it. We define each *set* as those files found by a
         recursive search of an argument (recursion descends to subvolumes but not
         mount points). The *set shared* value then is a sum of all shared space
@@ -188,6 +188,33 @@ label [<device>|<mountpoint>] [<newlabel>]
                 The maximum allowable length shall be less than 256 chars and must not contain
                 a newline. The trailing newline is stripped automatically.
 
+mkswapfile [-s size] file
+        Create a new file that's suitable and formatted as a swapfile. Default
+        size is 2GiB, fixed page size 4KiB, minimum size is 40KiB.
+
+        A swapfile must be created in a specific way: NOCOW and preallocated.
+        Subvolume containing a swapfile cannot be snapshotted and blocks of an
+        activated swapfile cannot be balanced.
+
+        Swapfile creation can be achieved by standalone commands too. Activation
+        needs to be done by command ``swapon(8)``. See also command
+        :command:`btrfs inspect-internal map-swapfile`
+        and the :doc:`Swapfile feature<Swapfile>` description.
+
+        .. note::
+                The command is a simplified version of 'mkswap', if you want to set
+                label, page size, or other parameters please use 'mkswap' proper.
+
+        ``Options``
+
+        -s|--size SIZE
+                Create swapfile of a given size SIZE (accepting k/m/g/e/p
+                suffix).
+
+        -U|--uuid UUID
+                specify UUID to use, or a special value: clear (all zeros), random,
+                time (time-based random)
+
 resize [options] [<devid>:][+/-]<size>[kKmMgGtTpPeE]|[<devid>:]max <path>
         Resize a mounted filesystem identified by *path*. A particular device
         can be resized by specifying a *devid*.
@@ -197,7 +224,7 @@ resize [options] [<devid>:][+/-]<size>[kKmMgGtTpPeE]|[<devid>:]max <path>
                 as expected and does not resize the image. This would resize the underlying
                 filesystem instead.
 
-        The *devid* can be found in the output of **btrfs filesystem show** and
+        The *devid* can be found in the output of :command:`btrfs filesystem show` and
         defaults to 1 if not specified.
         The *size* parameter specifies the new size of the filesystem.
         If the prefix *+* or *-* is present the size is increased or decreased
@@ -265,11 +292,11 @@ show [options] [<path>|<uuid>|<device>|<label>]
 sync <path>
         Force a sync of the filesystem at *path*, similar to the ``sync(1)`` command. In
         addition, it starts cleaning of deleted subvolumes. To wait for the subvolume
-        deletion to complete use the **btrfs subvolume sync** command.
+        deletion to complete use the :command:`btrfs subvolume sync` command.
 
 usage [options] <path> [<path>...]
         Show detailed information about internal filesystem usage. This is supposed to
-        replace the **btrfs filesystem df** command in the long run.
+        replace the :command:`btrfs filesystem df` command in the long run.
 
         The level of detail can differ if the command is run under a regular or the
         root user (due to use of restricted ioctl). For both there's a summary section
@@ -284,6 +311,7 @@ usage [options] <path> [<path>...]
                     Device allocated:              1.17TiB
                     Device unallocated:          669.99GiB
                     Device missing:                  0.00B
+                    Device slack:                  1.00GiB
                     Used:                          1.14TiB
                     Free (estimated):            692.57GiB      (min: 692.57GiB)
                     Free (statfs, df)            692.57GiB
@@ -292,13 +320,17 @@ usage [options] <path> [<path>...]
                     Global reserve:              512.00MiB      (used: 0.00B)
                     Multiple profiles:                  no
 
-        * *Device size* -- sum of raw device capacity available to the filesystem
+        * *Device size* -- sum of raw device capacity available to the
+          filesystem, note that this may not be the same as the total device
+          size (the difference is accounted as slack)
         * *Device allocated* -- sum of total space allocated for
           data/metadata/system profiles, this also accounts space reserved but
           not yet used for extents
         * *Device unallocated* -- the remaining unallocated space for future
           allocations (difference of the above two numbers)
         * *Device missing* -- sum of capacity of all missing devices
+        * *Device slack* -- sum of slack space on all devices (difference
+          between entire device size and the space occupied by filesystem)
         * *Used* -- sum of the used space of data/metadata/system profiles, not
           including the reserved space
         * *Free (estimated)* -- approximate size of the remaining free space
@@ -309,17 +341,17 @@ usage [options] <path> [<path>...]
         * *Free (statfs, df)* -- the amount of space available for data as
           reported by the **statfs** syscall, also returned as *Avail* in the
           output of **df**. The value is calculated in a different way and may
-          not match the estimate in some cases (eg.  multiple profiles).
+          not match the estimate in some cases (e.g.  multiple profiles).
         * *Data ratio* -- ratio of total space for data including redundancy or
-          parity to the effectively usable data space, eg. single is 1.0, RAID1
+          parity to the effectively usable data space, e.g. single is 1.0, RAID1
           is 2.0 and for RAID5/6 it depends on the number of devices
-        * *Metadata ratio* -- dtto, for metadata
+        * *Metadata ratio* -- ditto, for metadata
         * *Global reserve* -- portion of metadata currently used for global
           block reserve, used for emergency purposes (like deletion on a full
           filesystem)
         * *Multiple profiles* -- what block group types (data, metadata) have
-          more than one profile (single, raid1, ...), see ``btrfs(5)`` section
-          *FILESYSTEMS WITH MULTIPLE BLOCK GROUP PROFILES*.
+          more than one profile (single, raid1, ...), see :doc:`btrfs(5)<btrfs-man5>` section
+          :ref:`FILESYSTEMS WITH MULTIPLE PROFILES<man-btrfs5-filesystem-with-multiple-profiles>`.
 
         And on a zoned filesystem there are two more lines in the *Device* section:
 
@@ -329,7 +361,7 @@ usage [options] <path> [<path>...]
                     Device zone size:            256.00MiB
 
         * *Device zone unusable* -- sum of of space that's been used in the
-          past but now is not due to COW and not referenced anymory, the chunks
+          past but now is not due to COW and not referenced anymore, the chunks
           have to be reclaimed and zones reset to make it usable again
         * *Device zone size* -- the reported zone size of the host-managed
           device, same for all devices
@@ -425,12 +457,12 @@ specify the devid though.
 **$ btrfs filesystem resize 1:max /path**
 
 Let's assume that devid 1 exists and the filesystem does not occupy the whole
-block device, eg. it has been enlarged and we want to grow the filesystem. By
+block device, e.g. it has been enlarged and we want to grow the filesystem. By
 simply using *max* as size we will achieve that.
 
 .. note::
    There are two ways to minimize the filesystem on a given device. The
-   **btrfs inspect-internal min-dev-size** command, or iteratively shrink in steps.
+   :command:`btrfs inspect-internal min-dev-size` command, or iteratively shrink in steps.
 
 EXIT STATUS
 -----------
@@ -441,12 +473,11 @@ returned in case of failure.
 AVAILABILITY
 ------------
 
-**btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``btrfs-subvolume(8)``,
-``mkfs.btrfs(8)``
+:doc:`btrfs-subvolume(8)<btrfs-subvolume>`,
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`

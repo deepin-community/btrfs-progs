@@ -15,21 +15,25 @@
  */
 
 #include <sys/ioctl.h>
-#include <sys/mount.h>
-#include <sys/statfs.h>
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <linux/limits.h>
+#ifdef BTRFS_ZONED
+#include <linux/blkzoned.h>
+#endif
+#include <linux/fs.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <errno.h>
 #include <blkid/blkid.h>
-#include <linux/limits.h>
-#include <linux/fs.h>
-#include <limits.h>
 #include "kernel-lib/sizes.h"
 #include "kernel-shared/disk-io.h"
+#include "kernel-shared/ctree.h"
 #include "kernel-shared/zoned.h"
 #include "common/device-utils.h"
 #include "common/path-utils.h"
@@ -64,8 +68,8 @@ static int discard_supported(const char *device)
 		pr_verbose(3, "cannot read discard_granularity for %s\n", device);
 		return 0;
 	} else {
-		if (buf[0] == '0' && buf[1] == 0) {
-			pr_verbose(3, "%s: discard_granularity %s\n", device, buf);
+		if (atoi(buf) == 0) {
+			pr_verbose(3, "%s: discard_granularity %s", device, buf);
 			return 0;
 		}
 	}
@@ -227,7 +231,7 @@ int btrfs_prepare_device(int fd, const char *file, u64 *block_count_ret,
 		return 1;
 	}
 
-	block_count = btrfs_device_size(fd, &st);
+	block_count = device_get_partition_size_fd_stat(fd, &st);
 	if (block_count == 0) {
 		error("unable to determine size of %s", file);
 		return 1;
@@ -301,18 +305,17 @@ err:
 	return 1;
 }
 
-u64 btrfs_device_size(int fd, struct stat *st)
+u64 device_get_partition_size_fd_stat(int fd, const struct stat *st)
 {
 	u64 size;
-	if (S_ISREG(st->st_mode)) {
+
+	if (S_ISREG(st->st_mode))
 		return st->st_size;
-	}
-	if (!S_ISBLK(st->st_mode)) {
+	if (!S_ISBLK(st->st_mode))
 		return 0;
-	}
-	if (ioctl(fd, BLKGETSIZE64, &size) >= 0) {
+	if (ioctl(fd, BLKGETSIZE64, &size) >= 0)
 		return size;
-	}
+
 	return 0;
 }
 
@@ -329,7 +332,7 @@ u64 device_get_partition_size_fd(int fd)
 	return result;
 }
 
-u64 device_get_partition_size_sysfs(const char *dev)
+static u64 device_get_partition_size_sysfs(const char *dev)
 {
 	int ret;
 	char path[PATH_MAX] = {};
@@ -514,7 +517,19 @@ out:
 	return ret;
 }
 
-ssize_t btrfs_direct_pio(int rw, int fd, void *buf, size_t count, off_t offset)
+int device_get_rotational(const char *file)
+{
+	char rotational;
+	int ret;
+
+	ret = device_get_queue_param(file, "rotational", &rotational, 1);
+	if (ret < 1)
+		return 0;
+
+	return (rotational == '0');
+}
+
+ssize_t btrfs_direct_pread(int fd, void *buf, size_t count, off_t offset)
 {
 	int alignment;
 	size_t iosize;
@@ -522,13 +537,10 @@ ssize_t btrfs_direct_pio(int rw, int fd, void *buf, size_t count, off_t offset)
 	struct stat stat_buf;
 	unsigned long req;
 	int ret;
-	ssize_t ret_rw;
-
-	ASSERT(rw == READ || rw == WRITE);
 
 	if (fstat(fd, &stat_buf) == -1) {
 		error("fstat failed: %m");
-		return 0;
+		return -errno;
 	}
 
 	if ((stat_buf.st_mode & S_IFMT) == S_IFBLK)
@@ -538,43 +550,76 @@ ssize_t btrfs_direct_pio(int rw, int fd, void *buf, size_t count, off_t offset)
 
 	if (ioctl(fd, req, &alignment)) {
 		error("failed to get block size: %m");
-		return 0;
+		return -errno;
 	}
 
-	if (IS_ALIGNED((size_t)buf, alignment) && IS_ALIGNED(count, alignment)) {
-		if (rw == WRITE)
-			return pwrite(fd, buf, count, offset);
-		else
-			return pread(fd, buf, count, offset);
+	if (IS_ALIGNED((size_t)buf, alignment) && IS_ALIGNED(count, alignment))
+		return pread(fd, buf, count, offset);
+
+	iosize = round_up(count, alignment);
+
+	ret = posix_memalign(&bounce_buf, alignment, iosize);
+	if (ret) {
+		error_msg(ERROR_MSG_MEMORY, "bounce buffer");
+		errno = ret;
+		return -ret;
 	}
+
+	ret = pread(fd, bounce_buf, iosize, offset);
+	if (ret >= count)
+		ret = count;
+	memcpy(buf, bounce_buf, count);
+
+	free(bounce_buf);
+	return ret;
+}
+
+ssize_t btrfs_direct_pwrite(int fd, const void *buf, size_t count, off_t offset)
+{
+	int alignment;
+	size_t iosize;
+	void *bounce_buf = NULL;
+	struct stat stat_buf;
+	unsigned long req;
+	int ret;
+
+	if (fstat(fd, &stat_buf) == -1) {
+		error("fstat failed: %m");
+		return -errno;
+	}
+
+	if ((stat_buf.st_mode & S_IFMT) == S_IFBLK)
+		req = BLKSSZGET;
+	else
+		req = FIGETBSZ;
+
+	if (ioctl(fd, req, &alignment)) {
+		error("failed to get block size: %m");
+		return -errno;
+	}
+
+	if (IS_ALIGNED((size_t)buf, alignment) && IS_ALIGNED(count, alignment))
+		return pwrite(fd, buf, count, offset);
 
 	/* Cannot do anything if the write size is not aligned */
-	if (rw == WRITE && !IS_ALIGNED(count, alignment)) {
+	if (!IS_ALIGNED(count, alignment)) {
 		error("%zu is not aligned to %d", count, alignment);
-		return 0;
+		return -EINVAL;
 	}
 
 	iosize = round_up(count, alignment);
 
 	ret = posix_memalign(&bounce_buf, alignment, iosize);
 	if (ret) {
-		error("failed to allocate bounce buffer: %m");
+		error_msg(ERROR_MSG_MEMORY, "bounce buffer");
 		errno = ret;
-		return 0;
+		return -ret;
 	}
 
-	if (rw == WRITE) {
-		ASSERT(iosize == count);
-		memcpy(bounce_buf, buf, count);
-		ret_rw = pwrite(fd, bounce_buf, iosize, offset);
-	} else {
-		ret_rw = pread(fd, bounce_buf, iosize, offset);
-		if (ret_rw >= count) {
-			ret_rw = count;
-			memcpy(buf, bounce_buf, count);
-		}
-	}
+	UASSERT(iosize == count);
+	memcpy(bounce_buf, buf, count);
+	ret = pwrite(fd, bounce_buf, iosize, offset);
 
 	free(bounce_buf);
-	return ret_rw;
+	return ret;
 }

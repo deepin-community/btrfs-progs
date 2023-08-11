@@ -8,7 +8,7 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-**btrfs-image** is used to create an image of a btrfs filesystem.
+:command:`btrfs-image` is used to create an image of a btrfs filesystem.
 All data will be zeroed, but metadata and the like is preserved.
 Mainly used for debugging purposes.
 
@@ -39,7 +39,7 @@ OPTIONS
 -s
         Sanitize the file names when generating the image. One -s means just
         generate random garbage, which means that the directory indexes won't match up
-        since the hashes won't match with the garbage filenames. Using -ss will
+        since the hashes won't match with the garbage filenames. Using *-s* will
         calculate a collision for the filename so that the hashes match, and if it
         can't calculate a collision then it will just generate garbage.  The collision
         calculator is very time and CPU intensive so only use it if you are having
@@ -62,4 +62,4 @@ If any problems happened, 1 will be returned.
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`

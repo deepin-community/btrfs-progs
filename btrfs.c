@@ -14,20 +14,39 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
-
+#include <stdbool.h>
+#include <strings.h>
 #include "kernel-shared/volumes.h"
-#include "crypto/crc32c.h"
-#include "cmds/commands.h"
+#include "crypto/hash.h"
+#include "common/cpu-utils.h"
 #include "common/utils.h"
+#include "common/string-utils.h"
 #include "common/help.h"
 #include "common/box.h"
+#include "common/messages.h"
+#include "cmds/commands.h"
 
 static const char * const btrfs_cmd_group_usage[] = {
-	"btrfs [--help] [--version] [--format <format>] [-v|--verbose] [-q|--quiet] <group> [<group>...] <command> [<args>]",
+	/*
+	 * The main command group is the only one that takes options so this
+	 * needs the newlines and manual formatting.
+	 */
+	"btrfs [global] <group> [<group>...] <command> [<args>]\n"
+	"\n"
+	"Global options:\n"
+	"  --format <format> if supported, print subcommand output in that format (text, json)\n"
+	"  -v|--verbose      increase verbosity of the subcommand\n"
+	"  -q|--quiet        print only errors\n"
+	"  --log <level>     set log level (default, info, verbose, debug, quiet)\n"
+	"\n"
+	"Options for the main command only:\n"
+	"  --help            print condensed help for all subcommands\n"
+	"  --version         print version string",
 	NULL
 };
 
@@ -105,8 +124,7 @@ static void check_output_format(const struct cmd_struct *cmd)
 		return;
 
 	if (!(cmd->flags & bconf.output_format & CMD_FORMAT_MASK)) {
-		fprintf(stderr,
-			"ERROR: output format %s is unsupported for this command\n",
+		error("output format %s is unsupported for this command",
 			output_format_name(bconf.output_format));
 		exit(1);
 	}
@@ -158,8 +176,8 @@ static const char * const cmd_help_usage[] = {
 	"btrfs help [--full] [--box]",
 	"Display help information",
 	"",
-	"--full     display detailed help on every command",
-	"--box      show list of built-in tools (busybox style)",
+	OPTLINE("--full", "display detailed help on every command"),
+	OPTLINE("--box", "show list of built-in tools (busybox style)"),
 	NULL
 };
 
@@ -234,6 +252,23 @@ static void handle_output_format(const char *format)
 	}
 }
 
+static void handle_log_level(const char *level) {
+	if (strcasecmp(level, "default") == 0) {
+		bconf.verbose = LOG_DEFAULT;
+	} else if (strcasecmp(level, "info") == 0) {
+		bconf.verbose = LOG_INFO;
+	} else if (strcasecmp(level, "verbose") == 0) {
+		bconf.verbose = LOG_VERBOSE;
+	} else if (strcasecmp(level, "debug") == 0) {
+		bconf.verbose = LOG_DEBUG;
+	} else if (strcasecmp(level, "quiet") == 0) {
+		bconf.verbose = BTRFS_BCONF_QUIET;
+	} else {
+		error("unrecognized log level: %s", level);
+		exit(1);
+	}
+}
+
 /*
  * Parse global options, between binary name and first non-option argument
  * after processing all valid options (including those with arguments).
@@ -242,7 +277,7 @@ static void handle_output_format(const char *format)
  */
 static int handle_global_options(int argc, char **argv)
 {
-	enum { OPT_HELP = 256, OPT_VERSION, OPT_FULL, OPT_FORMAT };
+	enum { OPT_HELP = 256, OPT_VERSION, OPT_FULL, OPT_FORMAT, OPT_LOG };
 	static const struct option long_options[] = {
 		{ "help", no_argument, NULL, OPT_HELP },
 		{ "version", no_argument, NULL, OPT_VERSION },
@@ -250,6 +285,7 @@ static int handle_global_options(int argc, char **argv)
 		{ "full", no_argument, NULL, OPT_FULL },
 		{ "verbose", no_argument, NULL, 'v' },
 		{ "quiet", no_argument, NULL, 'q' },
+		{ "log", required_argument, NULL, OPT_LOG },
 		{ NULL, 0, NULL, 0}
 	};
 	int shift;
@@ -271,6 +307,9 @@ static int handle_global_options(int argc, char **argv)
 		case OPT_FULL: break;
 		case OPT_FORMAT:
 			handle_output_format(optarg);
+			break;
+		case OPT_LOG:
+			handle_log_level(optarg);
 			break;
 		case 'v':
 			bconf_be_verbose();
@@ -340,6 +379,9 @@ static const struct cmd_group btrfs_cmd_group = {
 		&cmd_struct_qgroup,
 		&cmd_struct_quota,
 		&cmd_struct_receive,
+#if EXPERIMENTAL
+		&cmd_struct_reflink,
+#endif
 		&cmd_struct_replace,
 		&cmd_struct_rescue,
 		&cmd_struct_restore,
@@ -397,9 +439,8 @@ int main(int argc, char **argv)
 	cmd = parse_command_token(argv[0], &btrfs_cmd_group);
 
 	handle_help_options_next_level(cmd, argc, argv);
-
-	crc32c_optimization_init();
-
+	cpu_detect_flags();
+	hash_init_accel();
 	fixup_argv0(argv, cmd->token);
 
 	ret = cmd_execute(cmd, argc, argv);

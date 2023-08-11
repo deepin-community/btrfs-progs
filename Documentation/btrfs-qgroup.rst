@@ -12,7 +12,7 @@ DESCRIPTION
 **btrfs qgroup** is used to control quota group (qgroup) of a btrfs filesystem.
 
 .. note::
-   To use qgroup you need to enable quota first using **btrfs quota enable**
+   To use qgroup you need to enable quota first using :command:`btrfs quota enable`
    command.
 
 .. warning::
@@ -34,7 +34,7 @@ exclusive limit.
 The qgroup identifiers conform to *level/id* where level 0 is reserved to the
 qgroups associated with subvolumes. Such qgroups are created automatically.
 
-The qgroup hierarchy is built by commands **create** and **assign**.
+The qgroup hierarchy is built by commands :command:`create` and :command:`assign`.
 
 .. note::
    If the qgroup of a subvolume is destroyed, quota about the subvolume will
@@ -69,6 +69,11 @@ destroy <qgroupid> <path>
 
         If a qgroup is not isolated, meaning it is a parent or child qgroup, then it
         can only be destroyed after the relationship is removed.
+
+clear-stale <path>
+	Clear all stale qgroups whose subvolume does not exist anymore, this is the
+	level 0 qgroup like 0/subvolid. Higher level qgroups are not deleted even
+	if they don't have any child qgroups.
 
 limit [options] <size>|none [<qgroupid>] <path>
         Limit the size of a qgroup to *size* or no limit in the btrfs filesystem
@@ -151,7 +156,7 @@ show [options] <path>
 QUOTA RESCAN
 ------------
 
-The rescan reads all extent sharing metadata and updates the respective qgoups
+The rescan reads all extent sharing metadata and updates the respective qgroups
 accordingly.
 
 The information consists of bytes owned exclusively (*excl*) or shared/referred
@@ -223,13 +228,12 @@ returned in case of failure.
 AVAILABILITY
 ------------
 
-**btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``,
-``btrfs-subvolume(8)``,
-``btrfs-quota(8)``,
+:doc:`btrfs-quota(8)<btrfs-quota>`,
+:doc:`btrfs-subvolume(8)<btrfs-subvolume>`,
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`,

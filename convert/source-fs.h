@@ -18,25 +18,20 @@
 #define __BTRFS_CONVERT_SOURCE_FS_H__
 
 #include "kerncompat.h"
-#include <pthread.h>
 #include <sys/types.h>
+#include <pthread.h>
+
+struct btrfs_convert_context;
+struct btrfs_inode_item;
+struct btrfs_root;
+struct btrfs_trans_handle;
+struct task_info;
 
 #define CONV_IMAGE_SUBVOL_OBJECTID BTRFS_FIRST_FREE_OBJECTID
 
-/*
- * Represents a simple contiguous range.
- *
- * For multiple or non-contiguous ranges, use extent_cache_tree from
- * extent-cache.c
- */
-struct simple_range {
-	u64 start;
-	u64 len;
-};
-
 extern const struct simple_range btrfs_reserved_ranges[3];
 
-struct task_info;
+const struct simple_range *intersect_with_reserved(u64 bytenr, u64 num_bytes);
 
 struct task_ctx {
 	pthread_mutex_t mutex;
@@ -44,8 +39,6 @@ struct task_ctx {
 	u64 cur_copy_inodes;
 	struct task_info *info;
 };
-
-struct btrfs_convert_context;
 
 #define SOURCE_FS_NAME_LEN	(16)
 
@@ -123,10 +116,6 @@ struct btrfs_convert_operations {
 	int (*check_state)(struct btrfs_convert_context *cctx);
 };
 
-struct btrfs_trans_handle;
-struct btrfs_root;
-struct btrfs_inode_item;
-
 struct blk_iterate_data {
 	struct btrfs_trans_handle *trans;
 	struct btrfs_root *root;
@@ -161,15 +150,5 @@ int read_disk_extent(struct btrfs_root *root, u64 bytenr,
 		            u32 num_bytes, char *buffer);
 int record_file_blocks(struct blk_iterate_data *data,
 			      u64 file_block, u64 disk_block, u64 num_blocks);
-
-/*
- * Simple range functions
- *
- * Get range end (exclusive)
- */
-static inline u64 range_end(const struct simple_range *range)
-{
-	return (range->start + range->len);
-}
 
 #endif

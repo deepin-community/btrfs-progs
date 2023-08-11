@@ -21,9 +21,11 @@
 #define __BTRFS_CHECK_COMMON_H__
 
 #include "kerncompat.h"
+#include "kernel-lib/list.h"
 #include "kernel-shared/ctree.h"
 #include "common/extent-cache.h"
-#include "kernel-lib/list.h"
+
+extern struct btrfs_fs_info *gfs_info;
 
 struct block_group_record {
 	struct cache_extent cache;
@@ -145,7 +147,7 @@ u64 calc_stripe_length(u64 type, u64 length, int num_stripes);
 static inline void block_group_tree_init(struct block_group_tree *tree)
 {
 	cache_tree_init(&tree->tree);
-	extent_io_tree_init(&tree->pending_extents);
+	extent_io_tree_init(NULL, &tree->pending_extents, 0);
 	INIT_LIST_HEAD(&tree->block_groups);
 }
 
