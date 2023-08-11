@@ -14,15 +14,14 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 #include <getopt.h>
-
-#include "cmds/commands.h"
-#include "common/utils.h"
 #include "common/help.h"
+#include "common/string-utils.h"
+#include "cmds/commands.h"
 
 #define USAGE_SHORT		1U
 #define USAGE_LONG		2U
@@ -106,7 +105,7 @@ void clean_args_no_options(const struct cmd_struct *cmd, int argc, char *argv[])
 		switch (c) {
 		default:
 			if (cmd->usagestr)
-				usage(cmd);
+				usage(cmd, 1);
 		}
 	}
 }
@@ -142,34 +141,65 @@ const char *output_format_name(unsigned int value)
 	return "UNKNOWN";
 }
 
+static void hpad(int len, FILE *outf)
+{
+	while (len-- > 0)
+		fputc(' ', outf);
+}
+
+static void format_text(const char *line, FILE *outf)
+{
+	int i;
+
+	i = 0;
+	while (*line) {
+		while (*line && *line == ' ')
+			line++;
+		while (*line && *line != ' ') {
+			fputc(*line, outf);
+			line++;
+			i++;
+		}
+		if (i > HELPINFO_DESC_WIDTH) {
+			if (*line) {
+				fputc('\n', outf);
+				line++;
+				hpad(HELPINFO_DESC_PREFIX, outf);
+			}
+			i = 0;
+		} else {
+			hpad(1, outf);
+		}
+	}
+}
+
 static int do_usage_one_command(const char * const *usagestr,
 				unsigned int flags, unsigned int cmd_flags,
 				FILE *outf)
 {
-	int pad = 4;
-	const char *prefix = "usage: ";
-	const char *pad_listing = "    ";
+	int pad = HELPINFO_PREFIX_WIDTH;
 
 	if (!usagestr || !*usagestr)
 		return -1;
 
 	if (flags & USAGE_LISTING)
-		prefix = pad_listing;
+		hpad(HELPINFO_PREFIX_WIDTH, outf);
+	else
+		fputs("usage: ", outf);
 
-	fputs(prefix, outf);
 	if (strchr(*usagestr, '\n') == NULL) {
 		fputs(*usagestr, outf);
 	} else {
 		const char *c = *usagestr;
-		const char *nprefix = "       ";
-
-		if (flags & USAGE_LISTING)
-			nprefix = pad_listing;
 
 		for (c = *usagestr; *c; c++) {
 			fputc(*c, outf);
-			if (*c == '\n')
-				fputs(nprefix, outf);
+			if (*c == '\n') {
+				if (flags & USAGE_LISTING)
+					hpad(HELPINFO_PREFIX_WIDTH, outf);
+				else
+					hpad(HELPINFO_LISTING_WIDTH, outf);
+			}
 		}
 	}
 	usagestr++;
@@ -182,11 +212,12 @@ static int do_usage_one_command(const char * const *usagestr,
 	fputc('\n', outf);
 
 	if (flags & USAGE_LISTING)
-		pad = 8;
+		pad = HELPINFO_LISTING_WIDTH;
 	else
 		fputc('\n', outf);
 
-	fprintf(outf, "%*s%s\n", pad, "", *usagestr++);
+	hpad(pad, outf);
+	fprintf(outf, "%s\n", *usagestr++);
 
 	/* a long (possibly multi-line) description (optional) */
 	if (!*usagestr || ((flags & USAGE_LONG) == 0))
@@ -194,8 +225,10 @@ static int do_usage_one_command(const char * const *usagestr,
 
 	if (**usagestr)
 		fputc('\n', outf);
-	while (*usagestr && **usagestr)
-		fprintf(outf, "%*s%s\n", pad, "", *usagestr++);
+	while (*usagestr && **usagestr) {
+		hpad(pad, outf);
+		fprintf(outf, "%s\n", *usagestr++);
+	}
 
 	/* options (optional) */
 	if (!*usagestr || ((flags & USAGE_OPTIONS) == 0))
@@ -216,16 +249,39 @@ static int do_usage_one_command(const char * const *usagestr,
 			 * We always support text, that's on by default for all
 			 * commands
 			 */
-			fprintf(outf, "%*s--format TYPE      where TYPE is: %s",
-					pad, "", output_formats[0].name);
+			hpad(pad, outf);
+			fprintf(outf, "%-*s  where TYPE is: %s",
+					HELPINFO_OPTION_WIDTH,
+					"--format TYPE",
+					 output_formats[0].name);
 			for (i = 1; i < ARRAY_SIZE(output_formats); i++) {
 				if (cmd_flags & output_formats[i].value)
 					fprintf(outf, ", %s",
 						output_formats[i].name);
 			}
 			fputc('\n', outf);
+		} else if (*usagestr[0] == HELPINFO_OPTION[0]) {
+			const char *tmp = *usagestr + 1;
+			const char *text_marker = strchr(*usagestr, HELPINFO_DESC[0]);
+			const char *text = text_marker + 1;
+			int optlen = (int)(text_marker - tmp - 1);
+
+			hpad(HELPINFO_PREFIX_WIDTH, outf);
+			while (tmp < text_marker)
+				fputc(*tmp++, outf);
+
+			if (optlen > HELPINFO_OPTION_WIDTH) {
+				fputc('\n', outf);
+				hpad(HELPINFO_DESC_PREFIX, outf);
+			} else {
+				hpad(HELPINFO_OPTION_WIDTH + HELPINFO_OPTION_MARGIN - optlen - 1,
+					outf);
+			}
+			format_text(text, outf);
+			fputc('\n', outf);
 		} else {
-			fprintf(outf, "%*s%s\n", pad, "", *usagestr);
+			hpad(pad, outf);
+			fprintf(outf, "%s\n", *usagestr);
 		}
 		usagestr++;
 	}
@@ -326,10 +382,10 @@ void usage_unknown_option(const struct cmd_struct *cmd, char **argv)
 }
 
 __attribute__((noreturn))
-void usage(const struct cmd_struct *cmd)
+void usage(const struct cmd_struct *cmd, int error)
 {
 	usage_command_usagestr(cmd->usagestr, NULL, 0, true, true);
-	exit(1);
+	exit(error);
 }
 
 static void usage_command_group_internal(const struct cmd_group *grp, bool full,

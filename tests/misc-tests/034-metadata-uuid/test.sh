@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq mkfs.btrfs
 check_prereq btrfs
@@ -190,6 +190,10 @@ failure_recovery() {
 	loop2=$(run_check_stdout $SUDO_HELPER losetup --find --show "$image2")
 
 	run_check $SUDO_HELPER udevadm settle
+
+	# Scan to make sure btrfs detects both devices before trying to mount
+	run_check $SUDO_HELPER "$TOP/btrfs" device scan "$loop1"
+	run_check $SUDO_HELPER "$TOP/btrfs" device scan "$loop2"
 
 	# Mount and unmount, on trans commit all disks should be consistent
 	run_check $SUDO_HELPER mount "$loop1" "$TEST_MNT"

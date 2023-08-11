@@ -9,7 +9,7 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-**btrfs rescue** is used to try to recover a damaged btrfs filesystem.
+:command:`btrfs rescue` is used to try to recover a damaged btrfs filesystem.
 
 SUBCOMMAND
 ----------
@@ -28,7 +28,7 @@ chunk-recover [options] <device>
 
 
 .. note::
-   Since **chunk-recover** will scan the whole device, it will be very
+   Since :command:`chunk-recover` will scan the whole device, it will be very
    slow especially executed on a large device.
 
 fix-device-size <device>
@@ -50,6 +50,15 @@ fix-device-size <device>
 
                 WARNING: CPU: 3 PID: 439 at fs/btrfs/ctree.h:1559 btrfs_update_device+0x1c5/0x1d0 [btrfs]
 
+clear-uuid-tree <device>
+        Clear UUID tree, so that kernel can re-generate it at next read-write
+        mount.
+
+        Since kernel v4.16 there are more sanity check performed, and sometimes
+        non-critical trees like UUID tree can cause problems and reject the mount.
+        In such case, clearing UUID tree may make the filesystem to be mountable again
+        without much risk as it's built from other trees.
+
 super-recover [options] <device>
         Recover bad superblocks from good copies.
 
@@ -65,7 +74,7 @@ zero-log <device>
 
         This command will clear the filesystem log tree. This may fix a specific
         set of problem when the filesystem mount fails due to the log replay. See below
-        for sample stacktraces that may show up in system log.
+        for sample stack traces that may show up in system log.
 
         The common case where this happens was fixed a long time ago,
         so it is unlikely that you will see this particular problem, but the command is
@@ -77,7 +86,7 @@ zero-log <device>
                 (default commit period) or less if the commit was implied by
                 other filesystem activity.
 
-        One can determine whether **zero-log** is needed according to the kernel
+        One can determine whether :command:`zero-log` is needed according to the kernel
         backtrace:
 
         .. code-block:: none
@@ -90,7 +99,7 @@ zero-log <device>
                 ? btree_read_extent_buffer_pages+0x76/0xbc [btrfs]
                 ? open_ctree+0xff6/0x132c [btrfs]
 
-        If the errors are like above, then **zero-log** should be used to clear
+        If the errors are like above, then :command:`zero-log` should be used to clear
         the log and the filesystem may be mounted normally again. The keywords to look
         for are 'open_ctree' which says that it's during mount and function names
         that contain *replay*, *recover* or *log_tree*.
@@ -104,13 +113,12 @@ returned in case of failure.
 AVAILABILITY
 ------------
 
-*btrfs* is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``,
-``btrfs-scrub(8)``,
-``btrfs-check(8)``
+:doc:`btrfs-check(8)<btrfs-check>`,
+:doc:`btrfs-scrub(8)<btrfs-scrub>`,
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`

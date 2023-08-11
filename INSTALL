@@ -18,9 +18,9 @@ Optionally, the checksums based on cryptographic hashes can be implemented by
 external libraries. Builtin implementations are provided in case the library
 dependencies are not desired.
 
-- libgcrypt
-- libsodium
-- libkcapi
+- libgcrypt >= 1.8.0
+- libsodium >= 1.0.4
+- libkcapi >= 1.0.0
 
 Optionally, multipath device detection requires libudev and running udev
 daemon, as it's the only source of the path information. Static build has a
@@ -33,16 +33,9 @@ must be 5.10 or newer.
 
 Generating documentation:
 
-- asciidoc - text document format tool
-- xmlto - text document format tool
-- source-highlight - optional, only for generating HTML output
-
-XATTR library should be provided by the standard C library or by
-
-- libattr - extended attribute library
+- sphinx
 
 Please note that the package names may differ according to the distribution.
-See https://btrfs.wiki.kernel.org/index.php/Btrfs_source_repositories#Dependencies .
 
 
 Building from sources
@@ -127,4 +120,5 @@ versions on a 32bit host is recommended.
 
 
 References:
-* https://btrfs.wiki.kernel.org
+* https://btrfs.readthedocs.io
+* https://btrfs.wiki.kernel.org (outdated)

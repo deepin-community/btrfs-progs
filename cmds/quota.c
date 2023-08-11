@@ -17,15 +17,17 @@
  */
 
 #include <sys/ioctl.h>
-#include <unistd.h>
-
-#include "kernel-shared/ctree.h"
-#include "ioctl.h"
-
-#include "cmds/commands.h"
-#include "common/utils.h"
+#include <dirent.h>
+#include <errno.h>
+#include <getopt.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+#include "kernel-shared/uapi/btrfs.h"
 #include "common/help.h"
 #include "common/open-utils.h"
+#include "common/messages.h"
+#include "cmds/commands.h"
 
 static const char * const quota_cmd_group_usage[] = {
 	"btrfs quota <command> [options] <path>",
@@ -77,7 +79,7 @@ static int cmd_quota_enable(const struct cmd_struct *cmd, int argc, char **argv)
 	ret = quota_ctl(BTRFS_QUOTA_CTL_ENABLE, argc, argv);
 
 	if (ret < 0)
-		usage(cmd);
+		usage(cmd, 1);
 	return ret;
 }
 static DEFINE_SIMPLE_COMMAND(quota_enable, "enable");
@@ -98,7 +100,7 @@ static int cmd_quota_disable(const struct cmd_struct *cmd,
 	ret = quota_ctl(BTRFS_QUOTA_CTL_DISABLE, argc, argv);
 
 	if (ret < 0)
-		usage(cmd);
+		usage(cmd, 1);
 	return ret;
 }
 static DEFINE_SIMPLE_COMMAND(quota_disable, "disable");
@@ -107,8 +109,9 @@ static const char * const cmd_quota_rescan_usage[] = {
 	"btrfs quota rescan [-sw] <path>",
 	"Trash all qgroup numbers and scan the metadata again with the current config.",
 	"",
-	"-s   show status of a running rescan operation",
-	"-w   wait for rescan operation to finish (can be already in progress)",
+	OPTLINE("-s|--status", "show status of a running rescan operation"),
+	OPTLINE("-w|--wait", "start rescan and wait for it to finish (can be already in progress)"),
+	OPTLINE("-W|--wait-norescan", "wait for rescan to finish without starting it"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_QUIET,
 	NULL
@@ -123,18 +126,32 @@ static int cmd_quota_rescan(const struct cmd_struct *cmd, int argc, char **argv)
 	struct btrfs_ioctl_quota_rescan_args args;
 	unsigned long ioctlnum = BTRFS_IOC_QUOTA_RESCAN;
 	DIR *dirstream = NULL;
-	int wait_for_completion = 0;
+	bool wait_for_completion = false;
 
 	optind = 0;
 	while (1) {
-		int c = getopt(argc, argv, "sw");
+		static const struct option long_options[] = {
+			{"status", no_argument, NULL, 's'},
+			{"wait", no_argument, NULL, 'w'},
+			{"wait-norescan", no_argument, NULL, 'W'},
+			{NULL, 0, NULL, 0}
+		};
+		int c;
+
+		c = getopt_long(argc, argv, "swW", long_options, NULL);
 		if (c < 0)
 			break;
+
 		switch (c) {
 		case 's':
 			ioctlnum = BTRFS_IOC_QUOTA_RESCAN_STATUS;
 			break;
 		case 'w':
+			ioctlnum = BTRFS_IOC_QUOTA_RESCAN;
+			wait_for_completion = true;
+			break;
+		case 'W':
+			ioctlnum = 0;
 			wait_for_completion = 1;
 			break;
 		default:
@@ -142,7 +159,7 @@ static int cmd_quota_rescan(const struct cmd_struct *cmd, int argc, char **argv)
 		}
 	}
 
-	if (ioctlnum != BTRFS_IOC_QUOTA_RESCAN && wait_for_completion) {
+	if (ioctlnum == BTRFS_IOC_QUOTA_RESCAN_STATUS && wait_for_completion) {
 		error("switch -w cannot be used with -s");
 		return 1;
 	}
@@ -157,8 +174,10 @@ static int cmd_quota_rescan(const struct cmd_struct *cmd, int argc, char **argv)
 	if (fd < 0)
 		return 1;
 
-	ret = ioctl(fd, ioctlnum, &args);
-	e = errno;
+	if (ioctlnum) {
+		ret = ioctl(fd, ioctlnum, &args);
+		e = errno;
+	}
 
 	if (ioctlnum == BTRFS_IOC_QUOTA_RESCAN_STATUS) {
 		close_file_or_dir(fd, dirstream);
@@ -167,15 +186,15 @@ static int cmd_quota_rescan(const struct cmd_struct *cmd, int argc, char **argv)
 			return 1;
 		}
 		if (!args.flags)
-			printf("no rescan operation in progress\n");
+			pr_verbose(LOG_DEFAULT, "no rescan operation in progress\n");
 		else
-			printf("rescan operation running (current key %lld)\n",
+			pr_verbose(LOG_DEFAULT, "rescan operation running (current key %lld)\n",
 				args.progress);
 		return 0;
 	}
 
-	if (ret == 0) {
-		pr_verbose(MUST_LOG, "quota rescan started\n");
+	if (ioctlnum == BTRFS_IOC_QUOTA_RESCAN && ret == 0) {
+		pr_verbose(LOG_DEFAULT, "quota rescan started\n");
 		fflush(stdout);
 	} else if (ret < 0 && (!wait_for_completion || e != EINPROGRESS)) {
 		error("quota rescan failed: %m");

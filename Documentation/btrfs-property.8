@@ -1,127 +1,178 @@
-'\" t
-.\"     Title: btrfs-property
-.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 11/05/2021
-.\"    Manual: Btrfs Manual
-.\"    Source: Btrfs v5.15
-.\"  Language: English
-.\"
-.TH "BTRFS\-PROPERTY" "8" "11/05/2021" "Btrfs v5\&.15" "Btrfs Manual"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
-.SH "NAME"
+.\" Man page generated from reStructuredText.
+.
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.TH "BTRFS-PROPERTY" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.SH NAME
 btrfs-property \- get/set/list properties for given filesystem object
-.SH "SYNOPSIS"
+.SH SYNOPSIS
 .sp
-\fBbtrfs property\fR \fI<subcommand>\fR \fI<args>\fR
-.SH "DESCRIPTION"
+\fBbtrfs property\fP <subcommand> <args>
+.SH DESCRIPTION
 .sp
-\fBbtrfs property\fR is used to get/set/list property for given filesystem object\&. The object can be an inode (file or directory), subvolume or the whole filesystem\&. See the description of \fBget\fR subcommand for more information about both btrfs object and property\&.
+\fBbtrfs property\fP is used to get/set/list property for given filesystem object.
+The object can be an inode (file or directory), subvolume or the whole
+filesystem.
 .sp
-\fBbtrfs property\fR provides an unified and user\-friendly method to tune different btrfs properties instead of using the traditional method like \fBchattr\fR(1) or \fBlsattr\fR(1)\&.
-.SH "SUBCOMMAND"
-.PP
-\fBget\fR [\-t \fI<type>\fR] \fI<object>\fR [\fI<name>\fR]
-.RS 4
-get property from a btrfs
-\fI<object>\fR
-of given
-\fI<type>\fR
+\fBbtrfs property\fP provides an unified and user\-friendly method to tune different
+btrfs properties instead of using the traditional method like \fBchattr(1)\fP or
+\fBlsattr(1)\fP\&.
+.SS Object types
 .sp
-A btrfs object, which is set by
-\fI<object>\fR, can be a btrfs filesystem itself, a btrfs subvolume, an inode (file or directory) inside btrfs, or a device on which a btrfs exists\&.
+A property might apply to several object types so in some cases it\(aqs necessary
+to specify that explicitly, however it\(aqs not needed in the most common case of
+files and directories.
 .sp
-The option
-\fI\-t\fR
-can be used to explicitly specify what type of object you meant\&. This is only needed when a property could be set for more then one object type\&.
+The subcommands take parameter \fI\-t\fP, use first letter as a shortcut (\fIf/s/d/i\fP)
+of the type:
+.INDENT 0.0
+.IP \(bu 2
+filesystem
+.IP \(bu 2
+subvolume
+.IP \(bu 2
+device
+.IP \(bu 2
+inode (file or directory)
+.UNINDENT
+.SS Inode properties
+.INDENT 0.0
+.TP
+.B compression
+compression algorithm set for an inode (it\(aqs not possible to set the
+compression level this way), possible values:
+.INDENT 7.0
+.IP \(bu 2
+\fIlzo\fP
+.IP \(bu 2
+\fIzlib\fP
+.IP \(bu 2
+\fIzstd\fP
+.IP \(bu 2
+\fIno\fP or \fInone\fP \- disable compression (equivalent to \fBchattr +m\fP)
+.IP \(bu 2
+\fI\(dq\(dq\fP (empty string) \- set the default value
+.INDENT 2.0
+.INDENT 3.5
 .sp
-Possible types are
-\fIs[ubvol]\fR,
-\fIf[ilesystem]\fR,
-\fIi[node]\fR
-and
-\fId[evice]\fR, where the first lettes is a shortcut\&.
+\fBNOTE:\fP
+.INDENT 0.0
+.INDENT 3.5
+This has changed in version 5.18 of btrfs\-progs and
+requires kernel 5.14 or newer to work.
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.SS Subvolume properties
+.INDENT 0.0
+.TP
+.B ro
+read\-only flag of subvolume: true or false. Please also see section \fISUBVOLUME FLAGS\fP
+in \fI\%btrfs\-subvolume(8)\fP for possible implications regarding incremental send.
+.UNINDENT
+.SS Filesystem properties
+.INDENT 0.0
+.TP
+.B label
+label of the filesystem. For an unmounted filesystem, provide a path to a block
+device as object. For a mounted filesystem, specify a mount point.
+.UNINDENT
+.SH SUBCOMMAND
+.INDENT 0.0
+.TP
+.B get [\-t <type>] <object> [<name>]
+Read value of a property \fIname\fP of btrfs \fIobject\fP of given \fItype\fP,
+empty \fIname\fP will read all of them
+.TP
+.B list [\-t <type>] <object>
+List available properties with their descriptions for the given object.
+.TP
+.B set [\-f] [\-t <type>] <object> <name> <value>
+Set \fIvalue\fP of property \fIname\fP on a given btrfs object.
 .sp
-Set the name of property by
-\fIname\fR\&. If no
-\fIname\fR
-is specified, all properties for the given object are printed\&.
-\fIname\fR
-is one of the following:
-.PP
-ro
-.RS 4
-read\-only flag of subvolume: true or false\&. Please also see section
-\fISUBVOLUME FLAGS\fR
-in
-\fBbtrfs\-subvolume\fR(8) for possible implications regarding incremental send\&.
-.RE
-.PP
-label
-.RS 4
-label of the filesystem\&. For an unmounted filesystem, provide a path to a block device as object\&. For a mounted filesystem, specify a mount point\&.
-.RE
-.PP
-compression
-.RS 4
-compression algorithm set for an inode, possible values:
-\fIlzo\fR,
-\fIzlib\fR,
-\fIzstd\fR\&. To disable compression use "" (empty string),
-\fIno\fR
-or
-\fInone\fR\&.
-.RE
-.RE
-.PP
-\fBlist\fR [\-t \fI<type>\fR] \fI<object>\fR
-.RS 4
-Lists available properties with their descriptions for the given object\&.
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B  \-f
+Force the change. Changing some properties may involve safety checks or
+additional changes that depend on the properties semantics.
+.UNINDENT
+.UNINDENT
+.SH EXAMPLES
 .sp
-See the description of
-\fBget\fR
-subcommand for the meaning of each option\&.
-.RE
-.PP
-\fBset\fR [\-f] [\-t \fI<type>\fR] \fI<object>\fR \fI<name>\fR \fI<value>\fR
-.RS 4
-Sets a property on a btrfs object\&.
+Set compression on a file:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-See the description of
-\fBget\fR
-subcommand for the meaning of each option\&.
+.nf
+.ft C
+$ touch file1
+$ btrfs prop get file1
+[ empty output ]
+$ btrfs prop set file1 compression zstd
+$ btrfs prop get file1
+compression=zstd
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .sp
-\fBOptions\fR
-.PP
-\-f
-.RS 4
-Force the change\&. Changing some properties may involve safety checks or additional changes that depend on the properties semantics\&.
-.RE
-.RE
-.SH "EXIT STATUS"
+Make a writeable subvolume read\-only:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-\fBbtrfs property\fR returns a zero exit status if it succeeds\&. Non zero is returned in case of failure\&.
-.SH "AVAILABILITY"
+.nf
+.ft C
+$ btrfs subvol create subvol1
+[ fill subvol1 with data ]
+$ btrfs prop get subvol1
+ro=false
+$ btrfs prop set subvol1 ro true
+ro=true
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SH EXIT STATUS
 .sp
-\fBbtrfs\fR is part of btrfs\-progs\&. Please refer to the btrfs wiki \m[blue]\fBhttp://btrfs\&.wiki\&.kernel\&.org\fR\m[] for further details\&.
-.SH "SEE ALSO"
+\fBbtrfs property\fP returns a zero exit status if it succeeds. Non zero is
+returned in case of failure.
+.SH AVAILABILITY
 .sp
-\fBmkfs\&.btrfs\fR(8), \fBlsattr\fR(1), \fBchattr\fR(1)
+\fBbtrfs\fP is part of btrfs\-progs.  Please refer to the documentation at
+\fI\%https://btrfs.readthedocs.io\fP\&.
+.SH SEE ALSO
+.sp
+\fI\%mkfs.btrfs(8)\fP,
+\fBlsattr(1)\fP,
+\fBchattr(1)\fP
+.\" Generated by docutils manpage writer.
+.

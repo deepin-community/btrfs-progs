@@ -21,32 +21,33 @@
 #include "kernel-shared/zoned.h"
 #include "common/messages.h"
 
-struct btrfs_trans_handle* btrfs_start_transaction(struct btrfs_root *root,
-		int num_blocks)
+struct btrfs_trans_handle *btrfs_start_transaction(struct btrfs_root *root,
+						   unsigned int num_items)
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
-	struct btrfs_trans_handle *h = kzalloc(sizeof(*h), GFP_NOFS);
+	struct btrfs_trans_handle *h;
 
 	if (fs_info->transaction_aborted)
 		return ERR_PTR(-EROFS);
 
-	if (!h)
-		return ERR_PTR(-ENOMEM);
 	if (root->commit_root) {
 		error("commit_root already set when starting transaction");
-		kfree(h);
 		return ERR_PTR(-EINVAL);
 	}
 	if (fs_info->running_transaction) {
 		error("attempt to start transaction over already running one");
-		kfree(h);
 		return ERR_PTR(-EINVAL);
 	}
+
+	h = kzalloc(sizeof(*h), GFP_NOFS);
+	if (!h)
+		return ERR_PTR(-ENOMEM);
+
 	h->fs_info = fs_info;
 	fs_info->running_transaction = h;
 	fs_info->generation++;
 	h->transid = fs_info->generation;
-	h->blocks_reserved = num_blocks;
+	h->blocks_reserved = num_items;
 	h->reinit_extent_tree = false;
 	h->allocating_chunk = 0;
 	root->last_trans = h->transid;
@@ -135,13 +136,13 @@ int __commit_transaction(struct btrfs_trans_handle *trans,
 	u64 end;
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct extent_buffer *eb;
-	struct extent_io_tree *tree = &fs_info->extent_cache;
+	struct extent_io_tree *tree = &fs_info->dirty_buffers;
 	int ret;
 
 	while(1) {
 again:
 		ret = find_first_extent_bit(tree, 0, &start, &end,
-					    EXTENT_DIRTY);
+					    EXTENT_DIRTY, NULL);
 		if (ret)
 			break;
 
@@ -149,16 +150,45 @@ again:
 			goto again;
 
 		while(start <= end) {
-			eb = find_first_extent_buffer(tree, start);
+			eb = find_first_extent_buffer(fs_info, start);
 			BUG_ON(!eb || eb->start != start);
 			ret = write_tree_block(trans, fs_info, eb);
-			BUG_ON(ret);
+			if (ret < 0) {
+				free_extent_buffer(eb);
+				errno = -ret;
+				error("failed to write tree block %llu: %m",
+				      eb->start);
+				goto cleanup;
+			}
 			start += eb->len;
-			clear_extent_buffer_dirty(eb);
+			btrfs_clear_buffer_dirty(eb);
 			free_extent_buffer(eb);
 		}
 	}
 	return 0;
+cleanup:
+	/*
+	 * Mark all remaining dirty ebs clean, as they have no chance to be written
+	 * back anymore.
+	 */
+	while (1) {
+		int find_ret;
+
+		find_ret = find_first_extent_bit(tree, 0, &start, &end,
+						 EXTENT_DIRTY, NULL);
+
+		if (find_ret)
+			break;
+
+		while (start <= end) {
+			eb = find_first_extent_buffer(fs_info, start);
+			BUG_ON(!eb || eb->start != start);
+			start += eb->len;
+			btrfs_clear_buffer_dirty(eb);
+			free_extent_buffer(eb);
+		}
+	}
+	return ret;
 }
 
 int btrfs_commit_transaction(struct btrfs_trans_handle *trans,
@@ -184,6 +214,8 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans,
 	if (root == root->fs_info->tree_root)
 		goto commit_tree;
 	if (root == root->fs_info->chunk_root)
+		goto commit_tree;
+	if (root == root->fs_info->block_group_root)
 		goto commit_tree;
 
 	free_extent_buffer(root->commit_root);
@@ -216,7 +248,7 @@ commit_tree:
 		if (ret < 0)
 			goto error;
 	}
-	__commit_transaction(trans, root);
+	ret = __commit_transaction(trans, root);
 	if (ret < 0)
 		goto error;
 
@@ -241,6 +273,7 @@ commit_tree:
 	}
 	return ret;
 error:
+	btrfs_abort_transaction(trans, ret);
 	btrfs_destroy_delayed_refs(trans);
 	free(trans);
 	return ret;

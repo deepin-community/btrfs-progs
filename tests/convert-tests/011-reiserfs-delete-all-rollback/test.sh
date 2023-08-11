@@ -1,17 +1,18 @@
 #!/bin/bash
 # create a base image, convert to btrfs, remove all files, rollback the reiserfs image
 
-source "$TEST_TOP/common"
-source "$TEST_TOP/common.convert"
+source "$TEST_TOP/common" || exit
+source "$TEST_TOP/common.convert" || exit
 
 if ! check_kernel_support_reiserfs >/dev/null; then
 	_not_run "no reiserfs support"
 fi
 
-setup_root_helper
-prepare_test_dev
 check_prereq btrfs-convert
 check_global_prereq mkreiserfs
+
+setup_root_helper
+prepare_test_dev
 
 # simple wrapper for a convert test
 # $1: btrfs features, argument to -O
@@ -63,7 +64,9 @@ do_test() {
 	rm "$CHECKSUMTMP"
 }
 
-for feature in '' 'extref' 'skinny-metadata' 'no-holes'; do
+# Iterate over defaults and options that are not tied to hardware capabilities
+# or number of devices
+for feature in '' 'block-group-tree' ; do
 	do_test "$feature" "reiserfs 4k nodesize" 4096 mkreiserfs -b 4096
 	do_test "$feature" "reiserfs 8k nodesize" 8192 mkreiserfs -b 4096
 	do_test "$feature" "reiserfs 16k nodesize" 16384 mkreiserfs -b 4096

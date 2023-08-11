@@ -14,37 +14,37 @@
  * Boston, MA 021110-1307, USA.
  */
 
-#include <sys/types.h>
+#include "kerncompat.h"
 #include <sys/stat.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
-#include <getopt.h>
-#include <fcntl.h>
-#include <dirent.h>
-
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 #include <linux/version.h>
 #include <linux/fiemap.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <getopt.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <errno.h>
+#include <limits.h>
+#include "kernel-lib/rbtree.h"
+#include "kernel-lib/rbtree_types.h"
+#include "kernel-lib/interval_tree_generic.h"
+#include "kernel-shared/ctree.h"
+#include "common/utils.h"
+#include "common/open-utils.h"
+#include "common/units.h"
+#include "common/help.h"
+#include "common/messages.h"
+#include "common/fsfeatures.h"
+#include "cmds/commands.h"
 
 #if !defined(FIEMAP_EXTENT_SHARED) && (HAVE_OWN_FIEMAP_EXTENT_SHARED_DEFINE == 1)
 #define FIEMAP_EXTENT_SHARED           0x00002000
 #endif
 
-#include "common/utils.h"
-#include "cmds/commands.h"
-#include "kerncompat.h"
-#include "kernel-lib/rbtree.h"
-#include "kernel-lib/interval_tree_generic.h"
-#include "common/open-utils.h"
-#include "common/units.h"
-#include "common/help.h"
-#include "common/fsfeatures.h"
-
-static int summarize = 0;
+static bool summarize = false;
 static unsigned unit_mode = UNITS_RAW;
 static char path[PATH_MAX] = { 0, };
 static char *pathp = path;
@@ -87,7 +87,7 @@ static int add_shared_extent(u64 start, u64 len, struct rb_root *root)
 {
 	struct shared_extent *sh;
 
-	ASSERT(len != 0);
+	UASSERT(len != 0);
 
 	sh = calloc(1, sizeof(*sh));
 	if (!sh)
@@ -119,8 +119,6 @@ static void cleanup_shared_extents(struct rb_root *root)
 	}
 }
 
-#define dbgprintf(...)
-
 /*
  * Find all extents which overlap 'n', calculate the space
  * covered by them and remove those nodes from the tree.
@@ -131,7 +129,7 @@ static u64 count_unique_bytes(struct rb_root *root, struct shared_extent *n)
 	u64 wstart = n->start;
 	u64 wlast = n->last;
 
-	dbgprintf("Count overlaps:");
+	pr_verbose(LOG_DEBUG, "Count overlaps:");
 
 	do {
 		/*
@@ -144,7 +142,7 @@ static u64 count_unique_bytes(struct rb_root *root, struct shared_extent *n)
 		if (wlast < n->last)
 			wlast = n->last;
 
-		dbgprintf(" (%llu, %llu)", n->start, n->last);
+		pr_verbose(LOG_DEBUG, " (%llu, %llu)", n->start, n->last);
 
 		tmp = n;
 		n = extent_tree_iter_next(n, wstart, wlast);
@@ -153,7 +151,7 @@ static u64 count_unique_bytes(struct rb_root *root, struct shared_extent *n)
 		free(tmp);
 	} while (n);
 
-	dbgprintf("; wstart: %llu wlast: %llu total: %llu\n", wstart,
+	pr_verbose(LOG_DEBUG, "; wstart: %llu wlast: %llu total: %llu\n", wstart,
 		wlast, wlast - wstart + 1);
 
 	return wlast - wstart + 1;
@@ -302,7 +300,7 @@ static int du_calc_file_space(int fd, struct rb_root *shared_extents,
 	int count = (sizeof(buf) - sizeof(*fiemap)) /
 			sizeof(struct fiemap_extent);
 	unsigned int i, ret;
-	int last = 0;
+	bool last = false;
 	int rc;
 	u64 ext_len;
 	u64 file_total = 0;
@@ -329,14 +327,14 @@ static int du_calc_file_space(int fd, struct rb_root *shared_extents,
 			flags = fm_ext[i].fe_flags;
 
 			if (flags & FIEMAP_EXTENT_LAST)
-				last = 1;
+				last = true;
 
 			if (flags & SKIP_FLAGS)
 				continue;
 
 			if (ext_len == 0) {
 				warning("extent %llu has length 0, skipping",
-					(unsigned long long)fm_ext[i].fe_physical);
+					fm_ext[i].fe_physical);
 				continue;
 			}
 
@@ -356,7 +354,7 @@ static int du_calc_file_space(int fd, struct rb_root *shared_extents,
 
 		fiemap->fm_start = (fm_ext[i - 1].fe_logical +
 				    fm_ext[i - 1].fe_length);
-	} while (last == 0);
+	} while (!last);
 
 	*ret_total = file_total;
 	*ret_shared = file_shared;
@@ -403,14 +401,13 @@ static int du_walk_dir(struct du_dir_ctxt *ctxt, struct rb_root *shared_extents)
 						  dirfd(dirstream),
 						  shared_extents, &tot, &shr,
 						  0);
-				if (ret == -ENOTTY) {
-					ret = 0;
-					continue;
-				} else if (ret) {
+				if (ret) {
 					errno = -ret;
-					fprintf(stderr,
-					"failed to walk dir/file: %s : %m\n",
-						entry->d_name);
+					warning("cannot access '%s': %m\n", entry->d_name);
+					if (ret == -ENOTTY || ret == -EACCES) {
+						ret = 0;
+						continue;
+					}
 					break;
 				}
 
@@ -524,13 +521,13 @@ static int du_add_file(const char *filename, int dirfd,
 			if (is_dir)
 				set_shared = dir_set_shared;
 
-			printf("%10s  %10s  %10s  %s\n",
+			pr_verbose(LOG_DEFAULT, "%10s  %10s  %10s  %s\n",
 			       pretty_size_mode(file_total, unit_mode),
 			       pretty_size_mode(excl, unit_mode),
 			       pretty_size_mode(set_shared, unit_mode),
 			       path);
 		} else {
-			printf("%10s  %10s  %10s  %s\n",
+			pr_verbose(LOG_DEFAULT, "%10s  %10s  %10s  %s\n",
 			       pretty_size_mode(file_total, unit_mode),
 			       pretty_size_mode(excl, unit_mode),
 			       "-", path);
@@ -555,7 +552,7 @@ static const char * const cmd_filesystem_du_usage[] = {
 	"btrfs filesystem du [options] <path> [<path>..]",
 	"Summarize disk usage of each file.",
 	"",
-	"-s|--summarize     display only a total for each argument",
+	OPTLINE("-s|--summarize", "display only a total for each argument"),
 	HELPINFO_UNITS_LONG,
 	NULL
 };
@@ -581,7 +578,7 @@ static int cmd_filesystem_du(const struct cmd_struct *cmd,
 			break;
 		switch (c) {
 		case 's':
-			summarize = 1;
+			summarize = true;
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -599,7 +596,7 @@ static int cmd_filesystem_du(const struct cmd_struct *cmd,
 "due to missing support for FIEMAP_EXTENT_SHARED flag");
 	}
 
-	printf("%10s  %10s  %10s  %s\n", "Total", "Exclusive", "Set shared",
+	pr_verbose(LOG_DEFAULT, "%10s  %10s  %10s  %s\n", "Total", "Exclusive", "Set shared",
 			"Filename");
 
 	for (i = optind; i < argc; i++) {

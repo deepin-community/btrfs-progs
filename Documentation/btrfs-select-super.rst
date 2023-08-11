@@ -12,7 +12,7 @@ DESCRIPTION
 Destructively overwrite all copies of the superblock with a specified copy.
 This helps in certain cases, for example when write barriers were disabled
 during a power failure and not all superblocks were written, or if the primary
-superblock is damaged, eg. accidentally overwritten.
+superblock is damaged, e.g. accidentally overwritten.
 
 The filesystem specified by *device* must not be mounted.
 
@@ -20,9 +20,9 @@ The filesystem specified by *device* must not be mounted.
    Prior to overwriting the primary superblock, please make sure that the
    backup copies are valid!
 
-To dump a superblock use the **btrfs inspect-internal dump-super** command.
+To dump a superblock use the :command:`btrfs inspect-internal dump-super` command.
 
-Then run the check (in the non-repair mode) using the command **btrfs check -s**
+Then run the check (in the non-repair mode) using the command :command:`btrfs check -s`
 where *-s* specifies the superblock copy to use.
 
 Superblock copies exist in the following offsets on the device:
@@ -43,4 +43,4 @@ OPTIONS
 SEE ALSO
 --------
 
-btrfs(8)
+:doc:`btrfs(8)<btrfs>`

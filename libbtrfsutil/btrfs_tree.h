@@ -48,6 +48,9 @@
 /* tracks free space in block groups. */
 #define BTRFS_FREE_SPACE_TREE_OBJECTID 10ULL
 
+/* hold the block group items. */
+#define BTRFS_BLOCK_GROUP_TREE_OBJECTID 11ULL
+
 /* device stats in the device tree */
 #define BTRFS_DEV_STATS_OBJECTID 0ULL
 
@@ -905,7 +908,7 @@ struct btrfs_free_space_info {
 #define BTRFS_FREE_SPACE_USING_BITMAPS (1ULL << 0)
 
 #define BTRFS_QGROUP_LEVEL_SHIFT		48
-static __inline__ __u64 btrfs_qgroup_level(__u64 qgroupid)
+static __inline__ __u16 btrfs_qgroup_level(__u64 qgroupid)
 {
 	return qgroupid >> BTRFS_QGROUP_LEVEL_SHIFT;
 }

@@ -1,3 +1,115 @@
+btrfs-progs (6.3.2-1) unstable; urgency=medium
+
+  * New upstream bugfix release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Sat, 24 Jun 2023 22:12:17 +0200
+
+btrfs-progs (6.3.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Drop pre-buster breaks.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Sun, 11 Jun 2023 21:10:24 +0200
+
+btrfs-progs (6.2-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Wed, 01 Mar 2023 00:17:49 +0100
+
+btrfs-progs (6.1.3-1) unstable; urgency=medium
+
+  * New upstream bugfix release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Sun, 05 Feb 2023 11:16:44 +0100
+
+btrfs-progs (6.1.2-1) unstable; urgency=medium
+
+  * New upstream bugfix release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Sun, 08 Jan 2023 01:37:24 +0100
+
+btrfs-progs (6.1.1-1) unstable; urgency=medium
+
+  * New upstream bugfix release, reverts changes that broke btrbk, snapper
+    and more (closes: #1027785, #1027628).
+    This will break programs that have already adapted to the changes. 🫤
+
+ -- Adam Borowski <kilobyte@angband.pl>  Thu, 05 Jan 2023 03:44:03 +0100
+
+btrfs-progs (6.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Fri, 23 Dec 2022 00:53:24 +0100
+
+btrfs-progs (6.0.2-1) unstable; urgency=medium
+
+  * New upstream bugfix release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Sat, 26 Nov 2022 03:44:06 +0100
+
+btrfs-progs (6.0.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Spaces→tabs [Jelmer Vernooĳ].
+
+ -- Adam Borowski <kilobyte@angband.pl>  Tue, 08 Nov 2022 18:09:00 +0100
+
+btrfs-progs (6.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Trim debian/copyright wrt files removed upstream.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Tue, 11 Oct 2022 12:24:00 +0200
+
+btrfs-progs (5.19.1-1) unstable; urgency=medium
+
+  * New upstream release (closes: #1020233).
+
+ -- Adam Borowski <kilobyte@angband.pl>  Tue, 13 Sep 2022 21:03:02 +0200
+
+btrfs-progs (5.19-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Tue, 16 Aug 2022 16:29:29 +0200
+
+btrfs-progs (5.18.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Thu, 09 Jun 2022 19:13:14 +0200
+
+btrfs-progs (5.18-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Drop an obsolete Breaks.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Thu, 26 May 2022 01:02:16 +0200
+
+btrfs-progs (5.17-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Switch from asciidoc[tor] to sphinx.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Wed, 04 May 2022 16:07:45 +0200
+
+btrfs-progs (5.16.2-1) unstable; urgency=medium
+
+  * New upstream release.
+    + Fix warning on deleting a subvolume as non-root (closes: #998840).
+  * Drop pre-oldstable Breaks/Replaces.
+  * Install udev rules in initramfs hook (closes: #1000961).
+
+ -- Adam Borowski <kilobyte@angband.pl>  Thu, 24 Feb 2022 18:39:55 +0100
+
+btrfs-progs (5.15.1-1) unstable; urgency=medium
+
+  * New upstream bugfix release.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Wed, 01 Dec 2021 00:29:38 +0100
+
 btrfs-progs (5.15-1) unstable; urgency=medium
 
   * New upstream release.

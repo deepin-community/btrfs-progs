@@ -2,10 +2,11 @@
 # Regression test for mkfs.btrfs --rootdir with inline file extents
 # For any large inline file extent, btrfs check could already report it
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq mkfs.btrfs
 
+setup_root_helper
 prepare_test_dev
 
 tmp=$(_mktemp_dir mkfs-rootdir)

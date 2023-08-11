@@ -24,6 +24,7 @@
 #include "kernel-lib/sizes.h"
 
 #define BTRFS_STRIPE_LEN	SZ_64K
+#define BTRFS_STRIPE_LEN_SHIFT	(16)
 
 struct btrfs_device {
 	struct list_head dev_list;
@@ -94,7 +95,6 @@ struct btrfs_fs_devices {
 	struct list_head devices;
 	struct list_head list;
 
-	int seeding;
 	struct btrfs_fs_devices *seed;
 
 	enum btrfs_chunk_allocation_policy chunk_alloc_policy;
@@ -106,6 +106,7 @@ struct btrfs_bio_stripe {
 };
 
 struct btrfs_multi_bio {
+	u64 type;
 	int error;
 	int num_stripes;
 	struct btrfs_bio_stripe stripes[];
@@ -293,10 +294,6 @@ int write_raid56_with_parity(struct btrfs_fs_info *info,
 			     struct extent_buffer *eb,
 			     struct btrfs_multi_bio *multi,
 			     u64 stripe_len, u64 *raid_map);
-int btrfs_check_chunk_valid(struct btrfs_fs_info *fs_info,
-			    struct extent_buffer *leaf,
-			    struct btrfs_chunk *chunk,
-			    int slot, u64 logical);
 u64 btrfs_stripe_length(struct btrfs_fs_info *fs_info,
 			struct extent_buffer *leaf,
 			struct btrfs_chunk *chunk);

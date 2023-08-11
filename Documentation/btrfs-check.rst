@@ -14,15 +14,15 @@ and attempt to repair it if requested.  It is recommended to unmount the
 filesystem prior to running the check, but it is possible to start checking a
 mounted filesystem (see *--force*).
 
-By default, **btrfs check** will not modify the device but you can reaffirm that
+By default, :command:`btrfs check` will not modify the device but you can reaffirm that
 by the option *--readonly*.
 
-**btrfsck** is an alias of **btrfs check** command and is now deprecated.
+:command:`btrfsck` is an alias of :command:`btrfs check` command and is now deprecated.
 
 .. warning::
    Do not use *--repair* unless you are advised to do so by a developer
    or an experienced user, and then only after having accepted that no *fsck*
-   successfully repair all types of filesystem corruption. Eg. some other software
+   successfully repair all types of filesystem corruption. E.g. some other software
    or hardware bugs can fatally damage a volume.
 
 The structural integrity check verifies if internal filesystem objects or
@@ -79,17 +79,9 @@ SAFE OR ADVISORY OPTIONS
         superblock is damaged.
 
 --clear-space-cache v1|v2
-        completely wipe all free space cache of given type
+        completely remove the free space cache of the given version
 
-        For free space cache *v1*, the *clear_cache* kernel mount option only rebuilds
-        the free space cache for block groups that are modified while the filesystem is
-        mounted with that option. Thus, using this option with *v1* makes it possible
-        to actually clear the entire free space cache.
-
-        For free space cache *v2*, the *clear_cache* kernel mount option destroys
-        the entire free space cache. This option, with *v2* provides an alternative
-        method of clearing the free space cache that doesn't require mounting the
-        filesystem.
+        See also the *clear_cache* mount option.
 
 --clear-ino-cache
         remove leftover items pertaining to the deprecated inode map feature
@@ -104,7 +96,7 @@ DANGEROUS OPTIONS
         .. note::
                 There's a warning and 10 second delay when this option is run without
                 *--force* to give users a chance to think twice before running repair, the
-                warnings in documentation have shown to be insufficient
+                warnings in documentation have shown to be insufficient.
 
 --init-csum-tree
         create a new checksum tree and recalculate checksums in all files
@@ -137,10 +129,15 @@ DANGEROUS OPTIONS
                 experimental.
 
 --force
-        allow work on a mounted filesystem. Note that this should work fine on a
-        quiescent or read-only mounted filesystem but may crash if the device is
-        changed externally, eg. by the kernel module.  Repair without mount checks is
-        not supported right now.
+        allow work on a mounted filesystem and skip mount checks. Note that
+        this should work fine on a quiescent or read-only mounted filesystem
+        but may crash if the device is changed externally, e.g. by the kernel
+        module.
+
+        .. note::
+		It is possible to run with --repair but on a mounted filesystem
+                that will most likely lead to a corruption unless the filesystem
+                is in a quiescent state which may not be possible to guarantee.
 
         This option also skips the delay and warning in the repair mode (see
         *--repair*).
@@ -154,13 +151,12 @@ returned in case of failure.
 AVAILABILITY
 ------------
 
-**btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``,
-``btrfs-scrub(8)``,
-``btrfs-rescue(8)``
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`,
+:doc:`btrfs-scrub(8)<btrfs-scrub>`,
+:doc:`btrfs-rescue(8)<btrfs-rescue>`

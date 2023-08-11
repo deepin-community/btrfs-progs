@@ -17,18 +17,23 @@
  */
 
 #include "kerncompat.h"
-
+#include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <getopt.h>
+#include <errno.h>
+#include <stdio.h>
+#include "kernel-lib/list.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/volumes.h"
 #include "kernel-shared/transaction.h"
 #include "kernel-shared/disk-io.h"
-#include "cmds/commands.h"
+#include "kernel-shared/extent_io.h"
+#include "common/messages.h"
 #include "common/utils.h"
 #include "common/help.h"
-#include "cmds/rescue.h"
 #include "common/open-utils.h"
+#include "cmds/commands.h"
+#include "cmds/rescue.h"
 
 static const char * const rescue_cmd_group_usage[] = {
 	"btrfs rescue <command> [options] <path>",
@@ -39,9 +44,9 @@ static const char * const cmd_rescue_chunk_recover_usage[] = {
 	"btrfs rescue chunk-recover [options] <device>",
 	"Recover the chunk tree by scanning the devices one by one.",
 	"",
-	"-y     Assume an answer of `yes' to all questions",
-	"-h     Help",
-	"-v     deprecated, alias for global -v option",
+	OPTLINE("-y", "assume an answer of `yes' to all questions"),
+	OPTLINE("-h", "help"),
+	OPTLINE("-v", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
 	NULL
@@ -52,7 +57,7 @@ static int cmd_rescue_chunk_recover(const struct cmd_struct *cmd,
 {
 	int ret = 0;
 	char *file;
-	int yes = 0;
+	bool yes = false;
 
 	/* If verbose is unset, set it to 0 */
 	if (bconf.verbose == BTRFS_BCONF_UNSET)
@@ -65,7 +70,7 @@ static int cmd_rescue_chunk_recover(const struct cmd_struct *cmd,
 			break;
 		switch (c) {
 		case 'y':
-			yes = 1;
+			yes = true;
 			break;
 		case 'v':
 			bconf.verbose++;
@@ -92,12 +97,12 @@ static int cmd_rescue_chunk_recover(const struct cmd_struct *cmd,
 
 	ret = btrfs_recover_chunk_tree(file, yes);
 	if (!ret) {
-		fprintf(stdout, "Chunk tree recovered successfully\n");
+		pr_verbose(LOG_DEFAULT, "Chunk tree recovered successfully\n");
 	} else if (ret > 0) {
 		ret = 0;
-		fprintf(stdout, "Chunk tree recovery aborted\n");
+		pr_verbose(LOG_DEFAULT, "Chunk tree recovery aborted\n");
 	} else {
-		fprintf(stdout, "Chunk tree recovery failed\n");
+		pr_verbose(LOG_DEFAULT, "Chunk tree recovery failed\n");
 	}
 	return ret;
 }
@@ -107,8 +112,8 @@ static const char * const cmd_rescue_super_recover_usage[] = {
 	"btrfs rescue super-recover [options] <device>",
 	"Recover bad superblocks from good copies",
 	"",
-	"-y     Assume an answer of `yes' to all questions",
-	"-v     deprecated, alias for global -v option",
+	OPTLINE("-y", "assume an answer of `yes' to all questions"),
+	OPTLINE("-v", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
 	NULL
@@ -126,7 +131,7 @@ static int cmd_rescue_super_recover(const struct cmd_struct *cmd,
 				    int argc, char **argv)
 {
 	int ret;
-	int yes = 0;
+	bool yes = false;
 	char *dname;
 
 	optind = 0;
@@ -139,7 +144,7 @@ static int cmd_rescue_super_recover(const struct cmd_struct *cmd,
 			bconf_be_verbose();
 			break;
 		case 'y':
-			yes = 1;
+			yes = true;
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -202,9 +207,8 @@ static int cmd_rescue_zero_log(const struct cmd_struct *cmd,
 	}
 
 	sb = root->fs_info->super_copy;
-	printf("Clearing log on %s, previous log_root %llu, level %u\n",
-			devname,
-			(unsigned long long)btrfs_super_log_root(sb),
+	pr_verbose(LOG_DEFAULT, "Clearing log on %s, previous log_root %llu, level %u\n",
+			devname, btrfs_super_log_root(sb),
 			(unsigned)btrfs_super_log_root_level(sb));
 	btrfs_set_super_log_root(sb, 0);
 	btrfs_set_super_log_root_level(sb, 0);
@@ -296,6 +300,109 @@ static int cmd_rescue_create_control_device(const struct cmd_struct *cmd,
 }
 static DEFINE_SIMPLE_COMMAND(rescue_create_control_device, "create-control-device");
 
+static int clear_uuid_tree(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_root *uuid_root = fs_info->uuid_root;
+	struct btrfs_trans_handle *trans;
+	struct btrfs_path path = {};
+	struct btrfs_key key = {};
+	int ret;
+
+	if (!uuid_root)
+		return 0;
+
+	fs_info->uuid_root = NULL;
+	trans = btrfs_start_transaction(fs_info->tree_root, 0);
+	if (IS_ERR(trans))
+		return PTR_ERR(trans);
+
+	while (1) {
+		int nr;
+
+		ret = btrfs_search_slot(trans, uuid_root, &key, &path, -1, 1);
+		if (ret < 0)
+			goto out;
+		UASSERT(ret > 0);
+		UASSERT(path.slots[0] == 0);
+
+		nr = btrfs_header_nritems(path.nodes[0]);
+		if (nr == 0) {
+			btrfs_release_path(&path);
+			break;
+		}
+
+		ret = btrfs_del_items(trans, uuid_root, &path, 0, nr);
+		btrfs_release_path(&path);
+		if (ret < 0)
+			goto out;
+	}
+	ret = btrfs_del_root(trans, fs_info->tree_root, &uuid_root->root_key);
+	if (ret < 0)
+		goto out;
+	list_del(&uuid_root->dirty_list);
+	ret = btrfs_clear_buffer_dirty(uuid_root->node);
+	if (ret < 0)
+		goto out;
+	ret = btrfs_free_tree_block(trans, btrfs_root_id(uuid_root),
+				    uuid_root->node, 0, 1);
+	if (ret < 0)
+		goto out;
+	free_extent_buffer(uuid_root->node);
+	free_extent_buffer(uuid_root->commit_root);
+	kfree(uuid_root);
+out:
+	if (ret < 0)
+		btrfs_abort_transaction(trans, ret);
+	else
+		ret = btrfs_commit_transaction(trans, fs_info->tree_root);
+	return ret;
+}
+
+static const char * const cmd_rescue_clear_uuid_tree_usage[] = {
+	"btrfs rescue clear-uuid-tree",
+	"Delete uuid tree so that kernel can rebuild it at mount time",
+	NULL,
+};
+
+static int cmd_rescue_clear_uuid_tree(const struct cmd_struct *cmd,
+				      int argc, char **argv)
+{
+	struct btrfs_fs_info *fs_info;
+	struct open_ctree_flags ocf = {};
+	char *devname;
+	int ret;
+
+	clean_args_no_options(cmd, argc, argv);
+	if (check_argc_exact(argc, 2))
+		return -EINVAL;
+
+	devname = argv[optind];
+	ret = check_mounted(devname);
+	if (ret < 0) {
+		errno = -ret;
+		error("could not check mount status: %m");
+		goto out;
+	} else if (ret) {
+		error("%s is currently mounted", devname);
+		ret = -EBUSY;
+		goto out;
+	}
+	ocf.filename = devname;
+	ocf.flags = OPEN_CTREE_WRITES | OPEN_CTREE_PARTIAL;
+	fs_info = open_ctree_fs_info(&ocf);
+	if (!fs_info) {
+		error("could not open btrfs");
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = clear_uuid_tree(fs_info);
+	close_ctree(fs_info->tree_root);
+out:
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(rescue_clear_uuid_tree, "clear-uuid-tree");
+
 static const char rescue_cmd_group_info[] =
 "toolbox for specific rescue operations";
 
@@ -306,6 +413,7 @@ static const struct cmd_group rescue_cmd_group = {
 		&cmd_struct_rescue_zero_log,
 		&cmd_struct_rescue_fix_device_size,
 		&cmd_struct_rescue_create_control_device,
+		&cmd_struct_rescue_clear_uuid_tree,
 		NULL
 	}
 };

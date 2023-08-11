@@ -14,7 +14,10 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include <stdio.h>
+#include <string.h>
 #include "common/units.h"
+#include "common/messages.h"
 
 /*
  * Note: this function uses a static per-thread buffer. Do not call this
@@ -75,9 +78,8 @@ int pretty_size_snprintf(u64 size, char *str, size_t str_size, unsigned unit_mod
 
 	/* Unknown mode */
 	if (!base) {
-		fprintf(stderr, "INTERNAL ERROR: unknown unit base, mode %u\n",
-				unit_mode);
-		assert(0);
+		internal_error("unknown unit base, mode %u", unit_mode);
+		UASSERT(0);
 		return -1;
 	}
 
@@ -87,15 +89,15 @@ int pretty_size_snprintf(u64 size, char *str, size_t str_size, unsigned unit_mod
 	case UNITS_TBYTES:
 		base *= mult;
 		num_divs++;
-		/* fallthrough */
+		fallthrough;
 	case UNITS_GBYTES:
 		base *= mult;
 		num_divs++;
-		/* fallthrough */
+		fallthrough;
 	case UNITS_MBYTES:
 		base *= mult;
 		num_divs++;
-		/* fallthrough */
+		fallthrough;
 	case UNITS_KBYTES:
 		num_divs++;
 		break;
@@ -132,9 +134,8 @@ int pretty_size_snprintf(u64 size, char *str, size_t str_size, unsigned unit_mod
 
 	if (num_divs >= ARRAY_SIZE(unit_suffix_binary)) {
 		str[0] = '\0';
-		printf("INTERNAL ERROR: unsupported unit suffix, index %d\n",
-				num_divs);
-		assert(0);
+		internal_error("unsupported unit suffix, index %d", num_divs);
+		UASSERT(0);
 		return -1;
 	}
 

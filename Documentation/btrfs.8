@@ -1,228 +1,223 @@
-'\" t
-.\"     Title: btrfs
-.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 11/05/2021
-.\"    Manual: Btrfs Manual
-.\"    Source: Btrfs v5.15
-.\"  Language: English
-.\"
-.TH "BTRFS" "8" "11/05/2021" "Btrfs v5\&.15" "Btrfs Manual"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
-.SH "NAME"
+.\" Man page generated from reStructuredText.
+.
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.TH "BTRFS" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.SH NAME
 btrfs \- a toolbox to manage btrfs filesystems
-.SH "SYNOPSIS"
+.SH SYNOPSIS
 .sp
-\fBbtrfs\fR \fI<command>\fR [\fI<args>\fR]
-.SH "DESCRIPTION"
+\fBbtrfs\fP [global] <group> [<group>...] <command> [<args>]
+.SH DESCRIPTION
 .sp
-The \fBbtrfs\fR utility is a toolbox for managing btrfs filesystems\&. There are command groups to work with subvolumes, devices, for whole filesystem or other specific actions\&. See section \fBCOMMANDS\fR\&.
+The \fBbtrfs\fP utility is a toolbox for managing btrfs filesystems.  There are
+command groups to work with subvolumes, devices, for whole filesystem or other
+specific actions. See section \fI\%COMMANDS\fP\&.
 .sp
-There are also standalone tools for some tasks like \fBbtrfs\-convert\fR or \fBbtrfstune\fR that were separate historically and/or haven\(cqt been merged to the main utility\&. See section \fISTANDALONE TOOLS\fR for more details\&.
+There are also standalone tools for some tasks like \fBbtrfs\-convert\fP or
+\fBbtrfstune\fP that were separate historically and/or haven\(aqt been merged to the
+main utility. See section \fI\%STANDALONE TOOLS\fP
+for more details.
 .sp
-For other topics (mount options, etc) please refer to the separate manual page \fBbtrfs\fR(5)\&.
-.SH "COMMAND SYNTAX"
+For other topics (mount options, etc) please refer to the separate manual
+page \fI\%btrfs(5)\fP\&.
+.SH COMMAND SYNTAX
 .sp
-Any command name can be shortened so long as the shortened form is unambiguous, however, it is recommended to use full command names in scripts\&. All command groups have their manual page named \fBbtrfs\-\fR\fB\fI<group>\fR\fR\&.
+Any command name can be shortened so long as the shortened form is unambiguous,
+however, it is recommended to use full command names in scripts.  All command
+groups have their manual page named \fBbtrfs\-<group>\fP\&.
 .sp
-For example: it is possible to run \fBbtrfs sub snaps\fR instead of \fBbtrfs subvolume snapshot\fR\&. But \fBbtrfs file s\fR is not allowed, because \fBfile s\fR may be interpreted both as \fBfilesystem show\fR and as \fBfilesystem sync\fR\&.
+For example: it is possible to run \fBbtrfs sub snaps\fP instead of
+\fBbtrfs subvolume snapshot\fP\&.
+But \fBbtrfs file s\fP is not allowed, because \fBfile s\fP may be interpreted
+both as \fBfilesystem show\fP and as \fBfilesystem sync\fP\&.
 .sp
-If the command name is ambiguous, the list of conflicting options is printed\&.
+If the command name is ambiguous, the list of conflicting options is
+printed.
 .sp
-For an overview of a given command use \fIbtrfs command \-\-help\fR or \fIbtrfs [command\&...] \-\-help \-\-full\fR to print all available options\&.
-.SH "COMMANDS"
-.PP
-\fBbalance\fR
-.RS 4
-Balance btrfs filesystem chunks across single or several devices\&.
-
-See
-\fBbtrfs\-balance\fR(8) for details\&.
-.RE
-.PP
-\fBcheck\fR
-.RS 4
-Do off\-line check on a btrfs filesystem\&.
-
-See
-\fBbtrfs\-check\fR(8) for details\&.
-.RE
-.PP
-\fBdevice\fR
-.RS 4
-Manage devices managed by btrfs, including add/delete/scan and so on\&.
-
-See
-\fBbtrfs\-device\fR(8) for details\&.
-.RE
-.PP
-\fBfilesystem\fR
-.RS 4
-Manage a btrfs filesystem, including label setting/sync and so on\&.
-
-See
-\fBbtrfs\-filesystem\fR(8) for details\&.
-.RE
-.PP
-\fBinspect\-internal\fR
-.RS 4
-Debug tools for developers/hackers\&.
-
-See
-\fBbtrfs\-inspect\-internal\fR(8) for details\&.
-.RE
-.PP
-\fBproperty\fR
-.RS 4
-Get/set a property from/to a btrfs object\&.
-
-See
-\fBbtrfs\-property\fR(8) for details\&.
-.RE
-.PP
-\fBqgroup\fR
-.RS 4
-Manage quota group(qgroup) for btrfs filesystem\&.
-
-See
-\fBbtrfs\-qgroup\fR(8) for details\&.
-.RE
-.PP
-\fBquota\fR
-.RS 4
-Manage quota on btrfs filesystem like enabling/rescan and etc\&.
-
-See
-\fBbtrfs\-quota\fR(8) and
-\fBbtrfs\-qgroup\fR(8) for details\&.
-.RE
-.PP
-\fBreceive\fR
-.RS 4
-Receive subvolume data from stdin/file for restore and etc\&.
-
-See
-\fBbtrfs\-receive\fR(8) for details\&.
-.RE
-.PP
-\fBreplace\fR
-.RS 4
-Replace btrfs devices\&.
-
-See
-\fBbtrfs\-replace\fR(8) for details\&.
-.RE
-.PP
-\fBrescue\fR
-.RS 4
-Try to rescue damaged btrfs filesystem\&.
-
-See
-\fBbtrfs\-rescue\fR(8) for details\&.
-.RE
-.PP
-\fBrestore\fR
-.RS 4
-Try to restore files from a damaged btrfs filesystem\&.
-
-See
-\fBbtrfs\-restore\fR(8) for details\&.
-.RE
-.PP
-\fBscrub\fR
-.RS 4
-Scrub a btrfs filesystem\&.
-
-See
-\fBbtrfs\-scrub\fR(8) for details\&.
-.RE
-.PP
-\fBsend\fR
-.RS 4
-Send subvolume data to stdout/file for backup and etc\&.
-
-See
-\fBbtrfs\-send\fR(8) for details\&.
-.RE
-.PP
-\fBsubvolume\fR
-.RS 4
-Create/delete/list/manage btrfs subvolume\&.
-
-See
-\fBbtrfs\-subvolume\fR(8) for details\&.
-.RE
-.SH "STANDALONE TOOLS"
+\fISizes\fP, both upon input and output, can be expressed in either SI or IEC\-I
+units (see \fI\%numfmt(1)\fP)
+with the suffix \fIB\fP appended.
+All numbers will be formatted according to the rules of the \fIC\fP locale
+(ignoring the shell locale, see \fI\%locale(7)\fP).
 .sp
-New functionality could be provided using a standalone tool\&. If the functionality proves to be useful, then the standalone tool is declared obsolete and its functionality is copied to the main tool\&. Obsolete tools are removed after a long (years) depreciation period\&.
+For an overview of a given command use \fBbtrfs command \-\-help\fP
+or \fBbtrfs [command...] \-\-help \-\-full\fP to print all available options.
 .sp
-Tools that are still in active use without an equivalent in \fBbtrfs\fR:
-.PP
-\fBbtrfs\-convert\fR
-.RS 4
+There are global options that are passed between \fIbtrfs\fP and the \fIgroup\fP name
+and affect behaviour not specific to the command, e.g. verbosity or the type
+of the output.
+.INDENT 0.0
+.TP
+.BI \-\-format \ <format>
+if supported by the command, print subcommand output in that format (text, json)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-v|\-\-verbose
+increase verbosity of the subcommandn\(dq
+.TP
+.B \-q|\-\-quiet
+print only errorsn\(dq
+.UNINDENT
+.INDENT 0.0
+.TP
+.BI \-\-log \ <level>
+set log level (default, info, verbose, debug, quiet)n\(dq
+.UNINDENT
+.sp
+The remaining options are relevant only for the main tool:
+.INDENT 0.0
+.TP
+.B  \-\-help
+print condensed help for all subcommands
+.TP
+.B  \-\-version
+print version string
+.UNINDENT
+.SH COMMANDS
+.INDENT 0.0
+.TP
+.B balance
+Balance btrfs filesystem chunks across single or several devices.
+See \fI\%btrfs\-balance(8)\fP for details.
+.TP
+.B check
+Do off\-line check on a btrfs filesystem.
+See \fI\%btrfs\-check(8)\fP for details.
+.TP
+.B device
+Manage devices managed by btrfs, including add/delete/scan and so
+on.  See \fI\%btrfs\-device(8)\fP for details.
+.TP
+.B filesystem
+Manage a btrfs filesystem, including label setting/sync and so on.
+See \fI\%btrfs\-filesystem(8)\fP for details.
+.TP
+.B inspect\-internal
+Debug tools for developers/hackers.
+See \fI\%btrfs\-inspect\-internal(8)\fP for details.
+.TP
+.B property
+Get/set a property from/to a btrfs object.
+See \fI\%btrfs\-property(8)\fP for details.
+.TP
+.B qgroup
+Manage quota group(qgroup) for btrfs filesystem.
+See \fI\%btrfs\-qgroup(8)\fP for details.
+.TP
+.B quota
+Manage quota on btrfs filesystem like enabling/rescan and etc.
+See \fI\%btrfs\-quota(8)\fP and \fI\%btrfs\-qgroup(8)\fP for details.
+.TP
+.B receive
+Receive subvolume data from stdin/file for restore and etc.
+See \fI\%btrfs\-receive(8)\fP for details.
+.TP
+.B replace
+Replace btrfs devices.
+See \fI\%btrfs\-replace(8)\fP for details.
+.TP
+.B rescue
+Try to rescue damaged btrfs filesystem.
+See \fI\%btrfs\-rescue(8)\fP for details.
+.TP
+.B restore
+Try to restore files from a damaged btrfs filesystem.
+See \fI\%btrfs\-restore(8)\fP for details.
+.TP
+.B scrub
+Scrub a btrfs filesystem.
+See \fI\%btrfs\-scrub(8)\fP for details.
+.TP
+.B send
+Send subvolume data to stdout/file for backup and etc.
+See \fI\%btrfs\-send(8)\fP for details.
+.TP
+.B subvolume
+Create/delete/list/manage btrfs subvolume.
+See \fI\%btrfs\-subvolume(8)\fP for details.
+.UNINDENT
+.SH STANDALONE TOOLS
+.sp
+New functionality could be provided using a standalone tool. If the functionality
+proves to be useful, then the standalone tool is declared obsolete and its
+functionality is copied to the main tool. Obsolete tools are removed after a
+long (years) depreciation period.
+.sp
+Tools that are still in active use without an equivalent in \fBbtrfs\fP:
+.INDENT 0.0
+.TP
+.B btrfs\-convert
 in\-place conversion from ext2/3/4 filesystems to btrfs
-.RE
-.PP
-\fBbtrfstune\fR
-.RS 4
+.TP
+.B btrfstune
 tweak some filesystem properties on a unmounted filesystem
-.RE
-.PP
-\fBbtrfs\-select\-super\fR
-.RS 4
+.TP
+.B btrfs\-select\-super
 rescue tool to overwrite primary superblock from a spare copy
-.RE
-.PP
-\fBbtrfs\-find\-root\fR
-.RS 4
+.TP
+.B btrfs\-find\-root
 rescue helper to find tree roots in a filesystem
-.RE
+.UNINDENT
 .sp
-Deprecated and obsolete tools:
-.PP
-\fBbtrfs\-debug\-tree\fR
-.RS 4
-moved to
-\fBbtrfs inspect\-internal dump\-tree\fR\&. Removed from source distribution\&.
-.RE
-.PP
-\fBbtrfs\-show\-super\fR
-.RS 4
-moved to
-\fBbtrfs inspect\-internal dump\-super\fR, standalone removed\&.
-.RE
-.PP
-\fBbtrfs\-zero\-log\fR
-.RS 4
-moved to
-\fBbtrfs rescue zero\-log\fR, standalone removed\&.
-.RE
+For space\-constrained environments, it\(aqs possible to build a single binary with
+functionality of several standalone tools. This is following the concept of
+busybox where the file name selects the functionality. This works for symlinks
+or hardlinks. The full list can be obtained by \fBbtrfs help \-\-box\fP\&.
+.SH EXIT STATUS
 .sp
-For space\-constrained environments, it\(cqs possible to build a single binary with functionality of several standalone tools\&. This is following the concept of busybox where the file name selects the functionality\&. This works for symlinks or hardlinks\&. The full list can be obtained by \fBbtrfs help \-\-box\fR\&.
-.SH "EXIT STATUS"
+\fBbtrfs\fP returns a zero exit status if it succeeds. Non zero is returned in
+case of failure.
+.SH AVAILABILITY
 .sp
-\fBbtrfs\fR returns a zero exit status if it succeeds\&. Non zero is returned in case of failure\&.
-.SH "AVAILABILITY"
+\fBbtrfs\fP is part of btrfs\-progs.  Please refer to the documentation at
+\fI\%https://btrfs.readthedocs.io\fP\&.
+.SH SEE ALSO
 .sp
-\fBbtrfs\fR is part of btrfs\-progs\&. Please refer to the btrfs wiki \m[blue]\fBhttp://btrfs\&.wiki\&.kernel\&.org\fR\m[] for further details\&.
-.SH "SEE ALSO"
-.sp
-\fBbtrfs\fR(5), \fBbtrfs\-balance\fR(8), \fBbtrfs\-check\fR(8), \fBbtrfs\-convert\fR(8), \fBbtrfs\-device\fR(8), \fBbtrfs\-filesystem\fR(8), \fBbtrfs\-inspect\-internal\fR(8), \fBbtrfs\-property\fR(8), \fBbtrfs\-qgroup\fR(8), \fBbtrfs\-quota\fR(8), \fBbtrfs\-receive\fR(8), \fBbtrfs\-replace\fR(8), \fBbtrfs\-rescue\fR(8), \fBbtrfs\-restore\fR(8), \fBbtrfs\-scrub\fR(8), \fBbtrfs\-send\fR(8), \fBbtrfs\-subvolume\fR(8), \fBbtrfstune\fR(8), \fBmkfs\&.btrfs\fR(8)
+\fI\%btrfs(5)\fP,
+\fI\%btrfs\-balance(8)\fP,
+\fI\%btrfs\-check(8)\fP,
+\fI\%btrfs\-convert(8)\fP,
+\fI\%btrfs\-device(8)\fP,
+\fI\%btrfs\-filesystem(8)\fP,
+\fI\%btrfs\-inspect\-internal(8)\fP,
+\fI\%btrfs\-property(8)\fP,
+\fI\%btrfs\-qgroup(8)\fP,
+\fI\%btrfs\-quota(8)\fP,
+\fI\%btrfs\-receive(8)\fP,
+\fI\%btrfs\-replace(8)\fP,
+\fI\%btrfs\-rescue(8)\fP,
+\fI\%btrfs\-restore(8)\fP,
+\fI\%btrfs\-scrub(8)\fP,
+\fI\%btrfs\-send(8)\fP,
+\fI\%btrfs\-subvolume(8)\fP,
+\fI\%btrfstune(8)\fP,
+\fI\%mkfs.btrfs(8)\fP
+.\" Generated by docutils manpage writer.
+.

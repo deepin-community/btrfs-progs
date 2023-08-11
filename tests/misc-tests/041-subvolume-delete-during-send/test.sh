@@ -1,11 +1,12 @@
 #!/bin/bash
 # Detect if subvolume deletion fails when it's part of send
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq mkfs.btrfs
 check_prereq btrfs
 
+setup_root_helper
 prepare_test_dev 4G
 
 run_check_mkfs_test_dev
@@ -20,9 +21,7 @@ done
 run_check $SUDO_HELPER "$TOP/btrfs" subvolume snapshot -r "$TEST_MNT/subv1" "$TEST_MNT/snap1"
 
 stream="stream$RANDOM.out"
-rm -f -- "$stream"
-touch -- "$stream"
-chmod a+rw -- "$stream"
+_mktemp_local "$stream"
 run_check "$TOP/btrfs" filesystem sync "$TEST_MNT"
 # Output to file must be slow
 run_check $SUDO_HELPER "$TOP/btrfs" send -f "$stream" "$TEST_MNT/snap1" &

@@ -19,7 +19,7 @@
 
 #include "kerncompat.h"
 #include <dirent.h>
-#include "ioctl.h"
+#include "kernel-shared/uapi/btrfs.h"
 
 #define BTRFS_SCAN_MOUNTED	(1ULL << 0)
 #define BTRFS_SCAN_LBLKID	(1ULL << 1)
@@ -36,8 +36,6 @@
 
 struct btrfs_root;
 struct btrfs_trans_handle;
-struct seen_fsid;
-struct DIR;
 
 struct seen_fsid {
 	u8 fsid[BTRFS_FSID_SIZE];

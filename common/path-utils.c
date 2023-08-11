@@ -15,7 +15,6 @@
  */
 
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/ioctl.h>
 #include <linux/major.h>
 #include <linux/kdev_t.h>
@@ -30,6 +29,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <libgen.h>
+#include <limits.h>
 #include "common/path-utils.h"
 
 /*
@@ -50,10 +50,14 @@ int path_is_block_device(const char *path)
 }
 
 /*
- * check if given path is a mount point
- * return 1 if yes. 0 if no. -1 for error
+ * Check if given path is a mount point. (Note: a similar function also exists
+ * in libudev so it's been renamed to avoid clash.)
+ *
+ * Return: 1 if yes,
+ *         0 if no,
+ *        -1 for error
  */
-int path_is_mount_point(const char *path)
+int path_is_a_mount_point(const char *path)
 {
 	FILE *f;
 	struct mntent *mnt;

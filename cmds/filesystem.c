@@ -14,31 +14,37 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <linux/version.h>
+#include <linux/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
 #include <errno.h>
-#include <uuid/uuid.h>
-#include <ctype.h>
 #include <fcntl.h>
 #include <ftw.h>
 #include <mntent.h>
-#include <linux/version.h>
 #include <getopt.h>
 #include <limits.h>
-
-#include <btrfsutil.h>
-
-#include "kerncompat.h"
-#include "kernel-shared/ctree.h"
-#include "common/utils.h"
-#include "kernel-shared/volumes.h"
-#include "cmds/commands.h"
-#include "cmds/filesystem-usage.h"
+#include <dirent.h>
+#include <stdbool.h>
+#include <uuid/uuid.h>
+#include "libbtrfsutil/btrfsutil.h"
+#include "kernel-lib/list.h"
+#include "kernel-lib/sizes.h"
 #include "kernel-lib/list_sort.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/ctree.h"
+#include "kernel-shared/compression.h"
+#include "kernel-shared/volumes.h"
 #include "kernel-shared/disk-io.h"
+#include "common/defs.h"
+#include "common/internal.h"
+#include "common/messages.h"
+#include "common/utils.h"
 #include "common/help.h"
 #include "common/units.h"
 #include "common/fsfeatures.h"
@@ -47,6 +53,11 @@
 #include "common/device-utils.h"
 #include "common/open-utils.h"
 #include "common/parse-utils.h"
+#include "common/string-utils.h"
+#include "common/filesystem-utils.h"
+#include "common/format-output.h"
+#include "cmds/commands.h"
+#include "cmds/filesystem-usage.h"
 
 /*
  * for btrfs fi show, we maintain a hash of fsids we've already printed.
@@ -65,10 +76,12 @@ static const char * const cmd_filesystem_df_usage[] = {
 	"Show space usage information for a mount point",
 	"",
 	HELPINFO_UNITS_SHORT_LONG,
+	HELPINFO_INSERT_GLOBALS,
+	HELPINFO_INSERT_FORMAT,
 	NULL
 };
 
-static void print_df(int fd, struct btrfs_ioctl_space_args *sargs, unsigned unit_mode)
+static void print_df_text(int fd, struct btrfs_ioctl_space_args *sargs, unsigned unit_mode)
 {
 	u64 i;
 	struct btrfs_ioctl_space_info *sp = sargs->spaces;
@@ -79,7 +92,7 @@ static void print_df(int fd, struct btrfs_ioctl_space_args *sargs, unsigned unit
 		unusable = device_get_zone_unusable(fd, sp->flags);
 		ok = (unusable != DEVICE_ZONE_UNUSABLE_UNKNOWN);
 
-		printf("%s, %s: total=%s, used=%s%s%s\n",
+		pr_verbose(LOG_DEFAULT, "%s, %s: total=%s, used=%s%s%s\n",
 			btrfs_group_type_str(sp->flags),
 			btrfs_group_profile_str(sp->flags),
 			pretty_size_mode(sp->total_bytes, unit_mode),
@@ -87,6 +100,44 @@ static void print_df(int fd, struct btrfs_ioctl_space_args *sargs, unsigned unit
 			(ok ? ", zone_unusable=" : ""),
 			(ok ? pretty_size_mode(unusable, unit_mode) : ""));
 	}
+}
+
+static const struct rowspec filesystem_df_rowspec[] = {
+	{ .key = "bg-type", .fmt = "%s", .out_json = "bg-type" },
+	{ .key = "bg-profile", .fmt = "%s", .out_json = "bg-profile" },
+	{ .key = "total", .fmt = "%llu", .out_json = "total" },
+	{ .key = "used", .fmt = "%llu", .out_json = "used" },
+	{ .key = "zone_unusable", .fmt = "%llu", .out_json = "zone_unusable" },
+	ROWSPEC_END
+};
+
+static void print_df_json(int fd, struct btrfs_ioctl_space_args *sargs)
+{
+	struct format_ctx fctx;
+	u64 i;
+	struct btrfs_ioctl_space_info *sp = sargs->spaces;
+	u64 unusable;
+	bool ok;
+
+	fmt_start(&fctx, filesystem_df_rowspec, 1, 0);
+	fmt_print_start_group(&fctx, "filesystem-df", JSON_TYPE_ARRAY);
+
+	for (i = 0; i < sargs->total_spaces; i++, sp++) {
+		unusable = device_get_zone_unusable(fd, sp->flags);
+		ok = (unusable != DEVICE_ZONE_UNUSABLE_UNKNOWN);
+
+		fmt_print_start_group(&fctx, NULL, JSON_TYPE_MAP);
+		fmt_print(&fctx, "bg-type", btrfs_group_type_str(sp->flags));
+		fmt_print(&fctx, "bg-profile", btrfs_group_profile_str(sp->flags));
+		fmt_print(&fctx, "total", sp->total_bytes);
+		fmt_print(&fctx, "used", sp->used_bytes);
+		if (ok)
+			fmt_print(&fctx, "zone_unusable", unusable);
+		fmt_print_end_group(&fctx, NULL);
+	}
+
+	fmt_print_end_group(&fctx, "filesystem-df");
+	fmt_end(&fctx);
 }
 
 static int cmd_filesystem_df(const struct cmd_struct *cmd,
@@ -115,7 +166,10 @@ static int cmd_filesystem_df(const struct cmd_struct *cmd,
 	ret = get_df(fd, &sargs);
 
 	if (ret == 0) {
-		print_df(fd, sargs, unit_mode);
+		if (bconf.output_format == CMD_FORMAT_JSON)
+			print_df_json(fd, sargs);
+		else
+			print_df_text(fd, sargs, unit_mode);
 		free(sargs);
 	} else {
 		errno = -ret;
@@ -126,7 +180,7 @@ static int cmd_filesystem_df(const struct cmd_struct *cmd,
 	close_file_or_dir(fd, dirstream);
 	return !!ret;
 }
-static DEFINE_SIMPLE_COMMAND(filesystem_df, "df");
+static DEFINE_COMMAND_WITH_FLAGS(filesystem_df, "df", CMD_FORMAT_JSON);
 
 static int match_search_item_kernel(u8 *fsid, char *mnt, char *label,
 					char *search)
@@ -236,8 +290,8 @@ static void print_devices(struct btrfs_fs_devices *fs_devices,
 
 	list_sort(NULL, all_devices, cmp_device_id);
 	list_for_each_entry(device, all_devices, dev_list) {
-		printf("\tdevid %4llu size %s used %s path %s\n",
-		       (unsigned long long)device->devid,
+		pr_verbose(LOG_DEFAULT, "\tdevid %4llu size %s used %s path %s\n",
+		       device->devid,
 		       pretty_size_mode(device->total_bytes, unit_mode),
 		       pretty_size_mode(device->bytes_used, unit_mode),
 		       device->name);
@@ -261,21 +315,20 @@ static void print_one_uuid(struct btrfs_fs_devices *fs_devices,
 	device = list_entry(fs_devices->devices.next, struct btrfs_device,
 			    dev_list);
 	if (device->label && device->label[0])
-		printf("Label: '%s' ", device->label);
+		pr_verbose(LOG_DEFAULT, "Label: '%s' ", device->label);
 	else
-		printf("Label: none ");
+		pr_verbose(LOG_DEFAULT, "Label: none ");
 
 	total = device->total_devs;
-	printf(" uuid: %s\n\tTotal devices %llu FS bytes used %s\n", uuidbuf,
-	       (unsigned long long)total,
-	       pretty_size_mode(device->super_bytes_used, unit_mode));
+	pr_verbose(LOG_DEFAULT, " uuid: %s\n\tTotal devices %llu FS bytes used %s\n", uuidbuf,
+	       total, pretty_size_mode(device->super_bytes_used, unit_mode));
 
 	print_devices(fs_devices, &devs_found, unit_mode);
 
 	if (devs_found < total) {
-		printf("\t*** Some devices missing\n");
+		pr_verbose(LOG_DEFAULT, "\t*** Some devices missing\n");
 	}
-	printf("\n");
+	pr_verbose(LOG_DEFAULT, "\n");
 }
 
 /* adds up all the used spaces as reported by the space info ioctl
@@ -296,7 +349,6 @@ static int print_one_fs(struct btrfs_ioctl_fs_info_args *fs_info,
 {
 	int i;
 	int fd;
-	int missing = 0;
 	char uuidbuf[BTRFS_UUID_UNPARSED_SIZE];
 	struct btrfs_ioctl_dev_info_args *tmp_dev_info;
 	int ret;
@@ -309,11 +361,11 @@ static int print_one_fs(struct btrfs_ioctl_fs_info_args *fs_info,
 
 	uuid_unparse(fs_info->fsid, uuidbuf);
 	if (label && *label)
-		printf("Label: '%s' ", label);
+		pr_verbose(LOG_DEFAULT, "Label: '%s' ", label);
 	else
-		printf("Label: none ");
+		pr_verbose(LOG_DEFAULT, "Label: none ");
 
-	printf(" uuid: %s\n\tTotal devices %llu FS bytes used %s\n", uuidbuf,
+	pr_verbose(LOG_DEFAULT, " uuid: %s\n\tTotal devices %llu FS bytes used %s\n", uuidbuf,
 			fs_info->num_devices,
 			pretty_size_mode(calc_used_bytes(space_info),
 					 unit_mode));
@@ -326,12 +378,14 @@ static int print_one_fs(struct btrfs_ioctl_fs_info_args *fs_info,
 		/* Add check for missing devices even mounted */
 		fd = open((char *)tmp_dev_info->path, O_RDONLY);
 		if (fd < 0) {
-			missing = 1;
+			pr_verbose(LOG_DEFAULT, "\tdevid %4llu size 0 used 0 path %s MISSING\n",
+					tmp_dev_info->devid, tmp_dev_info->path);
 			continue;
+
 		}
 		close(fd);
 		canonical_path = path_canonicalize((char *)tmp_dev_info->path);
-		printf("\tdevid %4llu size %s used %s path %s\n",
+		pr_verbose(LOG_DEFAULT, "\tdevid %4llu size %s used %s path %s\n",
 			tmp_dev_info->devid,
 			pretty_size_mode(tmp_dev_info->total_bytes, unit_mode),
 			pretty_size_mode(tmp_dev_info->bytes_used, unit_mode),
@@ -340,9 +394,7 @@ static int print_one_fs(struct btrfs_ioctl_fs_info_args *fs_info,
 		free(canonical_path);
 	}
 
-	if (missing)
-		printf("\t*** Some devices missing\n");
-	printf("\n");
+	pr_verbose(LOG_DEFAULT, "\n");
 	return 0;
 }
 
@@ -642,8 +694,8 @@ static const char * const cmd_filesystem_show_usage[] = {
 	"btrfs filesystem show [options] [<path>|<uuid>|<device>|label]",
 	"Show the structure of a filesystem",
 	"",
-	"-d|--all-devices   show only disks under /dev containing btrfs filesystem",
-	"-m|--mounted       show only mounted btrfs",
+	OPTLINE("-d|--all-devices", "show only disks under /dev containing btrfs filesystem"),
+	OPTLINE("-m|--mounted", "show only mounted btrfs"),
 	HELPINFO_UNITS_LONG,
 	"",
 	"If no argument is given, structure of all present filesystems is shown.",
@@ -655,6 +707,7 @@ static int cmd_filesystem_show(const struct cmd_struct *cmd,
 {
 	LIST_HEAD(all_uuids);
 	struct btrfs_fs_devices *fs_devices;
+	struct btrfs_root *root = NULL;
 	char *search = NULL;
 	int ret;
 	/* default, search both kernel and udev */
@@ -699,7 +752,7 @@ static int cmd_filesystem_show(const struct cmd_struct *cmd,
 	if (argc > optind) {
 		search = argv[optind];
 		if (*search == 0)
-			usage(cmd);
+			usage(cmd, 1);
 		type = check_arg_type(search);
 
 		/*
@@ -753,12 +806,8 @@ static int cmd_filesystem_show(const struct cmd_struct *cmd,
 
 devs_only:
 	if (type == BTRFS_ARG_REG) {
-		/*
-		 * Given input (search) is regular file.
-		 * We don't close the fs_info because it will free the device,
-		 * this is not a long-running process so it's fine
-		 */
-		if (open_ctree(search, btrfs_sb_offset(0), 0))
+		root = open_ctree(search, btrfs_sb_offset(0), 0);
+		if (root)
 			ret = 0;
 		else
 			ret = 1;
@@ -768,7 +817,7 @@ devs_only:
 
 	if (ret) {
 		error("blkid device scan returned %d", ret);
-		return 1;
+		goto out;
 	}
 
 	/*
@@ -779,13 +828,13 @@ devs_only:
 	ret = search_umounted_fs_uuids(&all_uuids, search, &found);
 	if (ret < 0) {
 		error("searching target device returned error %d", ret);
-		return 1;
+		goto out;
 	}
 
 	ret = map_seed_devices(&all_uuids);
 	if (ret) {
 		error("mapping seed devices returned error %d", ret);
-		return 1;
+		goto out;
 	}
 
 	list_for_each_entry(fs_devices, &all_uuids, list)
@@ -801,8 +850,10 @@ devs_only:
 		free_fs_devices(fs_devices);
 	}
 out:
+	if (root)
+		close_ctree(root);
 	free_seen_fsid(seen_fsid_hash);
-	return ret;
+	return !!ret;
 }
 static DEFINE_SIMPLE_COMMAND(filesystem_show, "show");
 
@@ -848,13 +899,13 @@ static const char * const cmd_filesystem_defrag_usage[] = {
 	"btrfs filesystem defragment [options] <file>|<dir> [<file>|<dir>...]",
 	"Defragment a file or a directory",
 	"",
-	"-r                  defragment files recursively",
-	"-c[zlib,lzo,zstd]   compress the file while defragmenting",
-	"-f                  flush data to disk immediately after defragmenting",
-	"-s start            defragment only from byte onward",
-	"-l len              defragment only up to len bytes",
-	"-t size             target extent size hint (default: 32M)",
-	"-v                  deprecated, alias for global -v option",
+	OPTLINE("-r", "defragment files recursively"),
+	OPTLINE("-c[zlib,lzo,zstd]", "compress the file while defragmenting, optional parameter (no space in between)"),
+	OPTLINE("-f", "flush data to disk immediately after defragmenting"),
+	OPTLINE("-s start", "defragment only from byte onward"),
+	OPTLINE("-l len", "defragment only up to len bytes"),
+	OPTLINE("-t size", "target extent size hint (default: 32M)"),
+	OPTLINE("-v", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
 	"",
@@ -874,7 +925,7 @@ static int defrag_callback(const char *fpath, const struct stat *sb,
 	int fd = 0;
 
 	if ((typeflag == FTW_F) && S_ISREG(sb->st_mode)) {
-		pr_verbose(1, "%s\n", fpath);
+		pr_verbose(LOG_INFO, "%s\n", fpath);
 		fd = open(fpath, defrag_open_mode);
 		if (fd < 0) {
 			goto error;
@@ -903,12 +954,12 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 				 int argc, char **argv)
 {
 	int fd;
-	int flush = 0;
+	bool flush = false;
 	u64 start = 0;
 	u64 len = (u64)-1;
 	u64 thresh;
 	int i;
-	int recursive = 0;
+	bool recursive = false;
 	int ret = 0;
 	int compress_type = BTRFS_COMPRESS_NONE;
 	DIR *dirstream;
@@ -928,6 +979,19 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 	 */
 	thresh = SZ_32M;
 
+	/*
+	 * Workaround to emulate previous behaviour, the log level has to be
+	 * adjusted:
+	 *
+	 * - btrfs fi defrag - no file names printed (LOG_DEFAULT)
+	 * - btrfs fi defrag -v - filenames printed (LOG_INFO)
+	 * - btrfs -v fi defrag - filenames printed (LOG_INFO)
+	 * - btrfs -v fi defrag -v - filenames printed (LOG_VERBOSE)
+	 */
+
+	if (bconf.verbose != BTRFS_BCONF_UNSET)
+		bconf.verbose++;
+
 	defrag_global_errors = 0;
 	defrag_global_errors = 0;
 	optind = 0;
@@ -943,10 +1007,13 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 				compress_type = parse_compress_type_arg(optarg);
 			break;
 		case 'f':
-			flush = 1;
+			flush = true;
 			break;
 		case 'v':
-			bconf_be_verbose();
+			if (bconf.verbose == BTRFS_BCONF_UNSET)
+				bconf.verbose = LOG_INFO;
+			else
+				bconf_be_verbose();
 			break;
 		case 's':
 			start = parse_size_from_string(optarg);
@@ -964,7 +1031,7 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 			}
 			break;
 		case 'r':
-			recursive = 1;
+			recursive = true;
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -1046,7 +1113,7 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 			/* errors are handled in the callback */
 			ret = 0;
 		} else {
-			pr_verbose(1, "%s\n", argv[i]);
+			pr_verbose(LOG_INFO, "%s\n", argv[i]);
 			ret = ioctl(fd, BTRFS_IOC_DEFRAG_RANGE,
 					&defrag_global_range);
 			defrag_err = errno;
@@ -1070,7 +1137,7 @@ next:
 	}
 
 	if (defrag_global_errors)
-		fprintf(stderr, "total %d failures\n", defrag_global_errors);
+		pr_stderr(LOG_DEFAULT, "total %d failures\n", defrag_global_errors);
 
 	return !!defrag_global_errors;
 }
@@ -1083,8 +1150,7 @@ static const char * const cmd_filesystem_resize_usage[] = {
 	"on the device 'devid'.",
 	"[kK] means KiB, which denotes 1KiB = 1024B, 1MiB = 1024KiB, etc.",
 	"",
-	"--enqueue         wait if there's another exclusive operation running,",
-	"                  otherwise continue",
+	OPTLINE("--enqueue", "wait if there's another exclusive operation running, otherwise continue"),
 	NULL
 };
 
@@ -1154,7 +1220,7 @@ static int check_resize_args(const char *amount, const char *path) {
 		res_str = "max";
 	} else if (strcmp(sizestr, "cancel") == 0) {
 		/* Different format, print and exit */
-		printf("Request to cancel resize\n");
+		pr_verbose(LOG_DEFAULT, "Request to cancel resize\n");
 		goto out;
 	} else {
 		if (sizestr[0] == '-') {
@@ -1197,7 +1263,7 @@ static int check_resize_args(const char *amount, const char *path) {
 		res_str = pretty_size_mode(new_size, UNITS_DEFAULT);
 	}
 
-	printf("Resize device id %lld (%s) from %s to %s\n", devid,
+	pr_verbose(LOG_DEFAULT, "Resize device id %lld (%s) from %s to %s\n", devid,
 		di_args[dev_idx].path,
 		pretty_size_mode(di_args[dev_idx].total_bytes, UNITS_DEFAULT),
 		res_str);
@@ -1228,7 +1294,7 @@ static int cmd_filesystem_resize(const struct cmd_struct *cmd,
 		} else if (strcmp(argv[optind], "--") == 0) {
 			/* Separator: options -- non-options */
 		} else if (strncmp(argv[optind], "--", 2) == 0) {
-			/* Emulate what getopt does on unkonwn option */
+			/* Emulate what getopt does on unknown option */
 			optind++;
 			usage_unknown_option(cmd, argv);
 		} else {
@@ -1340,7 +1406,7 @@ static int cmd_filesystem_label(const struct cmd_struct *cmd,
 
 		ret = get_label(argv[optind], label);
 		if (!ret)
-			fprintf(stdout, "%s\n", label);
+			pr_verbose(LOG_DEFAULT, "%s\n", label);
 
 		return ret;
 	}
@@ -1368,6 +1434,176 @@ static int cmd_filesystem_balance(const struct cmd_struct *unused,
 static DEFINE_COMMAND(filesystem_balance, "balance", cmd_filesystem_balance,
 		      cmd_filesystem_balance_usage, NULL, CMD_HIDDEN);
 
+static const char * const cmd_filesystem_mkswapfile_usage[] = {
+	"btrfs filesystem mkswapfile <file>",
+        "Create a new file that's suitable and formatted as a swapfile.",
+        "Create a new file that's suitable and formatted as a swapfile. Default",
+        "size is 2GiB, minimum size is 40KiB.",
+	"",
+	OPTLINE("-s|--size SIZE", "create file of SIZE (accepting k/m/g/e/p suffix)"),
+	OPTLINE("-U|--uuid UUID", "specify UUID to use, or a special value: clear (all zeros), random, time (time-based random)"),
+	HELPINFO_INSERT_GLOBALS,
+	HELPINFO_INSERT_VERBOSE,
+	HELPINFO_INSERT_QUIET,
+	NULL
+};
+
+/*
+ * Swap signature in the first 4KiB, v2, no label:
+ *
+ * 00000400 .. = 01 00 00 00 ff ff 03 00  00 00 00 00 cb 70 8e 60
+ *                           ^^^^^^^^^^^              ^^^^^^^^^^^
+ *                           page count 4B            uuid 4B
+ * 00000420 .. = 1d fb 4e ca be d4 3f 1f  6a 6b 0c 03 00 00 00 00
+ *               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *               uuid 8B
+ * 00000ff0 .. = 00 00 00 00 00 00 53 57  41 50 53 50 41 43 45 32
+ *                                  S  W   A  P  S  P  A  C  E  2
+ */
+static int write_swap_signature(int fd, u32 page_count, const uuid_t uuid)
+{
+	int ret;
+	static unsigned char swap[SZ_4K] = {
+		[0x400] = 0x01,
+		/* 0x404 .. 0x407 number of pages (little-endian) */
+		/* 0x408 .. 0x40b number of bad pages (unused) */
+		/* 0x40c .. 0x42b UUID */
+		/* Last bytes of the page */
+		[0xff6] = 'S',
+		[0xff7] = 'W',
+		[0xff8] = 'A',
+		[0xff9] = 'P',
+		[0xffa] = 'S',
+		[0xffb] = 'P',
+		[0xffc] = 'A',
+		[0xffd] = 'C',
+		[0xffe] = 'E',
+		[0xfff] = '2',
+	};
+	u32 *pages = (u32 *)&swap[0x404];
+
+	*pages = cpu_to_le32(page_count);
+	memcpy(&swap[0x40c], uuid, 16);
+	ret = pwrite(fd, swap, SZ_4K, 0);
+
+	return ret;
+}
+
+static int cmd_filesystem_mkswapfile(const struct cmd_struct *cmd, int argc, char **argv)
+{
+	int ret;
+	int fd;
+	const char *fname;
+	unsigned long flags;
+	u64 size = SZ_2G;
+	u64 page_count;
+	uuid_t uuid;
+
+	uuid_generate(uuid);
+	optind = 0;
+	while (1) {
+		int c;
+		static const struct option long_options[] = {
+			{ "size", required_argument, NULL, 's' },
+			{ "uuid", required_argument, NULL, 'U' },
+			{ NULL, 0, NULL, 0 }
+		};
+
+		c = getopt_long(argc, argv, "s:U:", long_options, NULL);
+		if (c < 0)
+			break;
+
+		switch (c) {
+		case 's':
+			size = parse_size_from_string(optarg);
+			/* Minimum limit reported by mkswap */
+			if (size < 40 * SZ_1K) {
+				error("swapfile needs to be at least 40 KiB");
+				return 1;
+			}
+			break;
+		case 'U':
+			if (strcmp(optarg, "clear") == 0) {
+				uuid_clear(uuid);
+			} else if (strcmp(optarg, "random") == 0) {
+				uuid_generate(uuid);
+			} else if (strcmp(optarg, "time") == 0) {
+				uuid_generate_time(uuid);
+			} else {
+				ret = uuid_parse(optarg, uuid);
+				if (ret == -1) {
+					error("UUID not recognized: %s", optarg);
+					return 1;
+				}
+			}
+			break;
+		default:
+			usage_unknown_option(cmd, argv);
+		}
+	}
+
+	if (check_argc_exact(argc - optind, 1))
+		return 1;
+
+	fname = argv[optind];
+	pr_verbose(LOG_INFO, "create file %s with mode 0600\n", fname);
+	fd = open(fname, O_RDWR | O_CREAT | O_EXCL, 0600);
+	if (fd < 0) {
+		error("cannot create new swapfile: %m");
+		return 1;
+	}
+	ret = ftruncate(fd, 0);
+	if (ret < 0) {
+		error("cannot truncate file: %m");
+		ret = 1;
+		goto out;
+	}
+	pr_verbose(LOG_INFO, "set NOCOW attribute\n");
+	flags = FS_NOCOW_FL;
+	ret = ioctl(fd, FS_IOC_SETFLAGS, &flags);
+	if (ret < 0) {
+		error("cannot set NOCOW flag: %m");
+		ret = 1;
+		goto out;
+	}
+	page_count = size / SZ_4K;
+	if (page_count <= 10) {
+		error("file too short");
+		ret = 1;
+		goto out;
+	}
+	/* First file page with header */
+	page_count--;
+	if (page_count > (u32)-1) {
+		error("file too big");
+		ret = 1;
+		goto out;
+	}
+	size = round_down(size, SZ_4K);
+	pr_verbose(LOG_INFO, "fallocate to size %llu, page size %u, %llu pages\n",
+			size, SZ_4K, page_count);
+	ret = fallocate(fd, 0, 0, size);
+	if (ret < 0) {
+		error("cannot fallocate file: %m");
+		ret = 1;
+		goto out;
+	}
+	pr_verbose(LOG_INFO, "write swap signature\n");
+	ret = write_swap_signature(fd, page_count, uuid);
+	if (ret < 0) {
+		error("cannot write swap signature: %m");
+		ret = 1;
+		goto out;
+	}
+	pr_verbose(LOG_DEFAULT, "create swapfile %s size %s (%llu)\n",
+			fname, pretty_size_mode(size, UNITS_HUMAN), size);
+out:
+	close(fd);
+
+	return 0;
+}
+static DEFINE_SIMPLE_COMMAND(filesystem_mkswapfile, "mkswapfile");
+
 static const char filesystem_cmd_group_info[] =
 "overall filesystem tasks and information";
 
@@ -1382,6 +1618,7 @@ static const struct cmd_group filesystem_cmd_group = {
 		&cmd_struct_filesystem_resize,
 		&cmd_struct_filesystem_label,
 		&cmd_struct_filesystem_usage,
+		&cmd_struct_filesystem_mkswapfile,
 		NULL
 	}
 };

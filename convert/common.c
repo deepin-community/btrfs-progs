@@ -14,12 +14,20 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 #include <uuid/uuid.h>
+#include "kernel-lib/sizes.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/ctree.h"
+#include "kernel-shared/extent_io.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/volumes.h"
-#include "common/utils.h"
 #include "common/path-utils.h"
+#include "common/messages.h"
 #include "mkfs/common.h"
 #include "convert/common.h"
 
@@ -36,7 +44,7 @@ static int reserve_free_space(struct cache_tree *free_tree, u64 len,
 	struct cache_extent *cache;
 	int found = 0;
 
-	ASSERT(ret_start != NULL);
+	UASSERT(ret_start != NULL);
 	cache = first_cache_extent(free_tree);
 	while (cache) {
 		if (cache->size > len) {
@@ -135,7 +143,7 @@ static int setup_temp_super(int fd, struct btrfs_mkfs_config *cfg,
 	btrfs_set_super_csum_type(&super, cfg->csum_type);
 	btrfs_set_super_chunk_root(&super, chunk_bytenr);
 	btrfs_set_super_cache_generation(&super, -1);
-	btrfs_set_super_incompat_flags(&super, cfg->features);
+	btrfs_set_super_incompat_flags(&super, cfg->features.incompat_flags);
 	if (cfg->label)
 		__strncpy_null(super.label, cfg->label, BTRFS_LABEL_SIZE - 1);
 
@@ -204,8 +212,8 @@ static void insert_temp_root_item(struct extent_buffer *buf,
 	btrfs_set_disk_key_offset(&disk_key, 0);
 
 	btrfs_set_item_key(buf, &disk_key, *slot);
-	btrfs_set_item_offset(buf, btrfs_item_nr(*slot), *itemoff);
-	btrfs_set_item_size(buf, btrfs_item_nr(*slot), sizeof(root_item));
+	btrfs_set_item_offset(buf, *slot, *itemoff);
+	btrfs_set_item_size(buf, *slot, sizeof(root_item));
 	write_extent_buffer(buf, &root_item,
 			    btrfs_item_ptr_offset(buf, *slot),
 			    sizeof(root_item));
@@ -238,7 +246,7 @@ static int setup_temp_root_tree(int fd, struct btrfs_mkfs_config *cfg,
 				u64 dev_bytenr, u64 fs_bytenr, u64 csum_bytenr)
 {
 	struct extent_buffer *buf = NULL;
-	u32 itemoff = __BTRFS_LEAF_DATA_SIZE(cfg->nodesize);
+	u32 itemoff = cfg->leaf_data_size;
 	int slot = 0;
 	int ret;
 
@@ -253,14 +261,10 @@ static int setup_temp_root_tree(int fd, struct btrfs_mkfs_config *cfg,
 				"extent < dev %llu < %llu, "
 				"dev < fs %llu < %llu, "
 				"fs < csum %llu < %llu",
-				(unsigned long long)root_bytenr,
-				(unsigned long long)extent_bytenr,
-				(unsigned long long)extent_bytenr,
-				(unsigned long long)dev_bytenr,
-				(unsigned long long)dev_bytenr,
-				(unsigned long long)fs_bytenr,
-				(unsigned long long)fs_bytenr,
-				(unsigned long long)csum_bytenr);
+				root_bytenr, extent_bytenr,
+				extent_bytenr, dev_bytenr,
+				dev_bytenr, fs_bytenr,
+				fs_bytenr, csum_bytenr);
 		return -EINVAL;
 	}
 	buf = malloc(sizeof(*buf) + cfg->nodesize);
@@ -311,8 +315,8 @@ static int insert_temp_dev_item(int fd, struct extent_buffer *buf,
 	btrfs_set_disk_key_objectid(&disk_key, BTRFS_DEV_ITEMS_OBJECTID);
 	btrfs_set_disk_key_offset(&disk_key, 1);
 	btrfs_set_item_key(buf, &disk_key, *slot);
-	btrfs_set_item_offset(buf, btrfs_item_nr(*slot), *itemoff);
-	btrfs_set_item_size(buf, btrfs_item_nr(*slot), sizeof(*dev_item));
+	btrfs_set_item_offset(buf, *slot, *itemoff);
+	btrfs_set_item_size(buf, *slot, sizeof(*dev_item));
 
 	dev_item = btrfs_item_ptr(buf, *slot, struct btrfs_dev_item);
 	/* Generate device uuid */
@@ -369,9 +373,8 @@ static int insert_temp_chunk_item(int fd, struct extent_buffer *buf,
 	btrfs_set_disk_key_objectid(&disk_key, BTRFS_FIRST_CHUNK_TREE_OBJECTID);
 	btrfs_set_disk_key_offset(&disk_key, start);
 	btrfs_set_item_key(buf, &disk_key, *slot);
-	btrfs_set_item_offset(buf, btrfs_item_nr(*slot), *itemoff);
-	btrfs_set_item_size(buf, btrfs_item_nr(*slot),
-			    btrfs_chunk_item_size(1));
+	btrfs_set_item_offset(buf, *slot, *itemoff);
+	btrfs_set_item_size(buf, *slot, btrfs_chunk_item_size(1));
 
 	chunk = btrfs_item_ptr(buf, *slot, struct btrfs_chunk);
 	btrfs_set_chunk_length(buf, chunk, len);
@@ -419,15 +422,14 @@ static int setup_temp_chunk_tree(int fd, struct btrfs_mkfs_config *cfg,
 				 u64 chunk_bytenr)
 {
 	struct extent_buffer *buf = NULL;
-	u32 itemoff = __BTRFS_LEAF_DATA_SIZE(cfg->nodesize);
+	u32 itemoff = cfg->leaf_data_size;
 	int slot = 0;
 	int ret;
 
 	/* Must ensure SYS chunk starts before META chunk */
 	if (meta_chunk_start < sys_chunk_start) {
 		error("wrong chunk order: meta < system %llu < %llu",
-				(unsigned long long)meta_chunk_start,
-				(unsigned long long)sys_chunk_start);
+				meta_chunk_start, sys_chunk_start);
 		return -EINVAL;
 	}
 	buf = malloc(sizeof(*buf) + cfg->nodesize);
@@ -472,8 +474,8 @@ static void insert_temp_dev_extent(struct extent_buffer *buf,
 	btrfs_set_disk_key_objectid(&disk_key, 1);
 	btrfs_set_disk_key_offset(&disk_key, start);
 	btrfs_set_item_key(buf, &disk_key, *slot);
-	btrfs_set_item_offset(buf, btrfs_item_nr(*slot), *itemoff);
-	btrfs_set_item_size(buf, btrfs_item_nr(*slot), sizeof(*dev_extent));
+	btrfs_set_item_offset(buf, *slot, *itemoff);
+	btrfs_set_item_size(buf, *slot, sizeof(*dev_extent));
 
 	dev_extent = btrfs_item_ptr(buf, *slot, struct btrfs_dev_extent);
 	btrfs_set_dev_extent_chunk_objectid(buf, dev_extent,
@@ -490,15 +492,14 @@ static int setup_temp_dev_tree(int fd, struct btrfs_mkfs_config *cfg,
 			       u64 dev_bytenr)
 {
 	struct extent_buffer *buf = NULL;
-	u32 itemoff = __BTRFS_LEAF_DATA_SIZE(cfg->nodesize);
+	u32 itemoff = cfg->leaf_data_size;
 	int slot = 0;
 	int ret;
 
 	/* Must ensure SYS chunk starts before META chunk */
 	if (meta_chunk_start < sys_chunk_start) {
 		error("wrong chunk order: meta < system %llu < %llu",
-				(unsigned long long)meta_chunk_start,
-				(unsigned long long)sys_chunk_start);
+				meta_chunk_start, sys_chunk_start);
 		return -EINVAL;
 	}
 	buf = malloc(sizeof(*buf) + cfg->nodesize);
@@ -581,7 +582,7 @@ static int insert_temp_extent_item(int fd, struct extent_buffer *buf,
 	struct btrfs_disk_key tree_info_key;
 	struct btrfs_tree_block_info *info;
 	int itemsize;
-	int skinny_metadata = cfg->features &
+	int skinny_metadata = cfg->features.incompat_flags &
 			      BTRFS_FEATURE_INCOMPAT_SKINNY_METADATA;
 	int ret;
 
@@ -604,8 +605,8 @@ static int insert_temp_extent_item(int fd, struct extent_buffer *buf,
 	btrfs_set_disk_key_objectid(&disk_key, bytenr);
 
 	btrfs_set_item_key(buf, &disk_key, *slot);
-	btrfs_set_item_offset(buf, btrfs_item_nr(*slot), *itemoff);
-	btrfs_set_item_size(buf, btrfs_item_nr(*slot), itemsize);
+	btrfs_set_item_offset(buf, *slot, *itemoff);
+	btrfs_set_item_size(buf, *slot, itemsize);
 
 	ei = btrfs_item_ptr(buf, *slot, struct btrfs_extent_item);
 	btrfs_set_extent_refs(buf, ei, 1);
@@ -670,8 +671,8 @@ static void insert_temp_block_group(struct extent_buffer *buf,
 	btrfs_set_disk_key_objectid(&disk_key, bytenr);
 	btrfs_set_disk_key_offset(&disk_key, len);
 	btrfs_set_item_key(buf, &disk_key, *slot);
-	btrfs_set_item_offset(buf, btrfs_item_nr(*slot), *itemoff);
-	btrfs_set_item_size(buf, btrfs_item_nr(*slot), sizeof(bgi));
+	btrfs_set_item_offset(buf, *slot, *itemoff);
+	btrfs_set_item_size(buf, *slot, sizeof(bgi));
 
 	btrfs_set_stack_block_group_flags(&bgi, flag);
 	btrfs_set_stack_block_group_used(&bgi, used);
@@ -688,7 +689,7 @@ static int setup_temp_extent_tree(int fd, struct btrfs_mkfs_config *cfg,
 				  u64 fs_bytenr, u64 csum_bytenr)
 {
 	struct extent_buffer *buf = NULL;
-	u32 itemoff = __BTRFS_LEAF_DATA_SIZE(cfg->nodesize);
+	u32 itemoff = cfg->leaf_data_size;
 	int slot = 0;
 	int ret;
 
@@ -705,16 +706,11 @@ static int setup_temp_extent_tree(int fd, struct btrfs_mkfs_config *cfg,
 				"extent < dev %llu < %llu, "
 				"dev < fs %llu < %llu, "
 				"fs < csum %llu < %llu",
-				(unsigned long long)chunk_bytenr,
-				(unsigned long long)root_bytenr,
-				(unsigned long long)root_bytenr,
-				(unsigned long long)extent_bytenr,
-				(unsigned long long)extent_bytenr,
-				(unsigned long long)dev_bytenr,
-				(unsigned long long)dev_bytenr,
-				(unsigned long long)fs_bytenr,
-				(unsigned long long)fs_bytenr,
-				(unsigned long long)csum_bytenr);
+				chunk_bytenr, root_bytenr,
+				root_bytenr, extent_bytenr,
+				extent_bytenr, dev_bytenr,
+				dev_bytenr, fs_bytenr,
+				fs_bytenr, csum_bytenr);
 		return -EINVAL;
 	}
 	buf = malloc(sizeof(*buf) + cfg->nodesize);
@@ -811,7 +807,7 @@ int make_convert_btrfs(int fd, struct btrfs_mkfs_config *cfg,
 	int ret;
 
 	/* Source filesystem must be opened, checked and analyzed in advance */
-	ASSERT(!cache_tree_empty(used_space));
+	UASSERT(!cache_tree_empty(used_space));
 
 	/*
 	 * reserve space for temporary superblock first

@@ -2,12 +2,13 @@
 # Verify that the restored image of an empty btrfs filesystem can still be
 # mounted
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 check_prereq btrfs-image
 check_prereq mkfs.btrfs
 check_prereq btrfs
 
+setup_root_helper
 prepare_test_dev
 
 tmp=$(_mktemp_dir image)

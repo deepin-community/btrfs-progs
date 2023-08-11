@@ -9,8 +9,10 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-**btrfs subvolume** is used to create/delete/list/show btrfs subvolumes and
+:command:`btrfs subvolume` is used to create/delete/list/show btrfs subvolumes and
 snapshots.
+
+.. include:: ch-subvolume-intro.rst
 
 SUBVOLUME AND SNAPSHOT
 ----------------------
@@ -65,21 +67,25 @@ delete [options] [<subvolume> [<subvolume>...]], delete -i|--subvolid <subvolid>
         If *subvolume* is not a subvolume, btrfs returns an error but continues if
         there are more arguments to process.
 
-        If *--subvolid* is used, *path* must point to a btrfs filesystem. See ``btrfs
-        subvolume list`` or ``btrfs inspect-internal rootid`` how to get the subvolume id.
+        If *--subvolid* is used, *path* must point to a btrfs filesystem. See
+        :command:`btrfs subvolume list` or :command:`btrfs inspect-internal rootid`
+        how to get the subvolume id.
 
         The corresponding directory is removed instantly but the data blocks are
-        removed later in the background. The command returns immediately. See ``btrfs
-        subvolume sync`` how to wait until the subvolume gets completely removed.
+        removed later in the background. The command returns immediately. See
+        :command:`btrfs subvolume sync` how to wait until the subvolume gets completely removed.
 
         The deletion does not involve full transaction commit by default due to
         performance reasons.  As a consequence, the subvolume may appear again after a
         crash.  Use one of the *--commit* options to wait until the operation is
         safely stored on the device.
 
-        The default subvolume (see ``btrfs subvolume set-default``) cannot be deleted and
+        Deleting subvolume needs sufficient permissions, by default the owner
+        cannot delete it unless it's enabled by a mount option
+        *user_subvol_rm_allowed*, or deletion is run as root.
+        The default subvolume (see :command:`btrfs subvolume set-default`) cannot be deleted and
         returns error (EPERM) and this is logged to the system log. A subvolume that's
-        currently involved in send (see ``btrfs send``) also cannot be deleted until the
+        currently involved in send (see :command:`btrfs send`) also cannot be deleted until the
         send is finished. This is also logged in the system log.
 
         ``Options``
@@ -102,18 +108,18 @@ find-new <subvolume> <last_gen>
 get-default <path>
         Get the default subvolume of the filesystem *path*.
 
-        The output format is similar to **subvolume list** command.
+        The output format is similar to :command:`subvolume list` command.
 
 list [options] [-G [\+|-]<value>] [-C [+|-]<value>] [--sort=rootid,gen,ogen,path] <path>
         List the subvolumes present in the filesystem *path*.
 
         For every subvolume the following information is shown by default:
 
-        ID *ID* gen *generation* top level *ID* path *path*
+        ID *ID* gen *generation* top level *parent_ID* path *path*
 
-        where ID is subvolume's id, gen is an internal counter which is updated
-        every transaction, top level is the same as parent subvolume's id, and
-        path is the relative path of the subvolume to the top level subvolume.
+        where *ID* is subvolume's (root)id, *generation* is an internal counter which is
+        updated every transaction, *parent_ID* is the same as the parent subvolume's id,
+        and *path* is the relative path of the subvolume to the top level subvolume.
         The subvolume's ID may be used by the subvolume set-default command,
         or at mount time via the *subvolid=* option.
 
@@ -186,8 +192,8 @@ set-default [<subvolume>|<id> <path>]
 
         There are two ways how to specify the subvolume, by *id* or by the *subvolume*
         path.
-        The id can be obtained from **btrfs subvolume list**, **btrfs subvolume show** or
-        **btrfs inspect-internal rootid**.
+        The id can be obtained from :command:`btrfs subvolume list`,
+        :command:`btrfs subvolume show` or :command:`btrfs inspect-internal rootid`.
 
 show [options] <path>
         Show more information about a subvolume (UUIDs, generations, times, flags,
@@ -241,36 +247,6 @@ sync <path> [subvolid...]
         -s <N>
                 sleep N seconds between checks (default: 1)
 
-SUBVOLUME FLAGS
----------------
-
-The subvolume flag currently implemented is the *ro* property. Read-write
-subvolumes have that set to *false*, snapshots as *true*. In addition to that,
-a plain snapshot will also have last change generation and creation generation
-equal.
-
-Read-only snapshots are building blocks fo incremental send (see
-``btrfs-send(8)``) and the whole use case relies on unmodified snapshots where the
-relative changes are generated from. Thus, changing the subvolume flags from
-read-only to read-write will break the assumptions and may lead to unexpected changes
-in the resulting incremental stream.
-
-A snapshot that was created by send/receive will be read-only, with different
-last change generation, read-only and with set *received_uuid* which identifies
-the subvolume on the filesystem that produced the stream. The usecase relies
-on matching data on both sides. Changing the subvolume to read-write after it
-has been received requires to reset the *received_uuid*. As this is a notable
-change and could potentially break the incremental send use case, performing
-it by **btrfs property set** requires force if that is really desired by user.
-
-.. note::
-   The safety checks have been implemented in 5.14.2, any subvolumes previously
-   received (with a valid *received_uuid*) and read-write status may exist and
-   could still lead to problems with send/receive. You can use **btrfs subvolume
-   show** to identify them. Flipping the flags to read-only and back to
-   read-write will reset the *received_uuid* manually.  There may exist a
-   convenience tool in the future.
-
 EXAMPLES
 --------
 
@@ -293,15 +269,14 @@ returned in case of failure.
 AVAILABILITY
 ------------
 
-**btrfs** is part of btrfs-progs.
-Please refer to the btrfs wiki http://btrfs.wiki.kernel.org for
-further details.
+**btrfs** is part of btrfs-progs.  Please refer to the documentation at
+`https://btrfs.readthedocs.io <https://btrfs.readthedocs.io>`_.
 
 SEE ALSO
 --------
 
-``mkfs.btrfs(8)``,
-``mount(8)``,
-``btrfs-quota(8)``,
-``btrfs-qgroup(8)``,
-``btrfs-send(8)``
+:doc:`btrfs-qgroup(8)<btrfs-qgroup>`,
+:doc:`btrfs-quota(8)<btrfs-quota>`,
+:doc:`btrfs-send(8)<btrfs-send>`,
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`,
+``mount(8)``

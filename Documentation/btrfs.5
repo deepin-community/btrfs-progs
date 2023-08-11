@@ -1,2887 +1,2892 @@
-'\" t
-.\"     Title: btrfs-man5
-.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 11/05/2021
-.\"    Manual: Btrfs Manual
-.\"    Source: Btrfs v5.15
-.\"  Language: English
-.\"
-.TH "BTRFS\-MAN5" "5" "11/05/2021" "Btrfs v5\&.15" "Btrfs Manual"
-.\" -----------------------------------------------------------------
-.\" * Define some portability stuff
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" http://bugs.debian.org/507673
-.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.ie \n(.g .ds Aq \(aq
-.el       .ds Aq '
-.\" -----------------------------------------------------------------
-.\" * set default formatting
-.\" -----------------------------------------------------------------
-.\" disable hyphenation
-.nh
-.\" disable justification (adjust text to left margin only)
-.ad l
-.\" -----------------------------------------------------------------
-.\" * MAIN CONTENT STARTS HERE *
-.\" -----------------------------------------------------------------
-.SH "NAME"
-btrfs-man5 \- topics about the BTRFS filesystem (mount options, supported file attributes and other)
-.SH "DESCRIPTION"
+.\" Man page generated from reStructuredText.
+.
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.TH "BTRFS" "5" "Jun 15, 2023" "6.3.2" "BTRFS"
+.SH NAME
+btrfs \- topics about the BTRFS filesystem (mount options, supported file attributes and other)
+.SH DESCRIPTION
 .sp
-This document describes topics related to BTRFS that are not specific to the tools\&. Currently covers:
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 1.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  1." 4.2
-.\}
+This document describes topics related to BTRFS that are not specific to the
+tools.  Currently covers:
+.INDENT 0.0
+.IP 1. 4
 mount options
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 2.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  2." 4.2
-.\}
+.IP 2. 4
 filesystem features
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 3.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  3." 4.2
-.\}
+.IP 3. 4
 checksum algorithms
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 4.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  4." 4.2
-.\}
+.IP 4. 4
 compression
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 5.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  5." 4.2
-.\}
+.IP 5. 4
+sysfs interface
+.IP 6. 4
 filesystem exclusive operations
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 6.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  6." 4.2
-.\}
+.IP 7. 4
 filesystem limits
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 7.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  7." 4.2
-.\}
+.IP 8. 4
 bootloader support
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 8.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  8." 4.2
-.\}
+.IP 9. 4
 file attributes
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04' 9.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  9." 4.2
-.\}
+.IP 10. 4
 zoned mode
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'10.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "10." 4.2
-.\}
+.IP 11. 4
 control device
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'11.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "11." 4.2
-.\}
+.IP 12. 4
 filesystems with multiple block group profiles
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'12.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "12." 4.2
-.\}
+.IP 13. 4
 seeding device
-.RE
+.IP 14. 4
+RAID56 status and recommended practices
+.IP 15. 4
+storage model, hardware considerations
+.UNINDENT
+.SH MOUNT OPTIONS
+.SS BTRFS SPECIFIC MOUNT OPTIONS
 .sp
-.RS 4
-.ie n \{\
-\h'-04'13.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "13." 4.2
-.\}
-raid56 status and recommended practices
-.RE
+This section describes mount options specific to BTRFS.  For the generic mount
+options please refer to \fBmount(8)\fP manual page. The options are sorted alphabetically
+(discarding the \fIno\fP prefix).
 .sp
-.RS 4
-.ie n \{\
-\h'-04'14.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "14." 4.2
-.\}
-storage model
-.RE
+\fBNOTE:\fP
+.INDENT 0.0
+.INDENT 3.5
+Most mount options apply to the whole filesystem and only options in the
+first mounted subvolume will take effect. This is due to lack of implementation
+and may change in the future. This means that (for example) you can\(aqt set
+per\-subvolume \fInodatacow\fP, \fInodatasum\fP, or \fIcompress\fP using mount options. This
+should eventually be fixed, but it has proved to be difficult to implement
+correctly within the Linux VFS framework.
+.UNINDENT
+.UNINDENT
 .sp
-.RS 4
-.ie n \{\
-\h'-04'15.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "15." 4.2
-.\}
-hardware considerations
-.RE
-.SH "MOUNT OPTIONS"
-.sp
-This section describes mount options specific to BTRFS\&. For the generic mount options please refer to \fBmount\fR(8) manpage\&. The options are sorted alphabetically (discarding the \fIno\fR prefix)\&.
-.if n \{\
-.sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-.sp
-most mount options apply to the whole filesystem and only options in the first mounted subvolume will take effect\&. This is due to lack of implementation and may change in the future\&. This means that (for example) you can\(cqt set per\-subvolume \fInodatacow\fR, \fInodatasum\fR, or \fIcompress\fR using mount options\&. This should eventually be fixed, but it has proved to be difficult to implement correctly within the Linux VFS framework\&.
-.sp .5v
-.RE
-.sp
-Mount options are processed in order, only the last occurrence of an option takes effect and may disable other options due to constraints (see eg\&. \fInodatacow\fR and \fIcompress\fR)\&. The output of \fImount\fR command shows which options have been applied\&.
-.PP
-\fBacl\fR, \fBnoacl\fR
-.RS 4
+Mount options are processed in order, only the last occurrence of an option
+takes effect and may disable other options due to constraints (see e.g.
+\fInodatacow\fP and \fIcompress\fP). The output of \fBmount\fP command shows which options
+have been applied.
+.INDENT 0.0
+.TP
+.B acl, noacl
 (default: on)
 .sp
-Enable/disable support for Posix Access Control Lists (ACLs)\&. See the
-\fBacl\fR(5) manual page for more information about ACLs\&.
+Enable/disable support for POSIX Access Control Lists (ACLs).  See the
+\fBacl(5)\fP manual page for more information about ACLs.
 .sp
-The support for ACL is build\-time configurable (BTRFS_FS_POSIX_ACL) and mount fails if
-\fIacl\fR
-is requested but the feature is not compiled in\&.
-.RE
-.PP
-\fBautodefrag\fR, \fBnoautodefrag\fR
-.RS 4
-(since: 3\&.0, default: off)
+The support for ACL is build\-time configurable (BTRFS_FS_POSIX_ACL) and
+mount fails if \fIacl\fP is requested but the feature is not compiled in.
+.TP
+.B autodefrag, noautodefrag
+(since: 3.0, default: off)
 .sp
-Enable automatic file defragmentation\&. When enabled, small random writes into files (in a range of tens of kilobytes, currently it\(cqs 64K) are detected and queued up for the defragmentation process\&. Not well suited for large database workloads\&.
+Enable automatic file defragmentation.
+When enabled, small random writes into files (in a range of tens of kilobytes,
+currently it\(aqs 64KiB) are detected and queued up for the defragmentation process.
+Not well suited for large database workloads.
 .sp
-The read latency may increase due to reading the adjacent blocks that make up the range for defragmentation, successive write will merge the blocks in the new location\&.
-.if n \{\
+The read latency may increase due to reading the adjacent blocks that make up the
+range for defragmentation, successive write will merge the blocks in the new
+location.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBWarning\fR
-.ps -1
-.br
-Defragmenting with Linux kernel versions < 3\&.9 or \(>= 3\&.14\-rc2 as well as with Linux stable kernel versions \(>= 3\&.10\&.31, \(>= 3\&.12\&.12 or \(>= 3\&.13\&.4 will break up the reflinks of COW data (for example files copied with
-\fBcp \-\-reflink\fR, snapshots or de\-duplicated data)\&. This may cause considerable increase of space usage depending on the broken up reflinks\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBbarrier\fR, \fBnobarrier\fR
-.RS 4
+\fBWARNING:\fP
+.INDENT 7.0
+.INDENT 3.5
+Defragmenting with Linux kernel versions < 3.9 or ≥ 3.14\-rc2 as
+well as with Linux stable kernel versions ≥ 3.10.31, ≥ 3.12.12 or
+≥ 3.13.4 will break up the reflinks of COW data (for example files
+copied with \fBcp \-\-reflink\fP, snapshots or de\-duplicated data).
+This may cause considerable increase of space usage depending on the
+broken up reflinks.
+.UNINDENT
+.UNINDENT
+.TP
+.B barrier, nobarrier
 (default: on)
 .sp
-Ensure that all IO write operations make it through the device cache and are stored permanently when the filesystem is at its consistency checkpoint\&. This typically means that a flush command is sent to the device that will synchronize all pending data and ordinary metadata blocks, then writes the superblock and issues another flush\&.
+Ensure that all IO write operations make it through the device cache and are stored
+permanently when the filesystem is at its consistency checkpoint. This
+typically means that a flush command is sent to the device that will
+synchronize all pending data and ordinary metadata blocks, then writes the
+superblock and issues another flush.
 .sp
-The write flushes incur a slight hit and also prevent the IO block scheduler to reorder requests in a more effective way\&. Disabling barriers gets rid of that penalty but will most certainly lead to a corrupted filesystem in case of a crash or power loss\&. The ordinary metadata blocks could be yet unwritten at the time the new superblock is stored permanently, expecting that the block pointers to metadata were stored permanently before\&.
+The write flushes incur a slight hit and also prevent the IO block
+scheduler to reorder requests in a more effective way. Disabling barriers gets
+rid of that penalty but will most certainly lead to a corrupted filesystem in
+case of a crash or power loss. The ordinary metadata blocks could be yet
+unwritten at the time the new superblock is stored permanently, expecting that
+the block pointers to metadata were stored permanently before.
 .sp
-On a device with a volatile battery\-backed write\-back cache, the
-\fInobarrier\fR
-option will not lead to filesystem corruption as the pending blocks are supposed to make it to the permanent storage\&.
-.RE
-.PP
-\fBcheck_int\fR, \fBcheck_int_data\fR, \fBcheck_int_print_mask=\fR\fB\fIvalue\fR\fR
-.RS 4
-(since: 3\&.0, default: off)
+On a device with a volatile battery\-backed write\-back cache, the \fInobarrier\fP
+option will not lead to filesystem corruption as the pending blocks are
+supposed to make it to the permanent storage.
+.TP
+.B check_int, check_int_data, check_int_print_mask=<value>
+(since: 3.0, default: off)
 .sp
-These debugging options control the behavior of the integrity checking module (the BTRFS_FS_CHECK_INTEGRITY config option required)\&. The main goal is to verify that all blocks from a given transaction period are properly linked\&.
+These debugging options control the behavior of the integrity checking
+module (the BTRFS_FS_CHECK_INTEGRITY config option required). The main goal is
+to verify that all blocks from a given transaction period are properly linked.
 .sp
-\fIcheck_int\fR
-enables the integrity checker module, which examines all block write requests to ensure on\-disk consistency, at a large memory and CPU cost\&.
+\fIcheck_int\fP enables the integrity checker module, which examines all
+block write requests to ensure on\-disk consistency, at a large
+memory and CPU cost.
 .sp
-\fIcheck_int_data\fR
-includes extent data in the integrity checks, and implies the
-\fIcheck_int\fR
-option\&.
+\fIcheck_int_data\fP includes extent data in the integrity checks, and
+implies the \fIcheck_int\fP option.
 .sp
-\fIcheck_int_print_mask\fR
-takes a bitmask of BTRFSIC_PRINT_MASK_* values as defined in
-\fIfs/btrfs/check\-integrity\&.c\fR, to control the integrity checker module behavior\&.
+\fIcheck_int_print_mask\fP takes a bitmask of BTRFSIC_PRINT_MASK_* values
+as defined in \fIfs/btrfs/check\-integrity.c\fP, to control the integrity
+checker module behavior.
 .sp
-See comments at the top of
-\fIfs/btrfs/check\-integrity\&.c\fR
-for more information\&.
-.RE
-.PP
-\fBclear_cache\fR
-.RS 4
-Force clearing and rebuilding of the disk space cache if something has gone wrong\&. See also:
-\fIspace_cache\fR\&.
-.RE
-.PP
-\fBcommit=\fR\fB\fIseconds\fR\fR
-.RS 4
-(since: 3\&.12, default: 30)
+See comments at the top of \fIfs/btrfs/check\-integrity.c\fP
+for more information.
+.TP
+.B clear_cache
+Force clearing and rebuilding of the free space cache if something
+has gone wrong.
 .sp
-Set the interval of periodic transaction commit when data are synchronized to permanent storage\&. Higher interval values lead to larger amount of unwritten data, which has obvious consequences when the system crashes\&. The upper bound is not forced, but a warning is printed if it\(cqs more than 300 seconds (5 minutes)\&. Use with care\&.
-.RE
-.PP
-\fBcompress\fR, \fBcompress=\fR\fB\fItype[:level]\fR\fR, \fBcompress\-force\fR, \fBcompress\-force=\fR\fB\fItype[:level]\fR\fR
-.RS 4
-(default: off, level support since: 5\&.1)
+For free space cache \fIv1\fP, this only clears (and, unless \fInospace_cache\fP is
+used, rebuilds) the free space cache for block groups that are modified while
+the filesystem is mounted with that option. To actually clear an entire free
+space cache \fIv1\fP, see \fBbtrfs check \-\-clear\-space\-cache v1\fP\&.
 .sp
-Control BTRFS file data compression\&. Type may be specified as
-\fIzlib\fR,
-\fIlzo\fR,
-\fIzstd\fR
-or
-\fIno\fR
-(for no compression, used for remounting)\&. If no type is specified,
-\fIzlib\fR
-is used\&. If
-\fIcompress\-force\fR
-is specified, then compression will always be attempted, but the data may end up uncompressed if the compression would make them larger\&.
+For free space cache \fIv2\fP, this clears the entire free space cache.
+To do so without requiring to mounting the filesystem, see
+\fBbtrfs check \-\-clear\-space\-cache v2\fP\&.
 .sp
-Both
-\fIzlib\fR
-and
-\fIzstd\fR
-(since version 5\&.1) expose the compression level as a tunable knob with higher levels trading speed and memory (\fIzstd\fR) for higher compression ratios\&. This can be set by appending a colon and the desired level\&. Zlib accepts the range [1, 9] and zstd accepts [1, 15]\&. If no level is set, both currently use a default level of 3\&. The value 0 is an alias for the default level\&.
+See also: \fIspace_cache\fP\&.
+.TP
+.B commit=<seconds>
+(since: 3.12, default: 30)
 .sp
-Otherwise some simple heuristics are applied to detect an incompressible file\&. If the first blocks written to a file are not compressible, the whole file is permanently marked to skip compression\&. As this is too simple, the
-\fIcompress\-force\fR
-is a workaround that will compress most of the files at the cost of some wasted CPU cycles on failed attempts\&. Since kernel 4\&.15, a set of heuristic algorithms have been improved by using frequency sampling, repeated pattern detection and Shannon entropy calculation to avoid that\&.
-.if n \{\
+Set the interval of periodic transaction commit when data are synchronized
+to permanent storage. Higher interval values lead to larger amount of unwritten
+data, which has obvious consequences when the system crashes.
+The upper bound is not forced, but a warning is printed if it\(aqs more than 300
+seconds (5 minutes). Use with care.
+.TP
+.B compress, compress=<type[:level]>, compress\-force, compress\-force=<type[:level]>
+(default: off, level support since: 5.1)
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-If compression is enabled,
-\fInodatacow\fR
-and
-\fInodatasum\fR
-are disabled\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBdatacow\fR, \fBnodatacow\fR
-.RS 4
+Control BTRFS file data compression.  Type may be specified as \fIzlib\fP,
+\fIlzo\fP, \fIzstd\fP or \fIno\fP (for no compression, used for remounting).  If no type
+is specified, \fIzlib\fP is used.  If \fIcompress\-force\fP is specified,
+then compression will always be attempted, but the data may end up uncompressed
+if the compression would make them larger.
+.sp
+Both \fIzlib\fP and \fIzstd\fP (since version 5.1) expose the compression level as a
+tunable knob with higher levels trading speed and memory (\fIzstd\fP) for higher
+compression ratios. This can be set by appending a colon and the desired level.
+ZLIB accepts the range [1, 9] and ZSTD accepts [1, 15]. If no level is set,
+both currently use a default level of 3. The value 0 is an alias for the
+default level.
+.sp
+Otherwise some simple heuristics are applied to detect an incompressible file.
+If the first blocks written to a file are not compressible, the whole file is
+permanently marked to skip compression. As this is too simple, the
+\fIcompress\-force\fP is a workaround that will compress most of the files at the
+cost of some wasted CPU cycles on failed attempts.
+Since kernel 4.15, a set of heuristic algorithms have been improved by using
+frequency sampling, repeated pattern detection and Shannon entropy calculation
+to avoid that.
+.sp
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+If compression is enabled, \fInodatacow\fP and \fInodatasum\fP are disabled.
+.UNINDENT
+.UNINDENT
+.TP
+.B datacow, nodatacow
 (default: on)
 .sp
-Enable data copy\-on\-write for newly created files\&.
-\fINodatacow\fR
-implies
-\fInodatasum\fR, and disables
-\fIcompression\fR\&. All files created under
-\fInodatacow\fR
-are also set the NOCOW file attribute (see
-\fBchattr\fR(1))\&.
-.if n \{\
+Enable data copy\-on\-write for newly created files.
+\fINodatacow\fP implies \fInodatasum\fP, and disables \fIcompression\fP\&. All files created
+under \fInodatacow\fP are also set the NOCOW file attribute (see \fBchattr(1)\fP).
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-If
-\fInodatacow\fR
-or
-\fInodatasum\fR
-are enabled, compression is disabled\&.
-.sp .5v
-.RE
-Updates in\-place improve performance for workloads that do frequent overwrites, at the cost of potential partial writes, in case the write is interrupted (system crash, device failure)\&.
-.RE
-.PP
-\fBdatasum\fR, \fBnodatasum\fR
-.RS 4
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+If \fInodatacow\fP or \fInodatasum\fP are enabled, compression is disabled.
+.UNINDENT
+.UNINDENT
+.sp
+Updates in\-place improve performance for workloads that do frequent overwrites,
+at the cost of potential partial writes, in case the write is interrupted
+(system crash, device failure).
+.TP
+.B datasum, nodatasum
 (default: on)
 .sp
-Enable data checksumming for newly created files\&.
-\fIDatasum\fR
-implies
-\fIdatacow\fR, ie\&. the normal mode of operation\&. All files created under
-\fInodatasum\fR
-inherit the "no checksums" property, however there\(cqs no corresponding file attribute (see
-\fBchattr\fR(1))\&.
-.if n \{\
+Enable data checksumming for newly created files.
+\fIDatasum\fP implies \fIdatacow\fP, i.e. the normal mode of operation. All files created
+under \fInodatasum\fP inherit the \(dqno checksums\(dq property, however there\(aqs no
+corresponding file attribute (see \fBchattr(1)\fP).
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-If
-\fInodatacow\fR
-or
-\fInodatasum\fR
-are enabled, compression is disabled\&.
-.sp .5v
-.RE
-There is a slight performance gain when checksums are turned off, the corresponding metadata blocks holding the checksums do not need to updated\&. The cost of checksumming of the blocks in memory is much lower than the IO, modern CPUs feature hardware support of the checksumming algorithm\&.
-.RE
-.PP
-\fBdegraded\fR
-.RS 4
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+If \fInodatacow\fP or \fInodatasum\fP are enabled, compression is disabled.
+.UNINDENT
+.UNINDENT
+.sp
+There is a slight performance gain when checksums are turned off, the
+corresponding metadata blocks holding the checksums do not need to updated.
+The cost of checksumming of the blocks in memory is much lower than the IO,
+modern CPUs feature hardware support of the checksumming algorithm.
+.TP
+.B degraded
 (default: off)
 .sp
-Allow mounts with less devices than the RAID profile constraints require\&. A read\-write mount (or remount) may fail when there are too many devices missing, for example if a stripe member is completely missing from RAID0\&.
+Allow mounts with less devices than the RAID profile constraints
+require.  A read\-write mount (or remount) may fail when there are too many devices
+missing, for example if a stripe member is completely missing from RAID0.
 .sp
-Since 4\&.14, the constraint checks have been improved and are verified on the chunk level, not an the device level\&. This allows degraded mounts of filesystems with mixed RAID profiles for data and metadata, even if the device number constraints would not be satisfied for some of the profiles\&.
+Since 4.14, the constraint checks have been improved and are verified on the
+chunk level, not at the device level. This allows degraded mounts of
+filesystems with mixed RAID profiles for data and metadata, even if the
+device number constraints would not be satisfied for some of the profiles.
 .sp
-Example: metadata \(em raid1, data \(em single, devices \(em /dev/sda, /dev/sdb
+Example: metadata \-\- raid1, data \-\- single, devices \-\- /dev/sda, /dev/sdb
 .sp
-Suppose the data are completely stored on
-\fIsda\fR, then missing
-\fIsdb\fR
-will not prevent the mount, even if 1 missing device would normally prevent (any)
-\fIsingle\fR
-profile to mount\&. In case some of the data chunks are stored on
-\fIsdb\fR, then the constraint of single/data is not satisfied and the filesystem cannot be mounted\&.
-.RE
-.PP
-\fBdevice=\fR\fB\fIdevicepath\fR\fR
-.RS 4
-Specify a path to a device that will be scanned for BTRFS filesystem during mount\&. This is usually done automatically by a device manager (like udev) or using the
-\fBbtrfs device scan\fR
-command (eg\&. run from the initial ramdisk)\&. In cases where this is not possible the
-\fIdevice\fR
-mount option can help\&.
-.if n \{\
+Suppose the data are completely stored on \fIsda\fP, then missing \fIsdb\fP will not
+prevent the mount, even if 1 missing device would normally prevent (any)
+\fIsingle\fP profile to mount. In case some of the data chunks are stored on \fIsdb\fP,
+then the constraint of single/data is not satisfied and the filesystem
+cannot be mounted.
+.TP
+.B device=<devicepath>
+Specify a path to a device that will be scanned for BTRFS filesystem during
+mount. This is usually done automatically by a device manager (like udev) or
+using the \fBbtrfs device scan\fP command (e.g. run from the initial ramdisk). In
+cases where this is not possible the \fIdevice\fP mount option can help.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-booting eg\&. a RAID1 system may fail even if all filesystem\(cqs
-\fIdevice\fR
-paths are provided as the actual device nodes may not be discovered by the system at that point\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBdiscard\fR, \fBdiscard=sync\fR, \fBdiscard=async\fR, \fBnodiscard\fR
-.RS 4
-(default: off, async support since: 5\&.6)
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Booting e.g. a RAID1 system may fail even if all filesystem\(aqs \fIdevice\fP
+paths are provided as the actual device nodes may not be discovered by the
+system at that point.
+.UNINDENT
+.UNINDENT
+.TP
+.B discard, discard=sync, discard=async, nodiscard
+(default: async when devices support it since 6.2, async support since: 5.6)
 .sp
-Enable discarding of freed file blocks\&. This is useful for SSD devices, thinly provisioned LUNs, or virtual machine images; however, every storage layer must support discard for it to work\&.
+Enable discarding of freed file blocks.  This is useful for SSD devices, thinly
+provisioned LUNs, or virtual machine images; however, every storage layer must
+support discard for it to work.
 .sp
-In the synchronous mode (\fIsync\fR
-or without option value), lack of asynchronous queued TRIM on the backing device TRIM can severely degrade performance, because a synchronous TRIM operation will be attempted instead\&. Queued TRIM requires newer than SATA revision 3\&.1 chipsets and devices\&.
+In the synchronous mode (\fIsync\fP or without option value), lack of asynchronous
+queued TRIM on the backing device TRIM can severely degrade performance,
+because a synchronous TRIM operation will be attempted instead. Queued TRIM
+requires newer than SATA revision 3.1 chipsets and devices.
 .sp
-The asynchronous mode (\fIasync\fR) gathers extents in larger chunks before sending them to the devices for TRIM\&. The overhead and performance impact should be negligible compared to the previous mode and it\(cqs supposed to be the preferred mode if needed\&.
+The asynchronous mode (\fIasync\fP) gathers extents in larger chunks before sending
+them to the devices for TRIM. The overhead and performance impact should be
+negligible compared to the previous mode and it\(aqs supposed to be the preferred
+mode if needed.
 .sp
-If it is not necessary to immediately discard freed blocks, then the
-\fBfstrim\fR
-tool can be used to discard all free blocks in a batch\&. Scheduling a TRIM during a period of low system activity will prevent latent interference with the performance of other operations\&. Also, a device may ignore the TRIM command if the range is too small, so running a batch discard has a greater probability of actually discarding the blocks\&.
-.RE
-.PP
-\fBenospc_debug\fR, \fBnoenospc_debug\fR
-.RS 4
+If it is not necessary to immediately discard freed blocks, then the \fBfstrim\fP
+tool can be used to discard all free blocks in a batch. Scheduling a TRIM
+during a period of low system activity will prevent latent interference with
+the performance of other operations. Also, a device may ignore the TRIM command
+if the range is too small, so running a batch discard has a greater probability
+of actually discarding the blocks.
+.TP
+.B enospc_debug, noenospc_debug
 (default: off)
 .sp
-Enable verbose output for some ENOSPC conditions\&. It\(cqs safe to use but can be noisy if the system reaches near\-full state\&.
-.RE
-.PP
-\fBfatal_errors=\fR\fB\fIaction\fR\fR
-.RS 4
-(since: 3\&.4, default: bug)
+Enable verbose output for some ENOSPC conditions. It\(aqs safe to use but can
+be noisy if the system reaches near\-full state.
+.TP
+.B fatal_errors=<action>
+(since: 3.4, default: bug)
 .sp
-Action to take when encountering a fatal error\&.
-.PP
-\fBbug\fR
-.RS 4
-\fIBUG()\fR
-on a fatal error, the system will stay in the crashed state and may be still partially usable, but reboot is required for full operation
-.RE
-.PP
-\fBpanic\fR
-.RS 4
-\fIpanic()\fR
-on a fatal error, depending on other system configuration, this may be followed by a reboot\&. Please refer to the documentation of kernel boot parameters, eg\&.
-\fIpanic\fR,
-\fIoops\fR
-or
-\fIcrashkernel\fR\&.
-.RE
-.RE
-.PP
-\fBflushoncommit\fR, \fBnoflushoncommit\fR
-.RS 4
+Action to take when encountering a fatal error.
+.INDENT 7.0
+.TP
+.B bug
+\fIBUG()\fP on a fatal error, the system will stay in the crashed state and may be
+still partially usable, but reboot is required for full operation
+.TP
+.B panic
+\fIpanic()\fP on a fatal error, depending on other system configuration, this may
+be followed by a reboot. Please refer to the documentation of kernel boot
+parameters, e.g. \fIpanic\fP, \fIoops\fP or \fIcrashkernel\fP\&.
+.UNINDENT
+.TP
+.B flushoncommit, noflushoncommit
 (default: off)
 .sp
-This option forces any data dirtied by a write in a prior transaction to commit as part of the current commit, effectively a full filesystem sync\&.
+This option forces any data dirtied by a write in a prior transaction to commit
+as part of the current commit, effectively a full filesystem sync.
 .sp
-This makes the committed state a fully consistent view of the file system from the application\(cqs perspective (i\&.e\&. it includes all completed file system operations)\&. This was previously the behavior only when a snapshot was created\&.
+This makes the committed state a fully consistent view of the file system from
+the application\(aqs perspective (i.e. it includes all completed file system
+operations). This was previously the behavior only when a snapshot was
+created.
 .sp
-When off, the filesystem is consistent but buffered writes may last more than one transaction commit\&.
-.RE
-.PP
-\fBfragment=\fR\fB\fItype\fR\fR
-.RS 4
-(depends on compile\-time option BTRFS_DEBUG, since: 4\&.4, default: off)
+When off, the filesystem is consistent but buffered writes may last more than
+one transaction commit.
+.TP
+.B fragment=<type>
+(depends on compile\-time option BTRFS_DEBUG, since: 4.4, default: off)
 .sp
-A debugging helper to intentionally fragment given
-\fItype\fR
-of block groups\&. The type can be
-\fIdata\fR,
-\fImetadata\fR
-or
-\fIall\fR\&. This mount option should not be used outside of debugging environments and is not recognized if the kernel config option
-\fIBTRFS_DEBUG\fR
-is not enabled\&.
-.RE
-.PP
-\fBnologreplay\fR
-.RS 4
+A debugging helper to intentionally fragment given \fItype\fP of block groups. The
+type can be \fIdata\fP, \fImetadata\fP or \fIall\fP\&. This mount option should not be used
+outside of debugging environments and is not recognized if the kernel config
+option \fIBTRFS_DEBUG\fP is not enabled.
+.TP
+.B nologreplay
 (default: off, even read\-only)
 .sp
-The tree\-log contains pending updates to the filesystem until the full commit\&. The log is replayed on next mount, this can be disabled by this option\&. See also
-\fItreelog\fR\&. Note that
-\fInologreplay\fR
-is the same as
-\fInorecovery\fR\&.
-.if n \{\
+The tree\-log contains pending updates to the filesystem until the full commit.
+The log is replayed on next mount, this can be disabled by this option.  See
+also \fItreelog\fP\&.  Note that \fInologreplay\fP is the same as \fInorecovery\fP\&.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBWarning\fR
-.ps -1
-.br
-currently, the tree log is replayed even with a read\-only mount! To disable that behaviour, mount also with
-\fInologreplay\fR\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBmax_inline=\fR\fB\fIbytes\fR\fR
-.RS 4
+\fBWARNING:\fP
+.INDENT 7.0
+.INDENT 3.5
+Currently, the tree log is replayed even with a read\-only mount! To
+disable that behaviour, mount also with \fInologreplay\fP\&.
+.UNINDENT
+.UNINDENT
+.TP
+.B max_inline=<bytes>
 (default: min(2048, page size) )
 .sp
-Specify the maximum amount of space, that can be inlined in a metadata B\-tree leaf\&. The value is specified in bytes, optionally with a K suffix (case insensitive)\&. In practice, this value is limited by the filesystem block size (named
-\fIsectorsize\fR
-at mkfs time), and memory page size of the system\&. In case of sectorsize limit, there\(cqs some space unavailable due to leaf headers\&. For example, a 4k sectorsize, maximum size of inline data is about 3900 bytes\&.
+Specify the maximum amount of space, that can be inlined in
+a metadata b\-tree leaf.  The value is specified in bytes, optionally
+with a K suffix (case insensitive).  In practice, this value
+is limited by the filesystem block size (named \fIsectorsize\fP at mkfs time),
+and memory page size of the system. In case of sectorsize limit, there\(aqs
+some space unavailable due to leaf headers.  For example, a 4KiB sectorsize,
+maximum size of inline data is about 3900 bytes.
 .sp
-Inlining can be completely turned off by specifying 0\&. This will increase data block slack if file sizes are much smaller than block size but will reduce metadata consumption in return\&.
-.if n \{\
+Inlining can be completely turned off by specifying 0. This will increase data
+block slack if file sizes are much smaller than block size but will reduce
+metadata consumption in return.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-the default value has changed to 2048 in kernel 4\&.6\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBmetadata_ratio=\fR\fB\fIvalue\fR\fR
-.RS 4
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+The default value has changed to 2048 in kernel 4.6.
+.UNINDENT
+.UNINDENT
+.TP
+.B metadata_ratio=<value>
 (default: 0, internal logic)
 .sp
-Specifies that 1 metadata chunk should be allocated after every
-\fIvalue\fR
-data chunks\&. Default behaviour depends on internal logic, some percent of unused metadata space is attempted to be maintained but is not always possible if there\(cqs not enough space left for chunk allocation\&. The option could be useful to override the internal logic in favor of the metadata allocation if the expected workload is supposed to be metadata intense (snapshots, reflinks, xattrs, inlined files)\&.
-.RE
-.PP
-\fBnorecovery\fR
-.RS 4
-(since: 4\&.5, default: off)
+Specifies that 1 metadata chunk should be allocated after every \fIvalue\fP data
+chunks. Default behaviour depends on internal logic, some percent of unused
+metadata space is attempted to be maintained but is not always possible if
+there\(aqs not enough space left for chunk allocation. The option could be useful to
+override the internal logic in favor of the metadata allocation if the expected
+workload is supposed to be metadata intense (snapshots, reflinks, xattrs,
+inlined files).
+.TP
+.B norecovery
+(since: 4.5, default: off)
 .sp
-Do not attempt any data recovery at mount time\&. This will disable
-\fIlogreplay\fR
-and avoids other write operations\&. Note that this option is the same as
-\fInologreplay\fR\&.
-.if n \{\
+Do not attempt any data recovery at mount time. This will disable \fIlogreplay\fP
+and avoids other write operations. Note that this option is the same as
+\fInologreplay\fP\&.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-The opposite option
-\fIrecovery\fR
-used to have different meaning but was changed for consistency with other filesystems, where
-\fInorecovery\fR
-is used for skipping log replay\&. BTRFS does the same and in general will try to avoid any write operations\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBrescan_uuid_tree\fR
-.RS 4
-(since: 3\&.12, default: off)
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+The opposite option \fIrecovery\fP used to have different meaning but was
+changed for consistency with other filesystems, where \fInorecovery\fP is used for
+skipping log replay. BTRFS does the same and in general will try to avoid any
+write operations.
+.UNINDENT
+.UNINDENT
+.TP
+.B rescan_uuid_tree
+(since: 3.12, default: off)
 .sp
-Force check and rebuild procedure of the UUID tree\&. This should not normally be needed\&.
-.RE
-.PP
-\fBrescue\fR
-.RS 4
-(since: 5\&.9)
+Force check and rebuild procedure of the UUID tree. This should not
+normally be needed.
+.TP
+.B rescue
+(since: 5.9)
 .sp
-Modes allowing mount with damaged filesystem structures\&.
+Modes allowing mount with damaged filesystem structures.
+.INDENT 7.0
+.IP \(bu 2
+\fIusebackuproot\fP (since: 5.9, replaces standalone option \fIusebackuproot\fP)
+.IP \(bu 2
+\fInologreplay\fP (since: 5.9, replaces standalone option \fInologreplay\fP)
+.IP \(bu 2
+\fIignorebadroots\fP, \fIibadroots\fP (since: 5.11)
+.IP \(bu 2
+\fIignoredatacsums\fP, \fIidatacsums\fP (since: 5.11)
+.IP \(bu 2
+\fIall\fP (since: 5.9)
+.UNINDENT
+.TP
+.B skip_balance
+(since: 3.3, default: off)
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIusebackuproot\fR
-(since: 5\&.9, replaces standalone option
-\fIusebackuproot\fR)
-.RE
+Skip automatic resume of an interrupted balance operation. The operation can
+later be resumed with \fBbtrfs balance resume\fP, or the paused state can be
+removed with \fBbtrfs balance cancel\fP\&. The default behaviour is to resume an
+interrupted balance immediately after a volume is mounted.
+.TP
+.B space_cache, space_cache=<version>, nospace_cache
+(\fInospace_cache\fP since: 3.2, \fIspace_cache=v1\fP and \fIspace_cache=v2\fP since 4.5, default: \fIspace_cache=v2\fP)
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fInologreplay\fR
-(since: 5\&.9, replaces standalone option
-\fInologreplay\fR)
-.RE
+Options to control the free space cache. The free space cache greatly improves
+performance when reading block group free space into memory. However, managing
+the space cache consumes some resources, including a small amount of disk
+space.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIignorebadroots\fR,
-\fIibadroots\fR
-(since: 5\&.11)
-.RE
+There are two implementations of the free space cache. The original
+one, referred to as \fIv1\fP, used to be a safe default but has been
+superseded by \fIv2\fP\&.  The \fIv1\fP space cache can be disabled at mount time
+with \fInospace_cache\fP without clearing.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIignoredatacsums\fR,
-\fIidatacsums\fR
-(since: 5\&.11)
-.RE
+On very large filesystems (many terabytes) and certain workloads, the
+performance of the \fIv1\fP space cache may degrade drastically. The \fIv2\fP
+implementation, which adds a new b\-tree called the free space tree, addresses
+this issue. Once enabled, the \fIv2\fP space cache will always be used and cannot
+be disabled unless it is cleared. Use \fIclear_cache,space_cache=v1\fP or
+\fIclear_cache,nospace_cache\fP to do so. If \fIv2\fP is enabled, and \fIv1\fP space
+cache will be cleared (at the first mount) and kernels without \fIv2\fP
+support will only be able to mount the filesystem in read\-only mode.
+On an unmounted filesystem the caches (both versions) can be cleared by
+\(dqbtrfs check \-\-clear\-space\-cache\(dq.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIall\fR
-(since: 5\&.9)
-.RE
-.RE
-.PP
-\fBskip_balance\fR
-.RS 4
-(since: 3\&.3, default: off)
+The \fI\%btrfs\-check(8)\fP and \fI:doc:\(gamkfs.btrfs(8)<mkfs.btrfs>\fP commands have full \fIv2\fP free space
+cache support since v4.19.
 .sp
-Skip automatic resume of an interrupted balance operation\&. The operation can later be resumed with
-\fBbtrfs balance resume\fR, or the paused state can be removed with
-\fBbtrfs balance cancel\fR\&. The default behaviour is to resume an interrupted balance immediately after a volume is mounted\&.
-.RE
-.PP
-\fBspace_cache\fR, \fBspace_cache=\fR\fB\fIversion\fR\fR, \fBnospace_cache\fR
-.RS 4
-(\fInospace_cache\fR
-since: 3\&.2,
-\fIspace_cache=v1\fR
-and
-\fIspace_cache=v2\fR
-since 4\&.5, default:
-\fIspace_cache=v1\fR)
-.sp
-Options to control the free space cache\&. The free space cache greatly improves performance when reading block group free space into memory\&. However, managing the space cache consumes some resources, including a small amount of disk space\&.
-.sp
-There are two implementations of the free space cache\&. The original one, referred to as
-\fIv1\fR, is the safe default\&. The
-\fIv1\fR
-space cache can be disabled at mount time with
-\fInospace_cache\fR
-without clearing\&.
-.sp
-On very large filesystems (many terabytes) and certain workloads, the performance of the
-\fIv1\fR
-space cache may degrade drastically\&. The
-\fIv2\fR
-implementation, which adds a new B\-tree called the free space tree, addresses this issue\&. Once enabled, the
-\fIv2\fR
-space cache will always be used and cannot be disabled unless it is cleared\&. Use
-\fIclear_cache,space_cache=v1\fR
-or
-\fIclear_cache,nospace_cache\fR
-to do so\&. If
-\fIv2\fR
-is enabled, kernels without
-\fIv2\fR
-support will only be able to mount the filesystem in read\-only mode\&.
-.sp
-The
-\fBbtrfs\-check\fR(8) and
-\fBmkfs\&.btrfs\fR(8) commands have full
-\fIv2\fR
-free space cache support since v4\&.19\&.
-.sp
-If a version is not explicitly specified, the default implementation will be chosen, which is
-\fIv1\fR\&.
-.RE
-.PP
-\fBssd\fR, \fBssd_spread\fR, \fBnossd\fR, \fBnossd_spread\fR
-.RS 4
+If a version is not explicitly specified, the default implementation will be
+chosen, which is \fIv2\fP\&.
+.TP
+.B ssd, ssd_spread, nossd, nossd_spread
 (default: SSD autodetected)
 .sp
-Options to control SSD allocation schemes\&. By default, BTRFS will enable or disable SSD optimizations depending on status of a device with respect to rotational or non\-rotational type\&. This is determined by the contents of
-\fI/sys/block/DEV/queue/rotational\fR)\&. If it is 0, the
-\fIssd\fR
-option is turned on\&. The option
-\fInossd\fR
-will disable the autodetection\&.
+Options to control SSD allocation schemes.  By default, BTRFS will
+enable or disable SSD optimizations depending on status of a device with
+respect to rotational or non\-rotational type. This is determined by the
+contents of \fI/sys/block/DEV/queue/rotational\fP). If it is 0, the \fIssd\fP option is
+turned on.  The option \fInossd\fP will disable the autodetection.
 .sp
-The optimizations make use of the absence of the seek penalty that\(cqs inherent for the rotational devices\&. The blocks can be typically written faster and are not offloaded to separate threads\&.
-.if n \{\
+The optimizations make use of the absence of the seek penalty that\(aqs inherent
+for the rotational devices. The blocks can be typically written faster and
+are not offloaded to separate threads.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-Since 4\&.14, the block layout optimizations have been dropped\&. This used to help with first generations of SSD devices\&. Their FTL (flash translation layer) was not effective and the optimization was supposed to improve the wear by better aligning blocks\&. This is no longer true with modern SSD devices and the optimization had no real benefit\&. Furthermore it caused increased fragmentation\&. The layout tuning has been kept intact for the option
-\fIssd_spread\fR\&.
-.sp .5v
-.RE
-The
-\fIssd_spread\fR
-mount option attempts to allocate into bigger and aligned chunks of unused space, and may perform better on low\-end SSDs\&.
-\fIssd_spread\fR
-implies
-\fIssd\fR, enabling all other SSD heuristics as well\&. The option
-\fInossd\fR
-will disable all SSD options while
-\fInossd_spread\fR
-only disables
-\fIssd_spread\fR\&.
-.RE
-.PP
-\fBsubvol=\fR\fB\fIpath\fR\fR
-.RS 4
-Mount subvolume from
-\fIpath\fR
-rather than the toplevel subvolume\&. The
-\fIpath\fR
-is always treated as relative to the toplevel subvolume\&. This mount option overrides the default subvolume set for the given filesystem\&.
-.RE
-.PP
-\fBsubvolid=\fR\fB\fIsubvolid\fR\fR
-.RS 4
-Mount subvolume specified by a
-\fIsubvolid\fR
-number rather than the toplevel subvolume\&. You can use
-\fBbtrfs subvolume list\fR
-of
-\fBbtrfs subvolume show\fR
-to see subvolume ID numbers\&. This mount option overrides the default subvolume set for the given filesystem\&.
-.if n \{\
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Since 4.14, the block layout optimizations have been dropped. This used
+to help with first generations of SSD devices. Their FTL (flash translation
+layer) was not effective and the optimization was supposed to improve the wear
+by better aligning blocks. This is no longer true with modern SSD devices and
+the optimization had no real benefit. Furthermore it caused increased
+fragmentation. The layout tuning has been kept intact for the option
+\fIssd_spread\fP\&.
+.UNINDENT
+.UNINDENT
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-if both
-\fIsubvolid\fR
-and
-\fIsubvol\fR
-are specified, they must point at the same subvolume, otherwise the mount will fail\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBthread_pool=\fR\fB\fInumber\fR\fR
-.RS 4
+The \fIssd_spread\fP mount option attempts to allocate into bigger and aligned
+chunks of unused space, and may perform better on low\-end SSDs.  \fIssd_spread\fP
+implies \fIssd\fP, enabling all other SSD heuristics as well. The option \fInossd\fP
+will disable all SSD options while \fInossd_spread\fP only disables \fIssd_spread\fP\&.
+.TP
+.B subvol=<path>
+Mount subvolume from \fIpath\fP rather than the toplevel subvolume. The
+\fIpath\fP is always treated as relative to the toplevel subvolume.
+This mount option overrides the default subvolume set for the given filesystem.
+.TP
+.B subvolid=<subvolid>
+Mount subvolume specified by a \fIsubvolid\fP number rather than the toplevel
+subvolume.  You can use \fBbtrfs subvolume list\fP of \fBbtrfs subvolume show\fP to see
+subvolume ID numbers.
+This mount option overrides the default subvolume set for the given filesystem.
+.sp
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+If both \fIsubvolid\fP and \fIsubvol\fP are specified, they must point at the
+same subvolume, otherwise the mount will fail.
+.UNINDENT
+.UNINDENT
+.TP
+.B thread_pool=<number>
 (default: min(NRCPUS + 2, 8) )
 .sp
-The number of worker threads to start\&. NRCPUS is number of on\-line CPUs detected at the time of mount\&. Small number leads to less parallelism in processing data and metadata, higher numbers could lead to a performance hit due to increased locking contention, process scheduling, cache\-line bouncing or costly data transfers between local CPU memories\&.
-.RE
-.PP
-\fBtreelog\fR, \fBnotreelog\fR
-.RS 4
+The number of worker threads to start. NRCPUS is number of on\-line CPUs
+detected at the time of mount. Small number leads to less parallelism in
+processing data and metadata, higher numbers could lead to a performance hit
+due to increased locking contention, process scheduling, cache\-line bouncing or
+costly data transfers between local CPU memories.
+.TP
+.B treelog, notreelog
 (default: on)
 .sp
-Enable the tree logging used for
-\fIfsync\fR
-and
-\fIO_SYNC\fR
-writes\&. The tree log stores changes without the need of a full filesystem sync\&. The log operations are flushed at sync and transaction commit\&. If the system crashes between two such syncs, the pending tree log operations are replayed during mount\&.
-.if n \{\
+Enable the tree logging used for \fIfsync\fP and \fIO_SYNC\fP writes. The tree log
+stores changes without the need of a full filesystem sync. The log operations
+are flushed at sync and transaction commit. If the system crashes between two
+such syncs, the pending tree log operations are replayed during mount.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBWarning\fR
-.ps -1
-.br
-currently, the tree log is replayed even with a read\-only mount! To disable that behaviour, also mount with
-\fInologreplay\fR\&.
-.sp .5v
-.RE
-The tree log could contain new files/directories, these would not exist on a mounted filesystem if the log is not replayed\&.
-.RE
-.PP
-\fBusebackuproot\fR
-.RS 4
-(since: 4\&.6, default: off)
+\fBWARNING:\fP
+.INDENT 7.0
+.INDENT 3.5
+Currently, the tree log is replayed even with a read\-only mount! To
+disable that behaviour, also mount with \fInologreplay\fP\&.
+.UNINDENT
+.UNINDENT
 .sp
-Enable autorecovery attempts if a bad tree root is found at mount time\&. Currently this scans a backup list of several previous tree roots and tries to use the first readable\&. This can be used with read\-only mounts as well\&.
-.if n \{\
+The tree log could contain new files/directories, these would not exist on
+a mounted filesystem if the log is not replayed.
+.TP
+.B usebackuproot
+(since: 4.6, default: off)
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-This option has replaced
-\fIrecovery\fR\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBuser_subvol_rm_allowed\fR
-.RS 4
+Enable autorecovery attempts if a bad tree root is found at mount time.
+Currently this scans a backup list of several previous tree roots and tries to
+use the first readable. This can be used with read\-only mounts as well.
+.sp
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+This option has replaced \fIrecovery\fP\&.
+.UNINDENT
+.UNINDENT
+.TP
+.B user_subvol_rm_allowed
 (default: off)
 .sp
-Allow subvolumes to be deleted by their respective owner\&. Otherwise, only the root user can do that\&.
-.if n \{\
+Allow subvolumes to be deleted by their respective owner. Otherwise, only the
+root user can do that.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-historically, any user could create a snapshot even if he was not owner of the source subvolume, the subvolume deletion has been restricted for that reason\&. The subvolume creation has been restricted but this mount option is still required\&. This is a usability issue\&. Since 4\&.18, the
-\fBrmdir\fR(2) syscall can delete an empty subvolume just like an ordinary directory\&. Whether this is possible can be detected at runtime, see
-\fIrmdir_subvol\fR
-feature in
-\fIFILESYSTEM FEATURES\fR\&.
-.sp .5v
-.RE
-.RE
-.SS "DEPRECATED MOUNT OPTIONS"
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Historically, any user could create a snapshot even if he was not owner
+of the source subvolume, the subvolume deletion has been restricted for that
+reason. The subvolume creation has been restricted but this mount option is
+still required. This is a usability issue.
+Since 4.18, the \fBrmdir(2)\fP syscall can delete an empty subvolume just like an
+ordinary directory. Whether this is possible can be detected at runtime, see
+\fIrmdir_subvol\fP feature in \fIFILESYSTEM FEATURES\fP\&.
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.SS DEPRECATED MOUNT OPTIONS
 .sp
-List of mount options that have been removed, kept for backward compatibility\&.
-.PP
-\fBrecovery\fR
-.RS 4
-(since: 3\&.2, default: off, deprecated since: 4\&.5)
-.if n \{\
+List of mount options that have been removed, kept for backward compatibility.
+.INDENT 0.0
+.TP
+.B recovery
+(since: 3.2, default: off, deprecated since: 4.5)
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-this option has been replaced by
-\fIusebackuproot\fR
-and should not be used but will work on 4\&.5+ kernels\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBinode_cache\fR, \fBnoinode_cache\fR
-.RS 4
-(removed in: 5\&.11, since: 3\&.0, default: off)
-.if n \{\
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+This option has been replaced by \fIusebackuproot\fP and should not be used
+but will work on 4.5+ kernels.
+.UNINDENT
+.UNINDENT
+.TP
+.B inode_cache, noinode_cache
+(removed in: 5.11, since: 3.0, default: off)
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-the functionality has been removed in 5\&.11, any stale data created by previous use of the
-\fIinode_cache\fR
-option can be removed by
-\fBbtrfs check \-\-clear\-ino\-cache\fR\&.
-.sp .5v
-.RE
-.RE
-.SS "NOTES ON GENERIC MOUNT OPTIONS"
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+The functionality has been removed in 5.11, any stale data created by
+previous use of the \fIinode_cache\fP option can be removed by \fBbtrfs check \-\-clear\-ino\-cache\fP\&.
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.SS NOTES ON GENERIC MOUNT OPTIONS
 .sp
-Some of the general mount options from \fBmount\fR(8) that affect BTRFS and are worth mentioning\&.
-.PP
-\fBnoatime\fR
-.RS 4
-under read intensive work\-loads, specifying
-\fInoatime\fR
-significantly improves performance because no new access time information needs to be written\&. Without this option, the default is
-\fIrelatime\fR, which only reduces the number of inode atime updates in comparison to the traditional
-\fIstrictatime\fR\&. The worst case for atime updates under
-\fIrelatime\fR
-occurs when many files are read whose atime is older than 24 h and which are freshly snapshotted\&. In that case the atime is updated
-\fIand\fR
-COW happens \- for each file \- in bulk\&. See also
-\m[blue]\fBhttps://lwn\&.net/Articles/499293/\fR\m[]
-\-
-\fIAtime and btrfs: a bad combination? (LWN, 2012\-05\-31)\fR\&.
+Some of the general mount options from \fBmount(8)\fP that affect BTRFS and are
+worth mentioning.
+.INDENT 0.0
+.TP
+.B noatime
+under read intensive work\-loads, specifying \fInoatime\fP significantly improves
+performance because no new access time information needs to be written. Without
+this option, the default is \fIrelatime\fP, which only reduces the number of
+inode atime updates in comparison to the traditional \fIstrictatime\fP\&. The worst
+case for atime updates under \fIrelatime\fP occurs when many files are read whose
+atime is older than 24 h and which are freshly snapshotted. In that case the
+atime is updated and COW happens \- for each file \- in bulk. See also
+\fI\%https://lwn.net/Articles/499293/\fP \- \fIAtime and btrfs: a bad combination? (LWN, 2012\-05\-31)\fP\&.
 .sp
-Note that
-\fInoatime\fR
-may break applications that rely on atime uptimes like the venerable Mutt (unless you use maildir mailboxes)\&.
-.RE
-.SH "FILESYSTEM FEATURES"
+Note that \fInoatime\fP may break applications that rely on atime uptimes like
+the venerable Mutt (unless you use maildir mailboxes).
+.UNINDENT
+.SH FILESYSTEM FEATURES
 .sp
-The basic set of filesystem features gets extended over time\&. The backward compatibility is maintained and the features are optional, need to be explicitly asked for so accidental use will not create incompatibilities\&.
+The basic set of filesystem features gets extended over time. The backward
+compatibility is maintained and the features are optional, need to be
+explicitly asked for so accidental use will not create incompatibilities.
 .sp
 There are several classes and the respective tools to manage the features:
-.PP
-at mkfs time only
-.RS 4
-This is namely for core structures, like the b\-tree nodesize or checksum algorithm, see
-\fBmkfs\&.btrfs\fR(8) for more details\&.
-.RE
-.PP
-after mkfs, on an unmounted filesystem
-.RS 4
-Features that may optimize internal structures or add new structures to support new functionality, see
-\fBbtrfstune\fR(8)\&. The command
-\fBbtrfs inspect\-internal dump\-super device\fR
+.INDENT 0.0
+.TP
+.B at mkfs time only
+This is namely for core structures, like the b\-tree nodesize or checksum
+algorithm, see \fI\%mkfs.btrfs(8)\fP for more details.
+.TP
+.B after mkfs, on an unmounted filesystem
+Features that may optimize internal structures or add new structures to support
+new functionality, see \fI\%btrfstune(8)\fP\&. The command
+\fBbtrfs inspect\-internal dump\-super /dev/sdx\fP
 will dump a superblock, you can map the value of
-\fIincompat_flags\fR
-to the features listed below
-.RE
-.PP
-after mkfs, on a mounted filesystem
-.RS 4
+\fIincompat_flags\fP to the features listed below
+.TP
+.B after mkfs, on a mounted filesystem
 The features of a filesystem (with a given UUID) are listed in
-\fB/sys/fs/btrfs/UUID/features/\fR, one file per feature\&. The status is stored inside the file\&. The value
-\fI1\fR
-is for enabled and active, while
-\fI0\fR
-means the feature was enabled at mount time but turned off afterwards\&.
+\fI/sys/fs/btrfs/UUID/features/\fP, one file per feature. The status is stored
+inside the file. The value \fI1\fP is for enabled and active, while \fI0\fP means the
+feature was enabled at mount time but turned off afterwards.
 .sp
-Whether a particular feature can be turned on a mounted filesystem can be found in the directory
-\fB/sys/fs/btrfs/features/\fR, one file per feature\&. The value
-\fI1\fR
-means the feature can be enabled\&.
-.RE
+Whether a particular feature can be turned on a mounted filesystem can be found
+in the directory \fI/sys/fs/btrfs/features/\fP, one file per feature. The value \fI1\fP
+means the feature can be enabled.
+.UNINDENT
 .sp
-List of features (see also \fBmkfs\&.btrfs\fR(8) section \fIFILESYSTEM FEATURES\fR):
-.PP
-\fBbig_metadata\fR
-.RS 4
-(since: 3\&.4)
+List of features (see also \fI\%mkfs.btrfs(8)\fP section
+\fI\%FILESYSTEM FEATURES\fP):
+.INDENT 0.0
+.TP
+.B big_metadata
+(since: 3.4)
 .sp
-the filesystem uses
-\fInodesize\fR
-for metadata blocks, this can be bigger than the page size
-.RE
-.PP
-\fBcompress_lzo\fR
-.RS 4
-(since: 2\&.6\&.38)
+the filesystem uses \fInodesize\fP for metadata blocks, this can be bigger than the
+page size
+.TP
+.B block_group_tree
+(since: 6.1)
 .sp
-the
-\fIlzo\fR
-compression has been used on the filesystem, either as a mount option or via
-\fBbtrfs filesystem defrag\fR\&.
-.RE
-.PP
-\fBcompress_zstd\fR
-.RS 4
-(since: 4\&.14)
+block group item representation using a dedicated b\-tree, this can greatly
+reduce mount time for large filesystems
+.TP
+.B compress_lzo
+(since: 2.6.38)
 .sp
-the
-\fIzstd\fR
-compression has been used on the filesystem, either as a mount option or via
-\fBbtrfs filesystem defrag\fR\&.
-.RE
-.PP
-\fBdefault_subvol\fR
-.RS 4
-(since: 2\&.6\&.34)
+the \fIlzo\fP compression has been used on the filesystem, either as a mount option
+or via \fBbtrfs filesystem defrag\fP\&.
+.TP
+.B compress_zstd
+(since: 4.14)
+.sp
+the \fIzstd\fP compression has been used on the filesystem, either as a mount option
+or via \fBbtrfs filesystem defrag\fP\&.
+.TP
+.B default_subvol
+(since: 2.6.34)
 .sp
 the default subvolume has been set on the filesystem
-.RE
-.PP
-\fBextended_iref\fR
-.RS 4
-(since: 3\&.7)
+.TP
+.B extended_iref
+(since: 3.7)
 .sp
-increased hardlink limit per file in a directory to 65536, older kernels supported a varying number of hardlinks depending on the sum of all file name sizes that can be stored into one metadata block
-.RE
-.PP
-\fBfree_space_tree\fR
-.RS 4
-(since: 4\&.5)
+increased hardlink limit per file in a directory to 65536, older kernels
+supported a varying number of hardlinks depending on the sum of all file name
+sizes that can be stored into one metadata block
+.TP
+.B free_space_tree
+(since: 4.5)
 .sp
 free space representation using a dedicated b\-tree, successor of v1 space cache
-.RE
-.PP
-\fBmetadata_uuid\fR
-.RS 4
-(since: 5\&.0)
+.TP
+.B metadata_uuid
+(since: 5.0)
 .sp
-the main filesystem UUID is the metadata_uuid, which stores the new UUID only in the superblock while all metadata blocks still have the UUID set at mkfs time, see
-\fBbtrfstune\fR(8) for more
-.RE
-.PP
-\fBmixed_backref\fR
-.RS 4
-(since: 2\&.6\&.31)
+the main filesystem UUID is the metadata_uuid, which stores the new UUID only
+in the superblock while all metadata blocks still have the UUID set at mkfs
+time, see \fI\%btrfstune(8)\fP for more
+.TP
+.B mixed_backref
+(since: 2.6.31)
 .sp
 the last major disk format change, improved backreferences, now default
-.RE
-.PP
-\fBmixed_groups\fR
-.RS 4
-(since: 2\&.6\&.37)
+.TP
+.B mixed_groups
+(since: 2.6.37)
 .sp
-mixed data and metadata block groups, ie\&. the data and metadata are not separated and occupy the same block groups, this mode is suitable for small volumes as there are no constraints how the remaining space should be used (compared to the split mode, where empty metadata space cannot be used for data and vice versa)
+mixed data and metadata block groups, i.e. the data and metadata are not
+separated and occupy the same block groups, this mode is suitable for small
+volumes as there are no constraints how the remaining space should be used
+(compared to the split mode, where empty metadata space cannot be used for data
+and vice versa)
 .sp
-on the other hand, the final layout is quite unpredictable and possibly highly fragmented, which means worse performance
-.RE
-.PP
-\fBno_holes\fR
-.RS 4
-(since: 3\&.14)
+on the other hand, the final layout is quite unpredictable and possibly highly
+fragmented, which means worse performance
+.TP
+.B no_holes
+(since: 3.14)
 .sp
-improved representation of file extents where holes are not explicitly stored as an extent, saves a few percent of metadata if sparse files are used
-.RE
-.PP
-\fBraid1c34\fR
-.RS 4
-(since: 5\&.5)
+improved representation of file extents where holes are not explicitly
+stored as an extent, saves a few percent of metadata if sparse files are used
+.TP
+.B raid1c34
+(since: 5.5)
 .sp
 extended RAID1 mode with copies on 3 or 4 devices respectively
-.RE
-.PP
-\fBraid56\fR
-.RS 4
-(since: 3\&.9)
+.TP
+.B RAID56
+(since: 3.9)
 .sp
-the filesystem contains or contained a raid56 profile of block groups
-.RE
-.PP
-\fBrmdir_subvol\fR
-.RS 4
-(since: 4\&.18)
+the filesystem contains or contained a RAID56 profile of block groups
+.TP
+.B rmdir_subvol
+(since: 4.18)
 .sp
-indicate that
-\fBrmdir\fR(2) syscall can delete an empty subvolume just like an ordinary directory\&. Note that this feature only depends on the kernel version\&.
-.RE
-.PP
-\fBskinny_metadata\fR
-.RS 4
-(since: 3\&.10)
+indicate that \fBrmdir(2)\fP syscall can delete an empty subvolume just like an
+ordinary directory. Note that this feature only depends on the kernel version.
+.TP
+.B skinny_metadata
+(since: 3.10)
 .sp
 reduced\-size metadata for extent references, saves a few percent of metadata
-.RE
-.PP
-\fBsend_stream_version\fR
-.RS 4
-(since: 5\&.10)
+.TP
+.B send_stream_version
+(since: 5.10)
 .sp
 number of the highest supported send stream version
-.RE
-.PP
-\fBsupported_checksums\fR
-.RS 4
-(since: 5\&.5)
+.TP
+.B supported_checksums
+(since: 5.5)
 .sp
-list of checksum algorithms supported by the kernel module, the respective modules or built\-in implementing the algorithms need to be present to mount the filesystem, see
-\fICHECKSUM ALGORITHMS\fR
-.RE
-.PP
-\fBsupported_sectorsizes\fR
-.RS 4
-(since: 5\&.13)
+list of checksum algorithms supported by the kernel module, the respective
+modules or built\-in implementing the algorithms need to be present to mount
+the filesystem, see \fICHECKSUM ALGORITHMS\fP
+.TP
+.B supported_sectorsizes
+(since: 5.13)
 .sp
-list of values that are accepted as sector sizes (\fBmkfs\&.btrfs \-\-sectorsize\fR) by the running kernel
-.RE
-.PP
-\fBsupported_rescue_options\fR
-.RS 4
-(since: 5\&.11)
+list of values that are accepted as sector sizes (\fBmkfs.btrfs \-\-sectorsize\fP) by
+the running kernel
+.TP
+.B supported_rescue_options
+(since: 5.11)
 .sp
-list of values for the mount option
-\fIrescue\fR
-that are supported by the running kernel, see
-\fBbtrfs\fR(5)
-.RE
-.PP
-\fBzoned\fR
-.RS 4
-(since: 5\&.12)
+list of values for the mount option \fIrescue\fP that are supported by the running
+kernel, see \fI\%btrfs(5)\fP
+.TP
+.B zoned
+(since: 5.12)
 .sp
-zoned mode is allocation/write friendly to host\-managed zoned devices, allocation space is partitioned into fixed\-size zones that must be updated sequentially, see
-\fIZONED MODE\fR
-.RE
-.SS "SWAPFILE SUPPORT"
+zoned mode is allocation/write friendly to host\-managed zoned devices,
+allocation space is partitioned into fixed\-size zones that must be updated
+sequentially, see \fIZONED MODE\fP
+.UNINDENT
+.SH SWAPFILE SUPPORT
 .sp
-The swapfile is supported since kernel 5\&.0\&. Use \fBswapon\fR(8) to activate the swapfile\&. There are some limitations of the implementation in btrfs and linux swap subsystem:
+A swapfile, when active, is a file\-backed swap area.  It is supported since kernel 5.0.
+Use \fBswapon(8)\fP to activate it, until then (respectively again after deactivating it
+with \fBswapoff(8)\fP) it\(aqs just a normal file (with NODATACOW set), for which the special
+restrictions for active swapfiles don\(aqt apply.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+There are some limitations of the implementation in BTRFS and Linux swap
+subsystem:
+.INDENT 0.0
+.IP \(bu 2
 filesystem \- must be only single device
-.RE
+.IP \(bu 2
+filesystem \- must have only \fIsingle\fP data profile
+.IP \(bu 2
+subvolume \- cannot be snapshotted if it contains any active swapfiles
+.IP \(bu 2
+swapfile \- must be preallocated (i.e. no holes)
+.IP \(bu 2
+swapfile \- must be NODATACOW (i.e. also NODATASUM, no compression)
+.UNINDENT
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-filesystem \- must have only
-\fIsingle\fR
-data profile
-.RE
+The limitations come namely from the COW\-based design and mapping layer of
+blocks that allows the advanced features like relocation and multi\-device
+filesystems. However, the swap subsystem expects simpler mapping and no
+background changes of the file block location once they\(aqve been assigned to
+swap.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-swapfile \- the containing subvolume cannot be snapshotted
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-swapfile \- must be preallocated
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-swapfile \- must be nodatacow (ie\&. also nodatasum)
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-swapfile \- must not be compressed
-.RE
-.sp
-The limitations come namely from the COW\-based design and mapping layer of blocks that allows the advanced features like relocation and multi\-device filesystems\&. However, the swap subsystem expects simpler mapping and no background changes of the file blocks once they\(cqve been attached to swap\&.
-.sp
-With active swapfiles, the following whole\-filesystem operations will skip swapfile extents or may fail:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-balance \- block groups with swapfile extents are skipped and reported, the rest will be processed normally
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+With active swapfiles, the following whole\-filesystem operations will skip
+swapfile extents or may fail:
+.INDENT 0.0
+.IP \(bu 2
+balance \- block groups with extents of any active swapfiles are skipped and
+reported, the rest will be processed normally
+.IP \(bu 2
 resize grow \- unaffected
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-resize shrink \- works as long as the extents are outside of the shrunk range
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-device add \- a new device does not interfere with existing swapfile and this operation will work, though no new swapfile can be activated afterwards
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
+resize shrink \- works as long as the extents of any active swapfiles are
+outside of the shrunk range
+.IP \(bu 2
+device add \- if the new devices do not interfere with any already active swapfiles
+this operation will work, though no new swapfile can be activated
+afterwards
+.IP \(bu 2
 device delete \- if the device has been added as above, it can be also deleted
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 device replace \- ditto
-.RE
+.UNINDENT
 .sp
-When there are no active swapfiles and a whole\-filesystem exclusive operation is running (ie\&. balance, device delete, shrink), the swapfiles cannot be temporarily activated\&. The operation must finish first\&.
+When there are no active swapfiles and a whole\-filesystem exclusive operation
+is running (e.g. balance, device delete, shrink), the swapfiles cannot be
+temporarily activated. The operation must finish first.
 .sp
 To create and activate a swapfile run the following commands:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 # truncate \-s 0 swapfile
 # chattr +C swapfile
 # fallocate \-l 2G swapfile
 # chmod 0600 swapfile
 # mkswap swapfile
 # swapon swapfile
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-Please note that the UUID returned by the \fImkswap\fR utility identifies the swap "filesystem" and because it\(cqs stored in a file, it\(cqs not generally visible and usable as an identifier unlike if it was on a block device\&.
+Since version 6.1 it\(aqs possible to create the swapfile in a single command
+(except the activation):
+.INDENT 0.0
+.INDENT 3.5
 .sp
-The file will appear in \fI/proc/swaps\fR:
-.sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
+# btrfs filesystem mkswapfile \-\-size 2G swapfile
+# swapon swapfile
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Please note that the UUID returned by the \fImkswap\fP utility identifies the swap
+\(dqfilesystem\(dq and because it\(aqs stored in a file, it\(aqs not generally visible and
+usable as an identifier unlike if it was on a block device.
+.sp
+Once activated the file will appear in \fI/proc/swaps\fP:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
 # cat /proc/swaps
 Filename          Type          Size           Used      Priority
 /path/swapfile    file          2097152        0         \-2
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-The swapfile can be created as one\-time operation or, once properly created, activated on each boot by the \fIswapon \-a\fR command (usually started by the service manager)\&. Add the following entry to \fI/etc/fstab\fR, assuming the filesystem that provides the \fI/path\fR has been already mounted at this point\&. Additional mount options relevant for the swapfile can be set too (like priority, not the btrfs mount options)\&.
+The swapfile can be created as one\-time operation or, once properly created,
+activated on each boot by the \fBswapon \-a\fP command (usually started by the
+service manager). Add the following entry to \fI/etc/fstab\fP, assuming the
+filesystem that provides the \fI/path\fP has been already mounted at this point.
+Additional mount options relevant for the swapfile can be set too (like
+priority, not the BTRFS mount options).
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 /path/swapfile        none        swap        defaults      0 0
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
-.SH "CHECKSUM ALGORITHMS"
+.UNINDENT
+.UNINDENT
 .sp
-There are several checksum algorithms supported\&. The default and backward compatible is \fIcrc32c\fR\&. Since kernel 5\&.5 there are three more with different characteristics and trade\-offs regarding speed and strength\&. The following list may help you to decide which one to select\&.
-.PP
-\fBCRC32C\fR (32bit digest)
-.RS 4
-default, best backward compatibility, very fast, modern CPUs have instruction\-level support, not collision\-resistant but still good error detection capabilities
-.RE
-.PP
-\fBXXHASH\fR (64bit digest)
-.RS 4
-can be used as CRC32C successor, very fast, optimized for modern CPUs utilizing instruction pipelining, good collision resistance and error detection
-.RE
-.PP
-\fBSHA256\fR (256bit digest)
-.RS 4
-a cryptographic\-strength hash, relatively slow but with possible CPU instruction acceleration or specialized hardware cards, FIPS certified and in wide use
-.RE
-.PP
-\fBBLAKE2b\fR (256bit digest)
-.RS 4
-a cryptographic\-strength hash, relatively fast with possible CPU acceleration using SIMD extensions, not standardized but based on BLAKE which was a SHA3 finalist, in wide use, the algorithm used is BLAKE2b\-256 that\(cqs optimized for 64bit platforms
-.RE
+From now on the subvolume with the active swapfile cannot be snapshotted until
+the swapfile is deactivated again by \fBswapoff\fP\&. Then the swapfile is a
+regular file and the subvolume can be snapshotted again, though this would prevent
+another activation any swapfile that has been snapshotted. New swapfiles (not
+snapshotted) can be created and activated.
 .sp
-The \fIdigest size\fR affects overall size of data block checksums stored in the filesystem\&. The metadata blocks have a fixed area up to 256bits (32 bytes), so there\(cqs no increase\&. Each data block has a separate checksum stored, with additional overhead of the b\-tree leaves\&.
+Otherwise, an inactive swapfile does not affect the containing subvolume. Activation
+creates a temporary in\-memory status and prevents some file operations, but is
+not stored permanently.
+.SH HIBERNATION
 .sp
-Approximate relative performance of the algorithms, measured against CRC32C using reference software implementations on a 3\&.5GHz intel CPU:
+A swapfile can be used for hibernation but it\(aqs not straightforward. Before
+hibernation a resume offset must be written to file \fI/sys/power/resume_offset\fP
+or the kernel command line parameter \fIresume_offset\fP must be set.
+.sp
+The value is the physical offset on the device. Note that \fBthis is not the same
+value that\fP \fBfilefrag\fP \fBprints as physical offset!\fP
+.sp
+Btrfs filesystem uses mapping between logical and physical addresses but here
+the physical can still map to one or more device\-specific physical block
+addresses. It\(aqs the device\-specific physical offset that is suitable as resume
+offset.
+.sp
+Since version 6.1 there\(aqs a command \fBbtrfs inspect\-internal map\-swapfile\fP that will
+print the device physical offset and the adjusted value for \fI/sys/power/resume_offset\fP\&.
+Note that the value is divided by page size, i.e. it\(aqs not the offset itself.
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+# btrfs filesystem mkswapfile swapfile
+# btrfs inspect\-internal map\-swapfile swapfile
+Physical start: 811511726080
+Resume offset:     198122980
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+For scripting and convenience the option \fI\-r\fP will print just the offset:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+# btrfs inspect\-internal map\-swapfile \-r swapfile
+198122980
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+The command \fImap\-swapfile\fP also verifies all the requirements, i.e. no holes,
+single device, etc.
+.SH TROUBLESHOOTING
+.sp
+If the swapfile activation fails please verify that you followed all the steps
+above or check the system log (e.g. \fBdmesg\fP or \fBjournalctl\fP) for more
+information.
+.sp
+Notably, the \fBswapon\fP utility exits with a message that does not say what
+failed:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+# swapon /path/swapfile
+swapon: /path/swapfile: swapon failed: Invalid argument
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+The specific reason is likely to be printed to the system log by the btrfs
+module:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+# journalctl \-t kernel | grep swapfile
+kernel: BTRFS warning (device sda): swapfile must have single data profile
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SH CHECKSUM ALGORITHMS
+.sp
+Data and metadata are checksummed by default, the checksum is calculated before
+write and verified after reading the blocks from devices. The whole metadata
+block has a checksum stored inline in the b\-tree node header, each data block
+has a detached checksum stored in the checksum tree.
+.sp
+There are several checksum algorithms supported. The default and backward
+compatible is \fIcrc32c\fP\&.  Since kernel 5.5 there are three more with different
+characteristics and trade\-offs regarding speed and strength. The following list
+may help you to decide which one to select.
+.INDENT 0.0
+.TP
+.B CRC32C (32bit digest)
+default, best backward compatibility, very fast, modern CPUs have
+instruction\-level support, not collision\-resistant but still good error
+detection capabilities
+.TP
+.B XXHASH (64bit digest)
+can be used as CRC32C successor, very fast, optimized for modern CPUs utilizing
+instruction pipelining, good collision resistance and error detection
+.TP
+.B SHA256 (256bit digest)
+a cryptographic\-strength hash, relatively slow but with possible CPU
+instruction acceleration or specialized hardware cards, FIPS certified and
+in wide use
+.TP
+.B BLAKE2b (256bit digest)
+a cryptographic\-strength hash, relatively fast with possible CPU acceleration
+using SIMD extensions, not standardized but based on BLAKE which was a SHA3
+finalist, in wide use, the algorithm used is BLAKE2b\-256 that\(aqs optimized for
+64bit platforms
+.UNINDENT
+.sp
+The \fIdigest size\fP affects overall size of data block checksums stored in the
+filesystem.  The metadata blocks have a fixed area up to 256 bits (32 bytes), so
+there\(aqs no increase. Each data block has a separate checksum stored, with
+additional overhead of the b\-tree leaves.
+.sp
+Approximate relative performance of the algorithms, measured against CRC32C
+using reference software implementations on a 3.5GHz intel CPU:
 .TS
-allbox tab(:);
-ct rt rt rt
-ct rt rt rt
-ct rt rt rt
-ct rt rt rt
-ct rt rt rt
-ct rt rt rt
-ct rt rt rt
-ct rt rt rt
-ct rt rt rt.
+center;
+|l|l|l|l|.
+_
 T{
-.sp
-\fBDigest\fR
-T}:T{
-.sp
-\fBCycles/4KiB\fR
-T}:T{
-.sp
-\fBRatio\fR
-T}:T{
-.sp
-\fBImplementation\fR
+Digest
+T}	T{
+Cycles/4KiB
+T}	T{
+Ratio
+T}	T{
+Implementation
 T}
+_
 T{
-.sp
 CRC32C
-T}:T{
-.sp
+T}	T{
 1700
-T}:T{
-.sp
-1\&.00
-T}:T{
-.sp
+T}	T{
+1.00
+T}	T{
 CPU instruction
 T}
+_
 T{
-.sp
 XXHASH
-T}:T{
-.sp
+T}	T{
 2500
-T}:T{
-.sp
-1\&.44
-T}:T{
-.sp
-reference impl\&.
+T}	T{
+1.44
+T}	T{
+reference impl.
 T}
+_
 T{
-.sp
 SHA256
-T}:T{
-.sp
+T}	T{
 105000
-T}:T{
-.sp
+T}	T{
 61
-T}:T{
-.sp
-reference impl\&.
+T}	T{
+reference impl.
 T}
+_
 T{
-.sp
 SHA256
-T}:T{
-.sp
+T}	T{
 36000
-T}:T{
-.sp
+T}	T{
 21
-T}:T{
-.sp
+T}	T{
 libgcrypt/AVX2
 T}
+_
 T{
-.sp
 SHA256
-T}:T{
-.sp
+T}	T{
 63000
-T}:T{
-.sp
+T}	T{
 37
-T}:T{
-.sp
+T}	T{
 libsodium/AVX2
 T}
+_
 T{
-.sp
 BLAKE2b
-T}:T{
-.sp
+T}	T{
 22000
-T}:T{
-.sp
+T}	T{
 13
-T}:T{
-.sp
-reference impl\&.
+T}	T{
+reference impl.
 T}
+_
 T{
-.sp
 BLAKE2b
-T}:T{
-.sp
+T}	T{
 19000
-T}:T{
-.sp
+T}	T{
 11
-T}:T{
-.sp
+T}	T{
 libgcrypt/AVX2
 T}
+_
 T{
-.sp
 BLAKE2b
-T}:T{
-.sp
+T}	T{
 19000
-T}:T{
-.sp
+T}	T{
 11
-T}:T{
-.sp
+T}	T{
 libsodium/AVX2
 T}
+_
 .TE
-.sp 1
 .sp
-Many kernels are configured with SHA256 as built\-in and not as a module\&. The accelerated versions are however provided by the modules and must be loaded explicitly (\fBmodprobe sha256\fR) before mounting the filesystem to make use of them\&. You can check in \fI/sys/fs/btrfs/FSID/checksum\fR which one is used\&. If you see \fIsha256\-generic\fR, then you may want to unmount and mount the filesystem again, changing that on a mounted filesystem is not possible\&. Check the file \fI/proc/crypto\fR, when the implementation is built\-in, you\(cqd find
+Many kernels are configured with SHA256 as built\-in and not as a module.
+The accelerated versions are however provided by the modules and must be loaded
+explicitly (\fBmodprobe sha256\fP) before mounting the filesystem to make use of
+them. You can check in \fI/sys/fs/btrfs/FSID/checksum\fP which one is used. If you
+see \fIsha256\-generic\fP, then you may want to unmount and mount the filesystem
+again, changing that on a mounted filesystem is not possible.
+Check the file \fI/proc/crypto\fP, when the implementation is built\-in, you\(aqd find
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 name         : sha256
 driver       : sha256\-generic
 module       : kernel
 priority     : 100
-\&.\&.\&.
+\&...
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-while accelerated implementation is e\&.g\&.
+while accelerated implementation is e.g.
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 name         : sha256
 driver       : sha256\-avx2
 module       : sha256_ssse3
 priority     : 170
-\&.\&.\&.
+\&...
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
-.SH "COMPRESSION"
+.UNINDENT
+.UNINDENT
+.SH COMPRESSION
 .sp
-Btrfs supports transparent file compression\&. There are three algorithms available: ZLIB, LZO and ZSTD (since v4\&.14)\&. Basically, compression is on a file by file basis\&. You can have a single btrfs mount point that has some files that are uncompressed, some that are compressed with LZO, some with ZLIB, for instance (though you may not want it that way, it is supported)\&.
+Btrfs supports transparent file compression. There are three algorithms
+available: ZLIB, LZO and ZSTD (since v4.14), with various levels.
+The compression happens on the level of file extents and the algorithm is
+selected by file property, mount option or by a defrag command.
+You can have a single btrfs mount point that has some files that are
+uncompressed, some that are compressed with LZO, some with ZLIB, for instance
+(though you may not want it that way, it is supported).
 .sp
-To enable compression, mount the filesystem with options \fIcompress\fR or \fIcompress\-force\fR\&. Please refer to section \fIMOUNT OPTIONS\fR\&. Once compression is enabled, all new writes will be subject to compression\&. Some files may not compress very well, and these are typically not recompressed but still written uncompressed\&.
+Once the compression is set, all newly written data will be compressed, i.e.
+existing data are untouched. Data are split into smaller chunks (128KiB) before
+compression to make random rewrites possible without a high performance hit. Due
+to the increased number of extents the metadata consumption is higher. The
+chunks are compressed in parallel.
 .sp
-Each compression algorithm has different speed/ratio trade offs\&. The levels can be selected by a mount option and affect only the resulting size (ie\&. no compatibility issues)\&.
-.sp
-Basic characteristics:
-.TS
-tab(:);
-lt lt
-lt lt
-lt lt.
-T{
-.sp
-ZLIB
-T}:T{
-.sp
+The algorithms can be characterized as follows regarding the speed/ratio
+trade\-offs:
+.INDENT 0.0
+.TP
+.B ZLIB
+.INDENT 7.0
+.IP \(bu 2
 slower, higher compression ratio
-
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 levels: 1 to 9, mapped directly, default level is 3
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 good backward compatibility
-.RE
-T}
-T{
-.sp
-LZO
-T}:T{
-.sp
-faster compression and decompression than zlib, worse compression ratio, designed to be fast
-
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.UNINDENT
+.TP
+.B LZO
+.INDENT 7.0
+.IP \(bu 2
+faster compression and decompression than ZLIB, worse compression ratio, designed to be fast
+.IP \(bu 2
 no levels
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 good backward compatibility
-.RE
-T}
-T{
+.UNINDENT
+.TP
+.B ZSTD
+.INDENT 7.0
+.IP \(bu 2
+compression comparable to ZLIB with higher compression/decompression speeds and different ratio
+.IP \(bu 2
+levels: 1 to 15, mapped directly (higher levels are not available)
+.IP \(bu 2
+since 4.14, levels since 5.1
+.UNINDENT
+.UNINDENT
 .sp
-ZSTD
-T}:T{
+The differences depend on the actual data set and cannot be expressed by a
+single number or recommendation. Higher levels consume more CPU time and may
+not bring a significant improvement, lower levels are close to real time.
+.SH HOW TO ENABLE COMPRESSION
 .sp
-compression comparable to zlib with higher compression/decompression speeds and different ratio
-
+Typically the compression can be enabled on the whole filesystem, specified for
+the mount point. Note that the compression mount options are shared among all
+mounts of the same filesystem, either bind mounts or subvolume mounts.
+Please refer to \fI\%btrfs(5)\fP section
+\fI\%MOUNT OPTIONS\fP\&.
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-levels: 1 to 15
-.RE
+.nf
+.ft C
+$ mount \-o compress=zstd /dev/sdx /mnt
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-since 4\&.14, levels since 5\&.1
-.RE
-T}
-.TE
-.sp 1
+This will enable the \fBzstd\fP algorithm on the default level (which is 3).
+The level can be specified manually too like \fBzstd:3\fP\&. Higher levels compress
+better at the cost of time. This in turn may cause increased write latency, low
+levels are suitable for real\-time compression and on reasonably fast CPU don\(aqt
+cause noticeable performance drops.
+.INDENT 0.0
+.INDENT 3.5
 .sp
-The differences depend on the actual data set and cannot be expressed by a single number or recommendation\&. Higher levels consume more CPU time and may not bring a significant improvement, lower levels are close to real time\&.
+.nf
+.ft C
+$ btrfs filesystem defrag \-czstd file
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .sp
-The algorithms could be mixed in one file as they\(cqre stored per extent\&. The compression can be changed on a file by \fBbtrfs filesystem defrag\fR command, using the \fI\-c\fR option, or by \fBbtrfs property set\fR using the \fIcompression\fR property\&. Setting compression by \fIchattr +c\fR utility will set it to zlib\&.
-.SS "INCOMPRESSIBLE DATA"
+The command above will start defragmentation of the whole \fIfile\fP and apply
+the compression, regardless of the mount option. (Note: specifying level is not
+yet implemented). The compression algorithm is not persistent and applies only
+to the defragmentation command, for any other writes other compression settings
+apply.
 .sp
-Files with already compressed data or with data that won\(cqt compress well with the CPU and memory constraints of the kernel implementations are using a simple decision logic\&. If the first portion of data being compressed is not smaller than the original, the compression of the file is disabled \(em unless the filesystem is mounted with \fIcompress\-force\fR\&. In that case compression will always be attempted on the file only to be later discarded\&. This is not optimal and subject to optimizations and further development\&.
+Persistent settings on a per\-file basis can be set in two ways:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-If a file is identified as incompressible, a flag is set (NOCOMPRESS) and it\(cqs sticky\&. On that file compression won\(cqt be performed unless forced\&. The flag can be also set by \fIchattr +m\fR (since e2fsprogs 1\&.46\&.2) or by properties with value \fIno\fR or \fInone\fR\&. Empty value will reset it to the default that\(cqs currently applicable on the mounted filesystem\&.
+.nf
+.ft C
+$ chattr +c file
+$ btrfs property set file compression zstd
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+The first command is using legacy interface of file attributes inherited from
+ext2 filesystem and is not flexible, so by default the \fIzlib\fP compression is
+set. The other command sets a property on the file with the given algorithm.
+(Note: setting level that way is not yet implemented.)
+.SH COMPRESSION LEVELS
+.sp
+The level support of ZLIB has been added in v4.14, LZO does not support levels
+(the kernel implementation provides only one), ZSTD level support has been added
+in v5.1.
+.sp
+There are 9 levels of ZLIB supported (1 to 9), mapping 1:1 from the mount option
+to the algorithm defined level. The default is level 3, which provides the
+reasonably good compression ratio and is still reasonably fast. The difference
+in compression gain of levels 7, 8 and 9 is comparable but the higher levels
+take longer.
+.sp
+The ZSTD support includes levels 1 to 15, a subset of full range of what ZSTD
+provides. Levels 1\-3 are real\-time, 4\-8 slower with improved compression and
+9\-15 try even harder though the resulting size may not be significantly improved.
+.sp
+Level 0 always maps to the default. The compression level does not affect
+compatibility.
+.SH INCOMPRESSIBLE DATA
+.sp
+Files with already compressed data or with data that won\(aqt compress well with
+the CPU and memory constraints of the kernel implementations are using a simple
+decision logic. If the first portion of data being compressed is not smaller
+than the original, the compression of the file is disabled \-\- unless the
+filesystem is mounted with \fIcompress\-force\fP\&. In that case compression will
+always be attempted on the file only to be later discarded. This is not optimal
+and subject to optimizations and further development.
+.sp
+If a file is identified as incompressible, a flag is set (\fINOCOMPRESS\fP) and it\(aqs
+sticky. On that file compression won\(aqt be performed unless forced. The flag
+can be also set by \fBchattr +m\fP (since e2fsprogs 1.46.2) or by properties with
+value \fIno\fP or \fInone\fP\&. Empty value will reset it to the default that\(aqs currently
+applicable on the mounted filesystem.
 .sp
 There are two ways to detect incompressible data:
+.INDENT 0.0
+.IP \(bu 2
+actual compression attempt \- data are compressed, if the result is not smaller,
+it\(aqs discarded, so this depends on the algorithm and level
+.IP \(bu 2
+pre\-compression heuristics \- a quick statistical evaluation on the data is
+performed and based on the result either compression is performed or skipped,
+the NOCOMPRESS bit is not set just by the heuristic, only if the compression
+algorithm does not make an improvement
+.UNINDENT
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-actual compression attempt \- data are compressed, if the result is not smaller, it\(cqs discarded, so this depends on the algorithm and level
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-pre\-compression heuristics \- a quick statistical evaluation on the data is peformed and based on the result either compression is performed or skipped, the NOCOMPRESS bit is not set just by the heuristic, only if the compression algorithm does not make an improvent
-.RE
-.SS "PRE\-COMPRESSION HEURISTICS"
-.sp
-The heuristics aim to do a few quick statistical tests on the compressed data in order to avoid probably costly compression that would turn out to be inefficient\&. Compression algorithms could have internal detection of incompressible data too but this leads to more overhead as the compression is done in another thread and has to write the data anyway\&. The heuristic is read\-only and can utilize cached memory\&.
-.sp
-The tests performed based on the following: data sampling, long repated pattern detection, byte frequency, Shannon entropy\&.
-.SS "COMPATIBILITY WITH OTHER FEATURES"
-.sp
-Compression is done using the COW mechanism so it\(cqs incompatible with \fInodatacow\fR\&. Direct IO works on compressed files but will fall back to buffered writes\&. Currently \fInodatasum\fR and compression don\(cqt work together\&.
-.SH "FILESYSTEM EXCLUSIVE OPERATIONS"
-.sp
-There are several operations that affect the whole filesystem and cannot be run in parallel\&. Attempt to start one while another is running will fail\&.
-.sp
-Since kernel 5\&.10 the currently running operation can be obtained from \fB/sys/fs/UUID/exclusive_operation\fR with following values and operations:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-balance
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-device add
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-device delete
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-device replace
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-resize
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-swapfile activate
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-none
-.RE
-.sp
-Enqueuing is supported for several btrfs subcommands so they can be started at once and then serialized\&.
-.SH "FILESYSTEM LIMITS"
-.PP
-maximum file name length
-.RS 4
-255
-.RE
-.PP
-maximum symlink target length
-.RS 4
-depends on the
-\fInodesize\fR
-value, for 4k it\(cqs 3949 bytes, for larger nodesize it\(cqs 4095 due to the system limit PATH_MAX
-.sp
-The symlink target may not be a valid path, ie\&. the path name components can exceed the limits (NAME_MAX), there\(cqs no content validation at
-\fBsymlink\fR(3) creation\&.
-.RE
-.PP
-maximum number of inodes
-.RS 4
-2^64 but depends on the available metadata space as the inodes are created dynamically
-.RE
-.PP
-inode numbers
-.RS 4
-minimum number: 256 (for subvolumes), regular files and directories: 257
-.RE
-.PP
-maximum file length
-.RS 4
-inherent limit of btrfs is 2^64 (16 EiB) but the linux VFS limit is 2^63 (8 EiB)
-.RE
-.PP
-maximum number of subvolumes
-.RS 4
-the subvolume ids can go up to 2^64 but the number of actual subvolumes depends on the available metadata space, the space consumed by all subvolume metadata includes bookkeeping of shared extents can be large (MiB, GiB)
-.RE
-.PP
-maximum number of hardlinks of a file in a directory
-.RS 4
-65536 when the
-\fBextref\fR
-feature is turned on during mkfs (default), roughly 100 otherwise
-.RE
-.PP
-minimum filesystem size
-.RS 4
-the minimal size of each device depends on the
-\fImixed\-bg\fR
-feature, without that (the default) it\(cqs about 109MiB, with mixed\-bg it\(cqs is 16MiB
-.RE
-.SH "BOOTLOADER SUPPORT"
-.sp
-GRUB2 (\m[blue]\fBhttps://www\&.gnu\&.org/software/grub\fR\m[]) has the most advanced support of booting from BTRFS with respect to features\&.
-.sp
-U\-boot (\m[blue]\fBhttps://www\&.denx\&.de/wiki/U\-Boot/\fR\m[]) has decent support for booting but not all BTRFS features are implemented, check the documentation\&.
-.sp
-EXTLINUX (from the \m[blue]\fBhttps://syslinux\&.org\fR\m[] project) can boot but does not support all features\&. Please check the upstream documentation before you use it\&.
-.sp
-The first 1MiB on each device is unused with the exception of primary superblock that is on the offset 64KiB and spans 4KiB\&.
-.SH "FILE ATTRIBUTES"
-.sp
-The btrfs filesystem supports setting file attributes or flags\&. Note there are old and new interfaces, with confusing names\&. The following list should clarify that:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIattributes\fR:
-\fBchattr\fR(1) or
-\fBlsattr\fR(1) utilities (the ioctls are FS_IOC_GETFLAGS and FS_IOC_SETFLAGS), due to the ioctl names the attributes are also called flags
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIxflags\fR: to distinguish from the previous, it\(cqs extended flags, with tunable bits similar to the attributes but extensible and new bits will be added in the future (the ioctls are FS_IOC_FSGETXATTR and FS_IOC_FSSETXATTR but they are not related to extended attributes that are also called xattrs), there\(cqs no standard tool to change the bits, there\(cqs support in
-\fBxfs_io\fR(8) as command
-\fBxfs_io \-c chattr\fR
-.RE
-.SS "ATTRIBUTES"
-.PP
-\fBa\fR
-.RS 4
-\fIappend only\fR, new writes are always written at the end of the file
-.RE
-.PP
-\fBA\fR
-.RS 4
-\fIno atime updates\fR
-.RE
-.PP
-\fBc\fR
-.RS 4
-\fIcompress data\fR, all data written after this attribute is set will be compressed\&. Please note that compression is also affected by the mount options or the parent directory attributes\&.
-.sp
-When set on a directory, all newly created files will inherit this attribute\&. This attribute cannot be set with
-\fIm\fR
-at the same time\&.
-.RE
-.PP
-\fBC\fR
-.RS 4
-\fIno copy\-on\-write\fR, file data modifications are done in\-place
-.sp
-When set on a directory, all newly created files will inherit this attribute\&.
-.if n \{\
-.sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
-due to implementation limitations, this flag can be set/unset only on empty files\&.
-.sp .5v
-.RE
-.RE
-.PP
-\fBd\fR
-.RS 4
-\fIno dump\fR, makes sense with 3rd party tools like
-\fBdump\fR(8), on BTRFS the attribute can be set/unset but no other special handling is done
-.RE
-.PP
-\fBD\fR
-.RS 4
-\fIsynchronous directory updates\fR, for more details search
-\fBopen\fR(2) for
-\fIO_SYNC\fR
-and
-\fIO_DSYNC\fR
-.RE
-.PP
-\fBi\fR
-.RS 4
-\fIimmutable\fR, no file data and metadata changes allowed even to the root user as long as this attribute is set (obviously the exception is unsetting the attribute)
-.RE
-.PP
-\fBm\fR
-.RS 4
-\fIno compression\fR, permanently turn off compression on the given file\&. Any compression mount options will not affect this file\&. (\fBchattr\fR
-support added in 1\&.46\&.2)
-.sp
-When set on a directory, all newly created files will inherit this attribute\&. This attribute cannot be set with
-\fIc\fR
-at the same time\&.
-.RE
-.PP
-\fBS\fR
-.RS 4
-\fIsynchronous updates\fR, for more details search
-\fBopen\fR(2) for
-\fIO_SYNC\fR
-and
-\fIO_DSYNC\fR
-.RE
-.sp
-No other attributes are supported\&. For the complete list please refer to the \fBchattr\fR(1) manual page\&.
-.SS "XFLAGS"
-.sp
-There\(cqs overlap of letters assigned to the bits with the attributes, this list refers to what \fBxfs_io\fR(8) provides:
-.PP
-\fBi\fR
-.RS 4
-\fIimmutable\fR, same as the attribute
-.RE
-.PP
-\fBa\fR
-.RS 4
-\fIappend only\fR, same as the attribute
-.RE
-.PP
-\fBs\fR
-.RS 4
-\fIsynchronous updates\fR, same as the attribute
-\fIS\fR
-.RE
-.PP
-\fBA\fR
-.RS 4
-\fIno atime updates\fR, same as the attribute
-.RE
-.PP
-\fBd\fR
-.RS 4
-\fIno dump\fR, same as the attribute
-.RE
-.SH "ZONED MODE"
-.sp
-Since version 5\&.12 btrfs supports so called \fIzoned mode\fR\&. This is a special on\-disk format and allocation/write strategy that\(cqs friendly to zoned devices\&. In short, a device is partitioned into fixed\-size zones and each zone can be updated by append\-only manner, or reset\&. As btrfs has no fixed data structures, except the super blocks, the zoned mode only requires block placement that follows the device constraints\&. You can learn about the whole architecture at \m[blue]\fBhttps://zonedstorage\&.io\fR\m[] \&.
-.sp
-The devices are also called SMR/ZBC/ZNS, in \fIhost\-managed\fR mode\&. Note that there are devices that appear as non\-zoned but actually are, this is \fIdrive\-managed\fR and using zoned mode won\(cqt help\&.
-.sp
-The zone size depends on the device, typical sizes are 256MiB or 1GiB\&. In general it must be a power of two\&. Emulated zoned devices like \fInull_blk\fR allow to set various zone sizes\&.
-.SS "REQUIREMENTS, LIMITATIONS"
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-all devices must have the same zone size
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-maximum zone size is 8GiB
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-mixing zoned and non\-zoned devices is possible, the zone writes are emulated, but this is namely for testing
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-the super block is handled in a special way and is at different locations than on a non\-zoned filesystem:
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-primary: 0B (and the next two zones)
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-secondary: 512G (and the next two zones)
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-tertiary: 4TiB (4096GiB, and the next two zones)
-.RE
-.SS "INCOMPATIBLE FEATURES"
-.sp
-The main constraint of the zoned devices is lack of in\-place update of the data\&. This is inherently incompatbile with some features:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-nodatacow \- overwrite in\-place, cannot create such files
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-fallocate \- preallocating space for in\-place first write
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-mixed\-bg \- unordered writes to data and metadata, fixing that means using separate data and metadata block groups
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-booting \- the zone at offset 0 contains superblock, resetting the zone would destroy the bootloader data
-.RE
-.sp
-Initial support lacks some features but they\(cqre planned:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-only single profile is supported
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-fstrim \- due to dependency on free space cache v1
-.RE
-.SS "SUPER BLOCK"
-.sp
-As said above, super block is handled in a special way\&. In order to be crash safe, at least one zone in a known location must contain a valid superblock\&. This is implemented as a ring buffer in two consecutive zones, starting from known offsets 0, 512G and 4TiB\&. The values are different than on non\-zoned devices\&. Each new super block is appended to the end of the zone, once it\(cqs filled, the zone is reset and writes continue to the next one\&. Looking up the latest super block needs to read offsets of both zones and determine the last written version\&.
-.sp
-The amount of space reserved for super block depends on the zone size\&. The secondary and tertiary copies are at distant offsets as the capacity of the devices is expected to be large, tens of terabytes\&. Maximum zone size supported is 8GiB, which would mean that eg\&. offset 0\-16GiB would be reserved just for the super block on a hypothetical device of that zone size\&. This is wasteful but required to guarantee crash safety\&.
-.SH "CONTROL DEVICE"
-.sp
-There\(cqs a character special device \fB/dev/btrfs\-control\fR with major and minor numbers 10 and 234 (the device can be found under the \fImisc\fR category)\&.
-.sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
+$ lsattr file
+\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-m file
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Using the forcing compression is not recommended, the heuristics are
+supposed to decide that and compression algorithms internally detect
+incompressible data too.
+.SH PRE-COMPRESSION HEURISTICS
+.sp
+The heuristics aim to do a few quick statistical tests on the compressed data
+in order to avoid probably costly compression that would turn out to be
+inefficient. Compression algorithms could have internal detection of
+incompressible data too but this leads to more overhead as the compression is
+done in another thread and has to write the data anyway. The heuristic is
+read\-only and can utilize cached memory.
+.sp
+The tests performed based on the following: data sampling, long repeated
+pattern detection, byte frequency, Shannon entropy.
+.SH COMPATIBILITY
+.sp
+Compression is done using the COW mechanism so it\(aqs incompatible with
+\fInodatacow\fP\&. Direct IO works on compressed files but will fall back to buffered
+writes and leads to recompression. Currently \fInodatasum\fP and compression don\(aqt
+work together.
+.sp
+The compression algorithms have been added over time so the version
+compatibility should be also considered, together with other tools that may
+access the compressed data like bootloaders.
+.SH SYSFS INTERFACE
+.sp
+Btrfs has a sysfs interface to provide extra knobs.
+.sp
+The top level path is \fB/sys/fs/btrfs/\fP, and the main directory layout is the following:
+.TS
+center;
+|l|l|l|.
+_
+T{
+Relative Path
+T}	T{
+Description
+T}	T{
+Version
+T}
+_
+T{
+features/
+T}	T{
+All supported features
+T}	T{
+3.14+
+T}
+_
+T{
+<UUID>/
+T}	T{
+Mounted fs UUID
+T}	T{
+3.14+
+T}
+_
+T{
+<UUID>/allocation/
+T}	T{
+Space allocation info
+T}	T{
+3.14+
+T}
+_
+T{
+<UUID>/features/
+T}	T{
+Features of the filesystem
+T}	T{
+3.14+
+T}
+_
+T{
+<UUID>/devices/<DEVID>/
+T}	T{
+Symlink to each block device sysfs
+T}	T{
+5.6+
+T}
+_
+T{
+<UUID>/devinfo/<DEVID>/
+T}	T{
+Btrfs specific info for each device
+T}	T{
+5.6+
+T}
+_
+T{
+<UUID>/qgroups/
+T}	T{
+Global qgroup info
+T}	T{
+5.9+
+T}
+_
+T{
+<UUID>/qgroups/<LEVEL>_<ID>/
+T}	T{
+Info for each qgroup
+T}	T{
+5.9+
+T}
+_
+T{
+<UUID>/discard/
+T}	T{
+Discard stats and tunables
+T}	T{
+6.1+
+T}
+_
+.TE
+.sp
+For \fB/sys/fs/btrfs/features/\fP directory, each file means a supported feature
+for the current kernel.
+.sp
+For \fB/sys/fs/btrfs/<UUID>/features/\fP directory, each file means an enabled
+feature for the mounted filesystem.
+.sp
+The features shares the same name in section
+\fI\%FILESYSTEM FEATURES\fP\&.
+.sp
+Files in \fB/sys/fs/btrfs/<UUID>/\fP directory are:
+.INDENT 0.0
+.TP
+.B bg_reclaim_threshold
+(RW, since: 5.19)
+.sp
+Used space percentage of total device space to start auto block group claim.
+Mostly for zoned devices.
+.TP
+.B checksum
+(RO, since: 5.5)
+.sp
+The checksum used for the mounted filesystem.
+This includes both the checksum type (see section
+\fI\%CHECKSUM ALGORITHMS\fP)
+and the implemented driver (mostly shows if it\(aqs hardware accelerated).
+.TP
+.B clone_alignment
+(RO, since: 3.16)
+.sp
+The bytes alignment for \fIclone\fP and \fIdedupe\fP ioctls.
+.TP
+.B commit_stats
+(RW, since: 6.0)
+.sp
+The performance statistics for btrfs transaction commit.
+Mostly for debug purposes.
+.sp
+Writing into this file will reset the maximum commit duration to
+the input value.
+.TP
+.B exclusive_operation
+(RO, since: 5.10)
+.sp
+Shows the running exclusive operation.
+Check section
+\fI\%FILESYSTEM EXCLUSIVE OPERATIONS\fP
+for details.
+.TP
+.B generation
+(RO, since: 5.11)
+.sp
+Show the generation of the mounted filesystem.
+.TP
+.B label
+(RW, since: 3.14)
+.sp
+Show the current label of the mounted filesystem.
+.TP
+.B metadata_uuid
+(RO, since: 5.0)
+.sp
+Shows the metadata uuid of the mounted filesystem.
+Check \fImetadata_uuid\fP feature for more details.
+.TP
+.B nodesize
+(RO, since: 3.14)
+.sp
+Show the nodesize of the mounted filesystem.
+.TP
+.B quota_override
+(RW, since: 4.13)
+.sp
+Shows the current quota override status.
+0 means no quota override.
+1 means quota override, quota can ignore the existing limit settings.
+.TP
+.B read_policy
+(RW, since: 5.11)
+.sp
+Shows the current balance policy for reads.
+Currently only \(dqpid\(dq (balance using pid value) is supported.
+.TP
+.B sectorsize
+(RO, since: 3.14)
+.sp
+Shows the sectorsize of the mounted filesystem.
+.UNINDENT
+.sp
+Files and directories in \fB/sys/fs/btrfs/<UUID>/allocations\fP directory are:
+.INDENT 0.0
+.TP
+.B global_rsv_reserved
+(RO, since: 3.14)
+.sp
+The used bytes of the global reservation.
+.TP
+.B global_rsv_size
+(RO, since: 3.14)
+.sp
+The total size of the global reservation.
+.TP
+.B \fIdata/\fP, \fImetadata/\fP and \fIsystem/\fP directories
+(RO, since: 5.14)
+.sp
+Space info accounting for the 3 chunk types.
+Mostly for debug purposes.
+.UNINDENT
+.sp
+Files in \fB/sys/fs/btrfs/<UUID>/allocations/\fP\fIdata,metadata,system\fP directory are:
+.INDENT 0.0
+.TP
+.B bg_reclaim_threshold
+(RW, since: 5.19)
+.sp
+Reclaimable space percentage of block group\(aqs size (excluding
+permanently unusable space) to reclaim the block group.
+Can be used on regular or zoned devices.
+.TP
+.B chunk_size
+(RW, since: 6.0)
+.sp
+Shows the chunk size. Can be changed for data and metadata.
+Cannot be set for zoned devices.
+.UNINDENT
+.sp
+Files in \fB/sys/fs/btrfs/<UUID>/devinfo/<DEVID>\fP directory are:
+.INDENT 0.0
+.TP
+.B error_stats:
+(RO, since: 5.14)
+.sp
+Shows all the history error numbers of the device.
+.TP
+.B fsid:
+(RO, since: 5.17)
+.sp
+Shows the fsid which the device belongs to.
+It can be different than the \fI<UUID>\fP if it\(aqs a seed device.
+.TP
+.B in_fs_metadata
+(RO, since: 5.6)
+.sp
+Shows whether we have found the device.
+Should always be 1, as if this turns to 0, the \fI<DEVID>\fP directory
+would get removed automatically.
+.TP
+.B missing
+(RO, since: 5.6)
+.sp
+Shows whether the device is missing.
+.TP
+.B replace_target
+(RO, since: 5.6)
+.sp
+Shows whether the device is the replace target.
+If no dev\-replace is running, this value should be 0.
+.TP
+.B scrub_speed_max
+(RW, since: 5.14)
+.sp
+Shows the scrub speed limit for this device. The unit is Bytes/s.
+0 means no limit.
+.TP
+.B writeable
+(RO, since: 5.6)
+.sp
+Show if the device is writeable.
+.UNINDENT
+.sp
+Files in \fB/sys/fs/btrfs/<UUID>/qgroups/\fP directory are:
+.INDENT 0.0
+.TP
+.B enabled
+(RO, since: 6.1)
+.sp
+Shows if qgroup is enabled.
+Also, if qgroup is disabled, the \fIqgroups\fP directory would
+be removed automatically.
+.TP
+.B inconsistent
+(RO, since: 6.1)
+.sp
+Shows if the qgroup numbers are inconsistent.
+If 1, it\(aqs recommended to do a qgroup rescan.
+.TP
+.B drop_subtree_threshold
+(RW, since: 6.1)
+.sp
+Shows the subtree drop threshold to automatically mark qgroup inconsistent.
+.sp
+When dropping large subvolumes with qgroup enabled, there would be a huge
+load for qgroup accounting.
+If we have a subtree whose level is larger than or equal to this value,
+we will not trigger qgroup account at all, but mark qgroup inconsistent to
+avoid the huge workload.
+.sp
+Default value is 8, where no subtree drop can trigger qgroup.
+.sp
+Lower value can reduce qgroup workload, at the cost of extra qgroup rescan
+to re\-calculate the numbers.
+.UNINDENT
+.sp
+Files in \fB/sys/fs/btrfs/<UUID>/<LEVEL>_<ID>/\fP directory are:
+.INDENT 0.0
+.TP
+.B exclusive
+(RO, since: 5.9)
+.sp
+Shows the exclusively owned bytes of the qgroup.
+.TP
+.B limit_flags
+(RO, since: 5.9)
+.sp
+Shows the numeric value of the limit flags.
+If 0, means no limit implied.
+.TP
+.B max_exclusive
+(RO, since: 5.9)
+.sp
+Shows the limits on exclusively owned bytes.
+.TP
+.B max_referenced
+(RO, since: 5.9)
+.sp
+Shows the limits on referenced bytes.
+.TP
+.B referenced
+(RO, since: 5.9)
+.sp
+Shows the referenced bytes of the qgroup.
+.TP
+.B rsv_data
+(RO, since: 5.9)
+.sp
+Shows the reserved bytes for data.
+.TP
+.B rsv_meta_pertrans
+(RO, since: 5.9)
+.sp
+Shows the reserved bytes for per transaction metadata.
+.TP
+.B rsv_meta_prealloc
+(RO, since: 5.9)
+.sp
+Shows the reserved bytes for preallocated metadata.
+.UNINDENT
+.sp
+Files in \fB/sys/fs/btrfs/<UUID>/discard/\fP directory are:
+.INDENT 0.0
+.TP
+.B discardable_bytes
+(RO, since: 6.1)
+.sp
+Shows amount of bytes that can be discarded in the async discard and
+nodiscard mode.
+.TP
+.B discardable_extents
+(RO, since: 6.1)
+.sp
+Shows number of extents to be discarded in the async discard and
+nodiscard mode.
+.TP
+.B discard_bitmap_bytes
+(RO, since: 6.1)
+.sp
+Shows amount of discarded bytes from data tracked as bitmaps.
+.TP
+.B discard_extent_bytes
+(RO, since: 6.1)
+.sp
+Shows amount of discarded extents from data tracked as bitmaps.
+.TP
+.B discard_bytes_saved
+(RO, since: 6.1)
+.sp
+Shows the amount of bytes that were reallocated without being discarded.
+.TP
+.B kbps_limit
+(RW, since: 6.1)
+.sp
+Tunable limit of kilobytes per second issued as discard IO in the async
+discard mode.
+.TP
+.B iops_limit
+(RW, since: 6.1)
+.sp
+Tunable limit of number of discard IO operations to be issued in the
+async discard mode.
+.TP
+.B max_discard_size
+(RW, since: 6.1)
+.sp
+Tunable limit for size of one IO discard request.
+.UNINDENT
+.SH FILESYSTEM EXCLUSIVE OPERATIONS
+.sp
+There are several operations that affect the whole filesystem and cannot be run
+in parallel. Attempt to start one while another is running will fail (see
+exceptions below).
+.sp
+Since kernel 5.10 the currently running operation can be obtained from
+\fI/sys/fs/UUID/exclusive_operation\fP with following values and operations:
+.INDENT 0.0
+.IP \(bu 2
+balance
+.IP \(bu 2
+balance paused (since 5.17)
+.IP \(bu 2
+device add
+.IP \(bu 2
+device delete
+.IP \(bu 2
+device replace
+.IP \(bu 2
+resize
+.IP \(bu 2
+swapfile activate
+.IP \(bu 2
+none
+.UNINDENT
+.sp
+Enqueuing is supported for several btrfs subcommands so they can be started
+at once and then serialized.
+.sp
+There\(aqs an exception when a paused balance allows to start a device add
+operation as they don\(aqt really collide and this can be used to add more space
+for the balance to finish.
+.SH FILESYSTEM LIMITS
+.INDENT 0.0
+.TP
+.B maximum file name length
+255
+.sp
+This limit is imposed by Linux VFS, the structures of BTRFS could store
+larger file names.
+.TP
+.B maximum symlink target length
+depends on the \fInodesize\fP value, for 4KiB it\(aqs 3949 bytes, for larger nodesize
+it\(aqs 4095 due to the system limit PATH_MAX
+.sp
+The symlink target may not be a valid path, i.e. the path name components
+can exceed the limits (NAME_MAX), there\(aqs no content validation at \fBsymlink(3)\fP
+creation.
+.TP
+.B maximum number of inodes
+2\s-2\u64\d\s0 but depends on the available metadata space as the inodes are created
+dynamically
+.sp
+Each subvolume is an independent namespace of inodes and thus their
+numbers, so the limit is per subvolume, not for the whole filesystem.
+.TP
+.B inode numbers
+minimum number: 256 (for subvolumes), regular files and directories: 257,
+maximum number: (2\s-2\u64\d\s0 \- 256)
+.sp
+The inode numbers that can be assigned to user created files are from
+the whole 64bit space except first 256 and last 256 in that range that
+are reserved for internal b\-tree identifiers.
+.TP
+.B maximum file length
+inherent limit of BTRFS is 2\s-2\u64\d\s0 (16 EiB) but the practical
+limit of Linux VFS is 2\s-2\u63\d\s0 (8 EiB)
+.TP
+.B maximum number of subvolumes
+the subvolume ids can go up to 2\s-2\u48\d\s0 but the number of actual subvolumes
+depends on the available metadata space
+.sp
+The space consumed by all subvolume metadata includes bookkeeping of
+shared extents can be large (MiB, GiB). The range is not the full 64bit
+range because of qgroups that use the upper 16 bits for another
+purposes.
+.TP
+.B maximum number of hardlinks of a file in a directory
+65536 when the \fIextref\fP feature is turned on during mkfs (default), roughly
+100 otherwise and depends on file name length that fits into one metadata node
+.TP
+.B minimum filesystem size
+the minimal size of each device depends on the \fImixed\-bg\fP feature, without that
+(the default) it\(aqs about 109MiB, with mixed\-bg it\(aqs is 16MiB
+.UNINDENT
+.SH BOOTLOADER SUPPORT
+.sp
+GRUB2 (\fI\%https://www.gnu.org/software/grub\fP) has the most advanced support of
+booting from BTRFS with respect to features.
+.sp
+U\-Boot (\fI\%https://www.denx.de/wiki/U\-Boot/\fP) has decent support for booting but
+not all BTRFS features are implemented, check the documentation.
+.sp
+In general, the first 1MiB on each device is unused with the exception of
+primary superblock that is on the offset 64KiB and spans 4KiB. The rest can be
+freely used by bootloaders or for other system information. Note that booting
+from a filesystem on \fI\%zoned device\fP is not supported.
+.SH FILE ATTRIBUTES
+.sp
+The btrfs filesystem supports setting file attributes or flags. Note there are
+old and new interfaces, with confusing names. The following list should clarify
+that:
+.INDENT 0.0
+.IP \(bu 2
+\fIattributes\fP: \fBchattr(1)\fP or \fBlsattr(1)\fP utilities (the ioctls are
+FS_IOC_GETFLAGS and FS_IOC_SETFLAGS), due to the ioctl names the attributes
+are also called flags
+.IP \(bu 2
+\fIxflags\fP: to distinguish from the previous, it\(aqs extended flags, with tunable
+bits similar to the attributes but extensible and new bits will be added in
+the future (the ioctls are FS_IOC_FSGETXATTR and FS_IOC_FSSETXATTR but they
+are not related to extended attributes that are also called xattrs), there\(aqs
+no standard tool to change the bits, there\(aqs support in \fBxfs_io(8)\fP as
+command \fBxfs_io \-c chattr\fP
+.UNINDENT
+.SS Attributes
+.INDENT 0.0
+.TP
+.B a
+\fIappend only\fP, new writes are always written at the end of the file
+.TP
+.B A
+\fIno atime updates\fP
+.TP
+.B c
+\fIcompress data\fP, all data written after this attribute is set will be compressed.
+Please note that compression is also affected by the mount options or the parent
+directory attributes.
+.sp
+When set on a directory, all newly created files will inherit this attribute.
+This attribute cannot be set with \(aqm\(aq at the same time.
+.TP
+.B C
+\fIno copy\-on\-write\fP, file data modifications are done in\-place
+.sp
+When set on a directory, all newly created files will inherit this attribute.
+.sp
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Due to implementation limitations, this flag can be set/unset only on
+empty files.
+.UNINDENT
+.UNINDENT
+.TP
+.B d
+\fIno dump\fP, makes sense with 3rd party tools like \fBdump(8)\fP, on BTRFS the
+attribute can be set/unset but no other special handling is done
+.TP
+.B D
+\fIsynchronous directory updates\fP, for more details search \fBopen(2)\fP for \fIO_SYNC\fP
+and \fIO_DSYNC\fP
+.TP
+.B i
+\fIimmutable\fP, no file data and metadata changes allowed even to the root user as
+long as this attribute is set (obviously the exception is unsetting the attribute)
+.TP
+.B m
+\fIno compression\fP, permanently turn off compression on the given file. Any
+compression mount options will not affect this file. (\fBchattr\fP support added in
+1.46.2)
+.sp
+When set on a directory, all newly created files will inherit this attribute.
+This attribute cannot be set with \fIc\fP at the same time.
+.TP
+.B S
+\fIsynchronous updates\fP, for more details search \fBopen(2)\fP for \fIO_SYNC\fP and
+\fIO_DSYNC\fP
+.UNINDENT
+.sp
+No other attributes are supported.  For the complete list please refer to the
+\fBchattr(1)\fP manual page.
+.SS XFLAGS
+.sp
+There\(aqs overlap of letters assigned to the bits with the attributes, this list
+refers to what \fBxfs_io(8)\fP provides:
+.INDENT 0.0
+.TP
+.B i
+\fIimmutable\fP, same as the attribute
+.TP
+.B a
+\fIappend only\fP, same as the attribute
+.TP
+.B s
+\fIsynchronous updates\fP, same as the attribute \fIS\fP
+.TP
+.B A
+\fIno atime updates\fP, same as the attribute
+.TP
+.B d
+\fIno dump\fP, same as the attribute
+.UNINDENT
+.SH ZONED MODE
+.sp
+Since version 5.12 btrfs supports so called \fIzoned mode\fP\&. This is a special
+on\-disk format and allocation/write strategy that\(aqs friendly to zoned devices.
+In short, a device is partitioned into fixed\-size zones and each zone can be
+updated by append\-only manner, or reset. As btrfs has no fixed data structures,
+except the super blocks, the zoned mode only requires block placement that
+follows the device constraints. You can learn about the whole architecture at
+\fI\%https://zonedstorage.io\fP .
+.sp
+The devices are also called SMR/ZBC/ZNS, in \fIhost\-managed\fP mode. Note that
+there are devices that appear as non\-zoned but actually are, this is
+\fIdrive\-managed\fP and using zoned mode won\(aqt help.
+.sp
+The zone size depends on the device, typical sizes are 256MiB or 1GiB. In
+general it must be a power of two. Emulated zoned devices like \fInull_blk\fP allow
+to set various zone sizes.
+.SS Requirements, limitations
+.INDENT 0.0
+.IP \(bu 2
+all devices must have the same zone size
+.IP \(bu 2
+maximum zone size is 8GiB
+.IP \(bu 2
+minimum zone size is 4MiB
+.IP \(bu 2
+mixing zoned and non\-zoned devices is possible, the zone writes are emulated,
+but this is namely for testing
+.IP \(bu 2
+the super block is handled in a special way and is at different locations than on a non\-zoned filesystem:
+.INDENT 2.0
+.IP \(bu 2
+primary: 0B (and the next two zones)
+.IP \(bu 2
+secondary: 512GiB (and the next two zones)
+.IP \(bu 2
+tertiary: 4TiB (4096GiB, and the next two zones)
+.UNINDENT
+.UNINDENT
+.SS Incompatible features
+.sp
+The main constraint of the zoned devices is lack of in\-place update of the data.
+This is inherently incompatible with some features:
+.INDENT 0.0
+.IP \(bu 2
+NODATACOW \- overwrite in\-place, cannot create such files
+.IP \(bu 2
+fallocate \- preallocating space for in\-place first write
+.IP \(bu 2
+mixed\-bg \- unordered writes to data and metadata, fixing that means using
+separate data and metadata block groups
+.IP \(bu 2
+booting \- the zone at offset 0 contains superblock, resetting the zone would
+destroy the bootloader data
+.UNINDENT
+.sp
+Initial support lacks some features but they\(aqre planned:
+.INDENT 0.0
+.IP \(bu 2
+only single (data, metadata) and DUP (metadata) profile is supported
+.IP \(bu 2
+fstrim \- due to dependency on free space cache v1
+.UNINDENT
+.SS Super block
+.sp
+As said above, super block is handled in a special way. In order to be crash
+safe, at least one zone in a known location must contain a valid superblock.
+This is implemented as a ring buffer in two consecutive zones, starting from
+known offsets 0B, 512GiB and 4TiB.
+.sp
+The values are different than on non\-zoned devices. Each new super block is
+appended to the end of the zone, once it\(aqs filled, the zone is reset and writes
+continue to the next one. Looking up the latest super block needs to read
+offsets of both zones and determine the last written version.
+.sp
+The amount of space reserved for super block depends on the zone size. The
+secondary and tertiary copies are at distant offsets as the capacity of the
+devices is expected to be large, tens of terabytes. Maximum zone size supported
+is 8GiB, which would mean that e.g. offset 0\-16GiB would be reserved just for
+the super block on a hypothetical device of that zone size. This is wasteful
+but required to guarantee crash safety.
+.SS Devices
+.SS Real hardware
+.sp
+The WD Ultrastar series 600 advertises HM\-SMR, i.e. the host\-managed zoned
+mode. There are two more: DA (device managed, no zoned information exported to
+the system), HA (host aware, can be used as regular disk but zoned writes
+improve performance). There are not many devices available at the moment, the
+information about exact zoned mode is hard to find, check data sheets or
+community sources gathering information from real devices.
+.sp
+Note: zoned mode won\(aqt work with DM\-SMR disks.
+.INDENT 0.0
+.IP \(bu 2
+Ultrastar® DC ZN540 NVMe ZNS SSD (\fI\%product
+brief\fP)
+.UNINDENT
+.SS Emulated: null_blk
+.sp
+The driver \fInull_blk\fP provides memory backed device and is suitable for
+testing. There are some quirks setting up the devices. The module must be
+loaded with \fInr_devices=0\fP or the numbering of device nodes will be offset. The
+\fIconfigfs\fP must be mounted at \fI/sys/kernel/config\fP and the administration of
+the null_blk devices is done in \fI/sys/kernel/config/nullb\fP\&. The device nodes
+are named like \fI/dev/nullb0\fP and are numbered sequentially. NOTE: the device
+name may be different than the named directory in sysfs!
+.sp
+Setup:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+modprobe\ configfs
+modprobe\ null_blk\ nr_devices=0
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Create a device \fImydev\fP, assuming no other previously created devices, size is
+2048MiB, zone size 256MiB. There are more tunable parameters, this is a minimal
+example taking defaults:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+cd\ /sys/kernel/config/nullb/
+mkdir\ mydev
+cd\ mydev
+echo\ 2048\ >\ size
+echo\ 1\ >\ zoned
+echo\ 1\ >\ memory_backed
+echo\ 256\ >\ zone_size
+echo\ 1\ >\ power
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+This will create a device \fI/dev/nullb0\fP and the value of file \fIindex\fP will
+match the ending number of the device node.
+.sp
+Remove the device:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+rmdir\ /sys/kernel/config/nullb/mydev
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Then continue with \fImkfs.btrfs /dev/nullb0\fP, the zoned mode is auto\-detected.
+.sp
+For convenience, there\(aqs a script wrapping the basic null_blk management operations
+\fI\%https://github.com/kdave/nullb.git\fP, the above commands become:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+nullb setup
+nullb create \-s 2g \-z 256
+mkfs.btrfs /dev/nullb0
+\&...
+nullb rm nullb0
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SS Emulated: TCMU runner
+.sp
+TCMU is a framework to emulate SCSI devices in userspace, providing various
+backends for the storage, with zoned support as well. A file\-backed zoned
+device can provide more options for larger storage and zone size. Please follow
+the instructions at \fI\%https://zonedstorage.io/projects/tcmu\-runner/\fP .
+.SS Compatibility, incompatibility
+.INDENT 0.0
+.IP \(bu 2
+the feature sets an incompat bit and requires new kernel to access the
+filesystem (for both read and write)
+.IP \(bu 2
+superblock needs to be handled in a special way, there are still 3 copies
+but at different offsets (0, 512GiB, 4TiB) and the 2 consecutive zones are a
+ring buffer of the superblocks, finding the latest one needs reading it from
+the write pointer or do a full scan of the zones
+.IP \(bu 2
+mixing zoned and non zoned devices is possible (zones are emulated) but is
+recommended only for testing
+.IP \(bu 2
+mixing zoned devices with different zone sizes is not possible
+.IP \(bu 2
+zone sizes must be power of two, zone sizes of real devices are e.g. 256MiB
+or 1GiB, larger size is expected, maximum zone size supported by btrfs is
+8GiB
+.UNINDENT
+.SS Status, stability, reporting bugs
+.sp
+The zoned mode has been released in 5.12 and there are still some rough edges
+and corner cases one can hit during testing. Please report bugs to
+\fI\%https://github.com/naota/linux/issues/\fP .
+.SS References
+.INDENT 0.0
+.IP \(bu 2
+\fI\%https://zonedstorage.io\fP
+.INDENT 2.0
+.IP \(bu 2
+\fI\%https://zonedstorage.io/projects/libzbc/\fP \-\- \fIlibzbc\fP is library and set
+of tools to directly manipulate devices with ZBC/ZAC support
+.IP \(bu 2
+\fI\%https://zonedstorage.io/projects/libzbd/\fP \-\- \fIlibzbd\fP uses the kernel
+provided zoned block device interface based on the ioctl() system calls
+.UNINDENT
+.IP \(bu 2
+\fI\%https://hddscan.com/blog/2020/hdd\-wd\-smr.html\fP \-\- some details about exact device types
+.IP \(bu 2
+\fI\%https://lwn.net/Articles/853308/\fP \-\- \fIBtrfs on zoned block devices\fP
+.IP \(bu 2
+\fI\%https://www.usenix.org/conference/vault20/presentation/bjorling\fP \-\- Zone
+Append: A New Way of Writing to Zoned Storage
+.UNINDENT
+.SH CONTROL DEVICE
+.sp
+There\(aqs a character special device \fI/dev/btrfs\-control\fP with major and minor
+numbers 10 and 234 (the device can be found under the \(aqmisc\(aq category).
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
 $ ls \-l /dev/btrfs\-control
 crw\-\-\-\-\-\-\- 1 root root 10, 234 Jan  1 12:00 /dev/btrfs\-control
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-The device accepts some ioctl calls that can perform following actions on the filesystem module:
+The device accepts some ioctl calls that can perform following actions on the
+filesystem module:
+.INDENT 0.0
+.IP \(bu 2
+scan devices for btrfs filesystem (i.e. to let multi\-device filesystems mount
+automatically) and register them with the kernel module
+.IP \(bu 2
+similar to scan, but also wait until the device scanning process is finished
+for a given filesystem
+.IP \(bu 2
+get the supported features (can be also found under \fI/sys/fs/btrfs/features\fP)
+.UNINDENT
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-scan devices for btrfs filesystem (ie\&. to let multi\-device filesystems mount automatically) and register them with the kernel module
-.RE
+The device is created when btrfs is initialized, either as a module or a
+built\-in functionality and makes sense only in connection with that. Running
+e.g. mkfs without the module loaded will not register the device and will
+probably warn about that.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-similar to scan, but also wait until the device scanning process is finished for a given filesystem
-.RE
+In rare cases when the module is loaded but the device is not present (most
+likely accidentally deleted), it\(aqs possible to recreate it by
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-get the supported features (can be also found under
-\fI/sys/fs/btrfs/features\fR)
-.RE
-.sp
-The device is created when btrfs is initialized, either as a module or a built\-in functionality and makes sense only in connection with that\&. Running eg\&. mkfs without the module loaded will not register the device and will probably warn about that\&.
-.sp
-In rare cases when the module is loaded but the device is not present (most likely accidentally deleted), it\(cqs possible to recreate it by
-.sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 # mknod \-\-mode=600 /dev/btrfs\-control c 10 234
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-or (since 5\&.11) by a convenience command
+or (since 5.11) by a convenience command
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 # btrfs rescue create\-control\-device
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-The control device is not strictly required but the device scanning will not work and a workaround would need to be used to mount a multi\-device filesystem\&. The mount option \fIdevice\fR can trigger the device scanning during mount, see also \fBbtrfs device scan\fR\&.
-.SH "FILESYSTEM WITH MULTIPLE PROFILES"
+The control device is not strictly required but the device scanning will not
+work and a workaround would need to be used to mount a multi\-device filesystem.
+The mount option \fIdevice\fP can trigger the device scanning during mount, see
+also \fBbtrfs device scan\fP\&.
+.SH FILESYSTEM WITH MULTIPLE PROFILES
 .sp
-It is possible that a btrfs filesystem contains multiple block group profiles of the same type\&. This could happen when a profile conversion using balance filters is interrupted (see \fBbtrfs\-balance\fR(8))\&. Some \fIbtrfs\fR commands perform a test to detect this kind of condition and print a warning like this:
+It is possible that a btrfs filesystem contains multiple block group profiles
+of the same type.  This could happen when a profile conversion using balance
+filters is interrupted (see \fI\%btrfs\-balance(8)\fP).  Some
+\fBbtrfs\fP commands perform
+a test to detect this kind of condition and print a warning like this:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
-WARNING: Multiple block group profiles detected, see \*(Aqman btrfs(5)\*(Aq\&.
+.ft C
+WARNING: Multiple block group profiles detected, see \(aqman btrfs(5)\(aq.
 WARNING:   Data: single, raid1
 WARNING:   Metadata: single, raid1
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-The corresponding output of \fBbtrfs filesystem df\fR might look like:
+The corresponding output of \fBbtrfs filesystem df\fP might look like:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
-WARNING: Multiple block group profiles detected, see \*(Aqman btrfs(5)\*(Aq\&.
+.ft C
+WARNING: Multiple block group profiles detected, see \(aqman btrfs(5)\(aq.
 WARNING:   Data: single, raid1
 WARNING:   Metadata: single, raid1
-Data, RAID1: total=832\&.00MiB, used=0\&.00B
-Data, single: total=1\&.63GiB, used=0\&.00B
-System, single: total=4\&.00MiB, used=16\&.00KiB
-Metadata, single: total=8\&.00MiB, used=112\&.00KiB
-Metadata, RAID1: total=64\&.00MiB, used=32\&.00KiB
-GlobalReserve, single: total=16\&.25MiB, used=0\&.00B
+Data, RAID1: total=832.00MiB, used=0.00B
+Data, single: total=1.63GiB, used=0.00B
+System, single: total=4.00MiB, used=16.00KiB
+Metadata, single: total=8.00MiB, used=112.00KiB
+Metadata, RAID1: total=64.00MiB, used=32.00KiB
+GlobalReserve, single: total=16.25MiB, used=0.00B
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-There\(cqs more than one line for type \fIData\fR and \fIMetadata\fR, while the profiles are \fIsingle\fR and \fIRAID1\fR\&.
+There\(aqs more than one line for type \fIData\fP and \fIMetadata\fP, while the profiles
+are \fIsingle\fP and \fIRAID1\fP\&.
 .sp
-This state of the filesystem OK but most likely needs the user/administrator to take an action and finish the interrupted tasks\&. This cannot be easily done automatically, also the user knows the expected final profiles\&.
+This state of the filesystem OK but most likely needs the user/administrator to
+take an action and finish the interrupted tasks. This cannot be easily done
+automatically, also the user knows the expected final profiles.
 .sp
-In the example above, the filesystem started as a single device and \fIsingle\fR block group profile\&. Then another device was added, followed by balance with \fIconvert=raid1\fR but for some reason hasn\(cqt finished\&. Restarting the balance with \fIconvert=raid1\fR will continue and end up with filesystem with all block group profiles \fIRAID1\fR\&.
-.if n \{\
+In the example above, the filesystem started as a single device and \fIsingle\fP
+block group profile. Then another device was added, followed by balance with
+\fIconvert=raid1\fP but for some reason hasn\(aqt finished. Restarting the balance
+with \fIconvert=raid1\fP will continue and end up with filesystem with all block
+group profiles \fIRAID1\fP\&.
 .sp
-.\}
-.RS 4
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.br
-.ps +1
-\fBNote\fR
-.ps -1
-.br
+\fBNOTE:\fP
+.INDENT 0.0
+.INDENT 3.5
+If you\(aqre familiar with balance filters, you can use
+\fIconvert=raid1,profiles=single,soft\fP, which will take only the unconverted
+\fIsingle\fP profiles and convert them to \fIraid1\fP\&. This may speed up the conversion
+as it would not try to rewrite the already convert \fIraid1\fP profiles.
+.UNINDENT
+.UNINDENT
 .sp
-If you\(cqre familiar with balance filters, you can use \fIconvert=raid1,profiles=single,soft\fR, which will take only the unconverted \fIsingle\fR profiles and convert them to \fIraid1\fR\&. This may speed up the conversion as it would not try to rewrite the already convert \fIraid1\fR profiles\&.
-.sp .5v
-.RE
+Having just one profile is desired as this also clearly defines the profile of
+newly allocated block groups, otherwise this depends on internal allocation
+policy. When there are multiple profiles present, the order of selection is
+RAID56, RAID10, RAID1, RAID0 as long as the device number constraints are
+satisfied.
 .sp
-Having just one profile is desired as this also clearly defines the profile of newly allocated block groups, otherwise this depends on internal allocation policy\&. When there are multiple profiles present, the order of selection is RAID6, RAID5, RAID10, RAID1, RAID0 as long as the device number constraints are satisfied\&.
+Commands that print the warning were chosen so they\(aqre brought to user
+attention when the filesystem state is being changed in that regard. This is:
+\fBdevice add\fP, \fBdevice delete\fP, \fBbalance cancel\fP, \fBbalance pause\fP\&. Commands
+that report space usage: \fBfilesystem df\fP, \fBdevice usage\fP\&. The command
+\fBfilesystem usage\fP provides a line in the overall summary:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-Commands that print the warning were chosen so they\(cqre brought to user attention when the filesystem state is being changed in that regard\&. This is: \fIdevice add\fR, \fIdevice delete\fR, \fIbalance cancel\fR, \fIbalance pause\fR\&. Commands that report space usage: \fIfilesystem df\fR, \fIdevice usage\fR\&. The command \fIfilesystem usage\fR provides a line in the overall summary:
-.sp
-.if n \{\
-.RS 4
-.\}
 .nf
-    Multiple profiles:                 yes (data, metadata)
+.ft C
+Multiple profiles:                 yes (data, metadata)
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
-.SH "SEEDING DEVICE"
+.UNINDENT
+.UNINDENT
+.SH SEEDING DEVICE
 .sp
-The COW mechanism and multiple devices under one hood enable an interesting concept, called a seeding device: extending a read\-only filesystem on a single device filesystem with another device that captures all writes\&. For example imagine an immutable golden image of an operating system enhanced with another device that allows to use the data from the golden image and normal operation\&. This idea originated on CD\-ROMs with base OS and allowing to use them for live systems, but this became obsolete\&. There are technologies providing similar functionality, like \fIunionmount\fR, \fIoverlayfs\fR or \fIqcow2\fR image snapshot\&.
+The COW mechanism and multiple devices under one hood enable an interesting
+concept, called a seeding device: extending a read\-only filesystem on a
+device with another device that captures all writes. For example
+imagine an immutable golden image of an operating system enhanced with another
+device that allows to use the data from the golden image and normal operation.
+This idea originated on CD\-ROMs with base OS and allowing to use them for live
+systems, but this became obsolete. There are technologies providing similar
+functionality, like \fIunionmount\fP, \fIoverlayfs\fP or \fIqcow2\fP image snapshot.
 .sp
-The seeding device starts as a normal filesystem, once the contents is ready, \fBbtrfstune \-S 1\fR is used to flag it as a seeding device\&. Mounting such device will not allow any writes, except adding a new device by \fBbtrfs device add\fR\&. Then the filesystem can be remounted as read\-write\&.
+The seeding device starts as a normal filesystem, once the contents is ready,
+\fBbtrfstune \-S 1\fP is used to flag it as a seeding device. Mounting such device
+will not allow any writes, except adding a new device by \fBbtrfs device add\fP\&.
+Then the filesystem can be remounted as read\-write.
 .sp
-Given that the filesystem on the seeding device is always recognized as read\-only, it can be used to seed multiple filesystems, at the same time\&. The UUID that is normally attached to a device is automatically changed to a random UUID on each mount\&.
+Given that the filesystem on the seeding device is always recognized as
+read\-only, it can be used to seed multiple filesystems from one device at the
+same time. The UUID that is normally attached to a device is automatically
+changed to a random UUID on each mount.
 .sp
-Once the seeding device is mounted, it needs the writable device\&. After adding it, something like \fIremount \-o remount,rw /path\fR makes the filesystem at \fI/path\fR ready for use\&. The simplest usecase is to throw away all changes by unmounting the filesystem when convenient\&.
+Once the seeding device is mounted, it needs the writable device. After adding
+it, unmounting and mounting with \fBumount /path; mount /dev/writable
+/path\fP or remounting read\-write with \fBremount \-o remount,rw\fP makes the
+filesystem at \fB/path\fP ready for use.
 .sp
-Alternatively, deleting the seeding device from the filesystem can turn it into a normal filesystem, provided that the writable device can also contain all the data from the seeding device\&.
+\fBNOTE:\fP
+.INDENT 0.0
+.INDENT 3.5
+There is a known bug with using remount to make the mount writeable:
+remount will leave the filesystem in a state where it is unable to
+clean deleted snapshots, so it will leak space until it is unmounted
+and mounted properly.
+.UNINDENT
+.UNINDENT
 .sp
-The seeding device flag can be cleared again by \fBbtrfstune \-f \-s 0\fR, eg\&. allowing to update with newer data but please note that this will invalidate all existing filesystems that use this particular seeding device\&. This works for some usecases, not for others, and a forcing flag to the command is mandatory to avoid accidental mistakes\&.
+Furthermore, deleting the seeding device from the filesystem can turn it into
+a normal filesystem, provided that the writable device can also contain all the
+data from the seeding device.
+.sp
+The seeding device flag can be cleared again by \fBbtrfstune \-f \-S 0\fP, e.g.
+allowing to update with newer data but please note that this will invalidate
+all existing filesystems that use this particular seeding device. This works
+for some use cases, not for others, and the forcing flag to the command is
+mandatory to avoid accidental mistakes.
 .sp
 Example how to create and use one seeding device:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
-# mkfs\&.btrfs /dev/sda
+.ft C
+# mkfs.btrfs /dev/sda
 # mount /dev/sda /mnt/mnt1
-# \&.\&.\&. fill mnt1 with data
+\&... fill mnt1 with data
 # umount /mnt/mnt1
+
 # btrfstune \-S 1 /dev/sda
+
 # mount /dev/sda /mnt/mnt1
-# btrfs device add /dev/sdb /mnt
-# mount \-o remount,rw /mnt/mnt1
-# \&.\&.\&. /mnt/mnt1 is now writable
+# btrfs device add /dev/sdb /mnt/mnt1
+# umount /mnt/mnt1
+# mount /dev/sdb /mnt/mnt1
+\&... /mnt/mnt1 is now writable
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-Now \fI/mnt/mnt1\fR can be used normally\&. The device \fI/dev/sda\fR can be mounted again with a another writable device:
+Now \fI/mnt/mnt1\fP can be used normally. The device \fI/dev/sda\fP can be mounted
+again with a another writable device:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 # mount /dev/sda /mnt/mnt2
 # btrfs device add /dev/sdc /mnt/mnt2
-# mount \-o remount,rw /mnt/mnt2
-# \&.\&.\&. /mnt/mnt2 is now writable
+# umount /mnt/mnt2
+# mount /dev/sdc /mnt/mnt2
+\&... /mnt/mnt2 is now writable
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-The writable device (\fI/dev/sdb\fR) can be decoupled from the seeding device and used independently:
+The writable device (\fI/dev/sdb\fP) can be decoupled from the seeding device and
+used independently:
+.INDENT 0.0
+.INDENT 3.5
 .sp
-.if n \{\
-.RS 4
-.\}
 .nf
+.ft C
 # btrfs device delete /dev/sda /mnt/mnt1
+.ft P
 .fi
-.if n \{\
-.RE
-.\}
+.UNINDENT
+.UNINDENT
 .sp
-As the contents originated in the seeding device, it\(cqs possible to turn \fI/dev/sdb\fR to a seeding device again and repeat the whole process\&.
+As the contents originated in the seeding device, it\(aqs possible to turn
+\fI/dev/sdb\fP to a seeding device again and repeat the whole process.
 .sp
 A few things to note:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-it\(cqs recommended to use only single device for the seeding device, it works for multiple devices but the
-\fIsingle\fR
-profile must be used in order to make the seeding device deletion work
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-block group profiles
-\fIsingle\fR
-and
-\fIdup\fR
-support the usecases above
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-the label is copied from the seeding device and can be changed by
-\fBbtrfs filesystem label\fR
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.INDENT 0.0
+.IP \(bu 2
+it\(aqs recommended to use only single device for the seeding device, it works
+for multiple devices but the \fIsingle\fP profile must be used in order to make
+the seeding device deletion work
+.IP \(bu 2
+block group profiles \fIsingle\fP and \fIdup\fP support the use cases above
+.IP \(bu 2
+the label is copied from the seeding device and can be changed by \fBbtrfs filesystem label\fP
+.IP \(bu 2
 each new mount of the seeding device gets a new random UUID
-.RE
-.SH "RAID56 STATUS AND RECOMMENDED PRACTICES"
+.IP \(bu 2
+\fBumount /path; mount /dev/writable /path\fP can be replaced with
+\fBmount \-o remount,rw /path\fP
+but it won\(aqt reclaim space of deleted subvolumes until the seeding device
+is mounted read\-write again before making it seeding again
+.UNINDENT
+.SS Chained seeding devices
 .sp
-The RAID56 feature provides striping and parity over several devices, same as the traditional RAID5/6\&. There are some implementation and design deficiencies that make it unreliable for some corner cases and the feature \fBshould not be used in production, only for evaluation or testing\fR\&. The power failure safety for metadata with RAID56 is not 100%\&.
-.SS "Metadata"
+Though it\(aqs not recommended and is rather an obscure and untested use case,
+chaining seeding devices is possible. In the first example, the writable device
+\fI/dev/sdb\fP can be turned onto another seeding device again, depending on the
+unchanged seeding device \fI/dev/sda\fP\&. Then using \fI/dev/sdb\fP as the primary
+seeding device it can be extended with another writable device, say \fI/dev/sdd\fP,
+and it continues as before as a simple tree structure on devices.
+.INDENT 0.0
+.INDENT 3.5
 .sp
-Do not use \fIraid5\fR nor \fIraid6\fR for metadata\&. Use \fIraid1\fR or \fIraid1c3\fR respectively\&.
+.nf
+.ft C
+# mkfs.btrfs /dev/sda
+# mount /dev/sda /mnt/mnt1
+\&... fill mnt1 with data
+# umount /mnt/mnt1
+
+# btrfstune \-S 1 /dev/sda
+
+# mount /dev/sda /mnt/mnt1
+# btrfs device add /dev/sdb /mnt/mnt1
+# mount \-o remount,rw /mnt/mnt1
+\&... /mnt/mnt1 is now writable
+# umount /mnt/mnt1
+
+# btrfstune \-S 1 /dev/sdb
+
+# mount /dev/sdb /mnt/mnt1
+# btrfs device add /dev/sdc /mnt
+# mount \-o remount,rw /mnt/mnt1
+\&... /mnt/mnt1 is now writable
+# umount /mnt/mnt1
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .sp
-The substitute profiles provide the same guarantees against loss of 1 or 2 devices, and in some respect can be an improvement\&. Recovering from one missing device will only need to access the remaining 1st or 2nd copy, that in general may be stored on some other devices due to the way RAID1 works on btrfs, unlike on a striped profile (similar to \fIraid0\fR) that would need all devices all the time\&.
+As a result we have:
+.INDENT 0.0
+.IP \(bu 2
+\fIsda\fP is a single seeding device, with its initial contents
+.IP \(bu 2
+\fIsdb\fP is a seeding device but requires \fIsda\fP, the contents are from the time
+when \fIsdb\fP is made seeding, i.e. contents of \fIsda\fP with any later changes
+.IP \(bu 2
+\fIsdc\fP last writable, can be made a seeding one the same way as was \fIsdb\fP,
+preserving its contents and depending on \fIsda\fP and \fIsdb\fP
+.UNINDENT
 .sp
-The space allocation pattern and consumption is different (eg\&. on N devices): for \fIraid5\fR as an example, a 1GiB chunk is reserved on each device, while with \fIraid1\fR there\(cqs each 1GiB chunk stored on 2 devices\&. The consumption of each 1GiB of used metadata is then \fIN * 1GiB\fR for vs \fI2 * 1GiB\fR\&. Using \fIraid1\fR is also more convenient for balancing/converting to other profile due to lower requirement on the available chunk space\&.
-.SS "Missing/incomplete support"
+As long as the seeding devices are unmodified and available, they can be used
+to start another branch.
+.SH RAID56 STATUS AND RECOMMENDED PRACTICES
 .sp
-When RAID56 is on the same filesystem with different raid profiles, the space reporting is inaccurate, eg\&. \fIdf\fR, \fIbtrfs filesystem df\fR or \fIbtrfs filesystem usge\fR\&. When there\(cqs only a one profile per block group type (eg\&. raid5 for data) the reporting is accurate\&.
+The RAID56 feature provides striping and parity over several devices, same as
+the traditional RAID5/6. There are some implementation and design deficiencies
+that make it unreliable for some corner cases and the feature \fBshould not be
+used in production, only for evaluation or testing\fP\&.  The power failure safety
+for metadata with RAID56 is not 100%.
+.SS Metadata
 .sp
-When scrub is started on a RAID56 filesystem, it\(cqs started on all devices that degrade the performance\&. The workaround is to start it on each device separately\&. Due to that the device stats may not match the actual state and some errors might get reported multiple times\&.
+Do not use \fIraid5\fP nor \fIraid6\fP for metadata. Use \fIraid1\fP or \fIraid1c3\fP
+respectively.
 .sp
-The \fIwrite hole\fR problem\&.
-.SH "STORAGE MODEL"
+The substitute profiles provide the same guarantees against loss of 1 or 2
+devices, and in some respect can be an improvement.  Recovering from one
+missing device will only need to access the remaining 1st or 2nd copy, that in
+general may be stored on some other devices due to the way RAID1 works on
+btrfs, unlike on a striped profile (similar to \fIraid0\fP) that would need all
+devices all the time.
 .sp
-\fIA storage model is a model that captures key physical aspects of data structure in a data store\&. A filesystem is the logical structure organizing data on top of the storage device\&.\fR
+The space allocation pattern and consumption is different (e.g. on N devices):
+for \fIraid5\fP as an example, a 1GiB chunk is reserved on each device, while with
+\fIraid1\fP there\(aqs each 1GiB chunk stored on 2 devices. The consumption of each
+1GiB of used metadata is then \fIN * 1GiB\fP for vs \fI2 * 1GiB\fP\&. Using \fIraid1\fP
+is also more convenient for balancing/converting to other profile due to lower
+requirement on the available chunk space.
+.SS Missing/incomplete support
 .sp
-The filesystem assumes several features or limitations of the storage device and utilizes them or applies measures to guarantee reliability\&. BTRFS in particular is based on a COW (copy on write) mode of writing, ie\&. not updating data in place but rather writing a new copy to a different location and then atomically switching the pointers\&.
+When RAID56 is on the same filesystem with different raid profiles, the space
+reporting is inaccurate, e.g. \fBdf\fP, \fBbtrfs filesystem df\fP or
+\fBbtrfs filesystem usage\fP\&. When there\(aqs only a one profile per block
+group type (e.g. RAID5 for data) the reporting is accurate.
 .sp
-In an ideal world, the device does what it promises\&. The filesystem assumes that this may not be true so additional mechanisms are applied to either detect misbehaving hardware or get valid data by other means\&. The devices may (and do) apply their own detection and repair mechanisms but we won\(cqt assume any\&.
+When scrub is started on a RAID56 filesystem, it\(aqs started on all devices that
+degrade the performance. The workaround is to start it on each device
+separately. Due to that the device stats may not match the actual state and
+some errors might get reported multiple times.
 .sp
-The following assumptions about storage devices are considered (sorted by importance, numbers are for further reference):
+The \fIwrite hole\fP problem. An unclean shutdown could leave a partially written
+stripe in a state where the some stripe ranges and the parity are from the old
+writes and some are new. The information which is which is not tracked. Write
+journal is not implemented. Alternatively a full read\-modify\-write would make
+sure that a full stripe is always written, avoiding the write hole completely,
+but performance in that case turned out to be too bad for use.
 .sp
-.RS 4
-.ie n \{\
-\h'-04' 1.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  1." 4.2
-.\}
-atomicity of reads and writes of blocks/sectors (the smallest unit of data the device presents to the upper layers)
-.RE
+The striping happens on all available devices (at the time the chunks were
+allocated), so in case a new device is added it may not be utilized
+immediately and would require a rebalance. A fixed configured stripe width is
+not implemented.
+.SH STORAGE MODEL, HARDWARE CONSIDERATIONS
+.SS Storage model
 .sp
-.RS 4
-.ie n \{\
-\h'-04' 2.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  2." 4.2
-.\}
-there\(cqs a flush command that instructs the device to forcibly order writes before and after the command; alternatively there\(cqs a barrier command that facilitates the ordering but may not flush the data
-.RE
+\fIA storage model is a model that captures key physical aspects of data
+structure in a data store. A filesystem is the logical structure organizing
+data on top of the storage device.\fP
 .sp
-.RS 4
-.ie n \{\
-\h'-04' 3.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  3." 4.2
-.\}
-data sent to write to a given device offset will be written without further changes to the data and to the offset
-.RE
+The filesystem assumes several features or limitations of the storage device
+and utilizes them or applies measures to guarantee reliability. BTRFS in
+particular is based on a COW (copy on write) mode of writing, i.e. not updating
+data in place but rather writing a new copy to a different location and then
+atomically switching the pointers.
 .sp
-.RS 4
-.ie n \{\
-\h'-04' 4.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  4." 4.2
-.\}
-writes can be reordered by the device, unless explicitly serialized by the flush command
-.RE
+In an ideal world, the device does what it promises. The filesystem assumes
+that this may not be true so additional mechanisms are applied to either detect
+misbehaving hardware or get valid data by other means. The devices may (and do)
+apply their own detection and repair mechanisms but we won\(aqt assume any.
 .sp
-.RS 4
-.ie n \{\
-\h'-04' 5.\h'+01'\c
-.\}
-.el \{\
-.sp -1
-.IP "  5." 4.2
-.\}
+The following assumptions about storage devices are considered (sorted by
+importance, numbers are for further reference):
+.INDENT 0.0
+.IP 1. 3
+atomicity of reads and writes of blocks/sectors (the smallest unit of data
+the device presents to the upper layers)
+.IP 2. 3
+there\(aqs a flush command that instructs the device to forcibly order writes
+before and after the command; alternatively there\(aqs a barrier command that
+facilitates the ordering but may not flush the data
+.IP 3. 3
+data sent to write to a given device offset will be written without further
+changes to the data and to the offset
+.IP 4. 3
+writes can be reordered by the device, unless explicitly serialized by the
+flush command
+.IP 5. 3
 reads and writes can be freely reordered and interleaved
-.RE
+.UNINDENT
 .sp
-The consistency model of BTRFS builds on these assumptions\&. The logical data updates are grouped, into a generation, written on the device, serialized by the flush command and then the super block is written ending the generation\&. All logical links among metadata comprising a consistent view of the data may not cross the generation boundary\&.
-.SS "WHEN THINGS GO WRONG"
+The consistency model of BTRFS builds on these assumptions. The logical data
+updates are grouped, into a generation, written on the device, serialized by
+the flush command and then the super block is written ending the generation.
+All logical links among metadata comprising a consistent view of the data may
+not cross the generation boundary.
+.SS When things go wrong
 .sp
-\fBNo or partial atomicity of block reads/writes (1)\fR
+\fBNo or partial atomicity of block reads/writes (1)\fP
+.INDENT 0.0
+.IP \(bu 2
+\fIProblem\fP: a partial block contents is written (\fItorn write\fP), e.g. due to a
+power glitch or other electronics failure during the read/write
+.IP \(bu 2
+\fIDetection\fP: checksum mismatch on read
+.IP \(bu 2
+\fIRepair\fP: use another copy or rebuild from multiple blocks using some encoding
+scheme
+.UNINDENT
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIProblem\fR: a partial block contents is written (\fItorn write\fR), eg\&. due to a power glitch or other electronics failure during the read/write
-.RE
+\fBThe flush command does not flush (2)\fP
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIDetection\fR: checksum mismatch on read
-.RE
+This is perhaps the most serious problem and impossible to mitigate by
+filesystem without limitations and design restrictions. What could happen in
+the worst case is that writes from one generation bleed to another one, while
+still letting the filesystem consider the generations isolated. Crash at any
+point would leave data on the device in an inconsistent state without any hint
+what exactly got written, what is missing and leading to stale metadata link
+information.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIRepair\fR: use another copy or rebuild from multiple blocks using some encoding scheme
-.RE
+Devices usually honor the flush command, but for performance reasons may do
+internal caching, where the flushed data are not yet persistently stored. A
+power failure could lead to a similar scenario as above, although it\(aqs less
+likely that later writes would be written before the cached ones. This is
+beyond what a filesystem can take into account. Devices or controllers are
+usually equipped with batteries or capacitors to write the cache contents even
+after power is cut. (\fIBattery backed write cache\fP)
 .sp
-\fBThe flush command does not flush (2)\fR
+\fBData get silently changed on write (3)\fP
 .sp
-This is perhaps the most serious problem and impossible to mitigate by filesystem without limitations and design restrictions\&. What could happen in the worst case is that writes from one generation bleed to another one, while still letting the filesystem consider the generations isolated\&. Crash at any point would leave data on the device in an inconsistent state without any hint what exactly got written, what is missing and leading to stale metadata link information\&.
+Such thing should not happen frequently, but still can happen spuriously due
+the complex internal workings of devices or physical effects of the storage
+media itself.
+.INDENT 0.0
+.IP \(bu 2
+\fIProblem\fP: while the data are written atomically, the contents get changed
+.IP \(bu 2
+\fIDetection\fP: checksum mismatch on read
+.IP \(bu 2
+\fIRepair\fP: use another copy or rebuild from multiple blocks using some
+encoding scheme
+.UNINDENT
 .sp
-Devices usually honor the flush command, but for performance reasons may do internal caching, where the flushed data are not yet persistently stored\&. A power failure could lead to a similar scenario as above, although it\(cqs less likely that later writes would be written before the cached ones\&. This is beyond what a filesystem can take into account\&. Devices or controllers are usually equipped with batteries or capacitors to write the cache contents even after power is cut\&. (\fIBattery backed write cache\fR)
+\fBData get silently written to another offset (3)\fP
 .sp
-\fBData get silently changed on write (3)\fR
+This would be another serious problem as the filesystem has no information
+when it happens. For that reason the measures have to be done ahead of time.
+This problem is also commonly called \fIghost write\fP\&.
 .sp
-Such thing should not happen frequently, but still can happen spuriously due the complex internal workings of devices or physical effects of the storage media itself\&.
+The metadata blocks have the checksum embedded in the blocks, so a correct
+atomic write would not corrupt the checksum. It\(aqs likely that after reading
+such block the data inside would not be consistent with the rest. To rule that
+out there\(aqs embedded block number in the metadata block. It\(aqs the logical
+block number because this is what the logical structure expects and verifies.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIProblem\fR: while the data are written atomically, the contents get changed
-.RE
+The following is based on information publicly available, user feedback,
+community discussions or bug report analyses. It\(aqs not complete and further
+research is encouraged when in doubt.
+.SS Main memory
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIDetection\fR: checksum mismatch on read
-.RE
+The data structures and raw data blocks are temporarily stored in computer
+memory before they get written to the device. It is critical that memory is
+reliable because even simple bit flips can have vast consequences and lead to
+damaged structures, not only in the filesystem but in the whole operating
+system.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIRepair\fR: use another copy or rebuild from multiple blocks using some encoding scheme
-.RE
+Based on experience in the community, memory bit flips are more common than one
+would think. When it happens, it\(aqs reported by the tree\-checker or by a checksum
+mismatch after reading blocks. There are some very obvious instances of bit
+flips that happen, e.g. in an ordered sequence of keys in metadata blocks. We can
+easily infer from the other data what values get damaged and how. However, fixing
+that is not straightforward and would require cross\-referencing data from the
+entire filesystem to see the scope.
 .sp
-\fBData get silently written to another offset (3)\fR
-.sp
-This would be another serious problem as the filesystem has no information when it happens\&. For that reason the measures have to be done ahead of time\&. This problem is also commonly called \fIghost write\fR\&.
-.sp
-The metadata blocks have the checksum embedded in the blocks, so a correct atomic write would not corrupt the checksum\&. It\(cqs likely that after reading such block the data inside would not be consistent with the rest\&. To rule that out there\(cqs embedded block number in the metadata block\&. It\(cqs the logical block number because this is what the logical structure expects and verifies\&.
-.SH "HARDWARE CONSIDERATIONS"
-.sp
-The following is based on information publicly available, user feedback, community discussions or bug report analyses\&. It\(cqs not complete and further research is encouraged when in doubt\&.
-.SS "MAIN MEMORY"
-.sp
-The data structures and raw data blocks are temporarily stored in computer memory before they get written to the device\&. It is critical that memory is reliable because even simple bit flips can have vast consequences and lead to damaged structures, not only in the filesystem but in the whole operating system\&.
-.sp
-Based on experience in the community, memory bit flips are more common than one would think\&. When it happens, it\(cqs reported by the tree\-checker or by a checksum mismatch after reading blocks\&. There are some very obvious instances of bit flips that happen, e\&.g\&. in an ordered sequence of keys in metadata blocks\&. We can easily infer from the other data what values get damaged and how\&. However, fixing that is not straightforward and would require cross\-referencing data from the entire filesystem to see the scope\&.
-.sp
-If available, ECC memory should lower the chances of bit flips, but this type of memory is not available in all cases\&. A memory test should be performed in case there\(cqs a visible bit flip pattern, though this may not detect a faulty memory module because the actual load of the system could be the factor making the problems appear\&. In recent years attacks on how the memory modules operate have been demonstrated (\fIrowhammer\fR) achieving specific bits to be flipped\&. While these were targeted, this shows that a series of reads or writes can affect unrelated parts of memory\&.
+If available, ECC memory should lower the chances of bit flips, but this
+type of memory is not available in all cases. A memory test should be performed
+in case there\(aqs a visible bit flip pattern, though this may not detect a faulty
+memory module because the actual load of the system could be the factor making
+the problems appear. In recent years attacks on how the memory modules operate
+have been demonstrated (\fIrowhammer\fP) achieving specific bits to be flipped.
+While these were targeted, this shows that a series of reads or writes can
+affect unrelated parts of memory.
 .sp
 Further reading:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\m[blue]\fBhttps://en\&.wikipedia\&.org/wiki/Row_hammer\fR\m[]
-.RE
+.INDENT 0.0
+.IP \(bu 2
+\fI\%https://en.wikipedia.org/wiki/Row_hammer\fP
+.UNINDENT
 .sp
 What to do:
+.INDENT 0.0
+.IP \(bu 2
+run \fImemtest\fP, note that sometimes memory errors happen only when the system
+is under heavy load that the default memtest cannot trigger
+.IP \(bu 2
+memory errors may appear as filesystem going read\-only due to \(dqpre write\(dq
+check, that verify meta data before they get written but fail some basic
+consistency checks
+.UNINDENT
+.SS Direct memory access (DMA)
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-run
-\fImemtest\fR, note that sometimes memory errors happen only when the system is under heavy load that the default memtest cannot trigger
-.RE
+Another class of errors is related to DMA (direct memory access) performed
+by device drivers. While this could be considered a software error, the
+data transfers that happen without CPU assistance may accidentally corrupt
+other pages. Storage devices utilize DMA for performance reasons, the
+filesystem structures and data pages are passed back and forth, making
+errors possible in case page life time is not properly tracked.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-memory errors may appear as filesystem going read\-only due to "pre write" check, that verify meta data before they get written but fail some basic consistency checks
-.RE
-.SS "DIRECT MEMORY ACCESS (DMA)"
-.sp
-Another class of errors is related to DMA (direct memory access) performed by device drivers\&. While this could be considered a software error, the data transfers that happen without CPU assistance may accidentally corrupt other pages\&. Storage devices utilize DMA for performance reasons, the filesystem structures and data pages are passed back and forth, making errors possible in case page life time is not properly tracked\&.
-.sp
-There are lots of quirks (device\-specific workarounds) in Linux kernel drivers (regarding not only DMA) that are added when found\&. The quirks may avoid specific errors or disable some features to avoid worse problems\&.
+There are lots of quirks (device\-specific workarounds) in Linux kernel
+drivers (regarding not only DMA) that are added when found. The quirks
+may avoid specific errors or disable some features to avoid worse problems.
 .sp
 What to do:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.INDENT 0.0
+.IP \(bu 2
 use up\-to\-date kernel (recent releases or maintained long term support versions)
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.IP \(bu 2
 as this may be caused by faulty drivers, keep the systems up\-to\-date
-.RE
-.SS "ROTATIONAL DISKS (HDD)"
+.UNINDENT
+.SS Rotational disks (HDD)
 .sp
-Rotational HDDs typically fail at the level of individual sectors or small clusters\&. Read failures are caught on the levels below the filesystem and are returned to the user as \fIEIO \- Input/output error\fR\&. Reading the blocks repeatedly may return the data eventually, but this is better done by specialized tools and filesystem takes the result of the lower layers\&. Rewriting the sectors may trigger internal remapping but this inevitably leads to data loss\&.
+Rotational HDDs typically fail at the level of individual sectors or small clusters.
+Read failures are caught on the levels below the filesystem and are returned to
+the user as \fIEIO \- Input/output error\fP\&. Reading the blocks repeatedly may
+return the data eventually, but this is better done by specialized tools and
+filesystem takes the result of the lower layers. Rewriting the sectors may
+trigger internal remapping but this inevitably leads to data loss.
 .sp
-Disk firmware is technically software but from the filesystem perspective is part of the hardware\&. IO requests are processed, and caching or various other optimizations are performed, which may lead to bugs under high load or unexpected physical conditions or unsupported use cases\&.
+Disk firmware is technically software but from the filesystem perspective is
+part of the hardware. IO requests are processed, and caching or various
+other optimizations are performed, which may lead to bugs under high load or
+unexpected physical conditions or unsupported use cases.
 .sp
-Disks are connected by cables with two ends, both of which can cause problems when not attached properly\&. Data transfers are protected by checksums and the lower layers try hard to transfer the data correctly or not at all\&. The errors from badly\-connecting cables may manifest as large amount of failed read or write requests, or as short error bursts depending on physical conditions\&.
+Disks are connected by cables with two ends, both of which can cause problems
+when not attached properly. Data transfers are protected by checksums and the
+lower layers try hard to transfer the data correctly or not at all. The errors
+from badly\-connecting cables may manifest as large amount of failed read or
+write requests, or as short error bursts depending on physical conditions.
 .sp
 What to do:
+.INDENT 0.0
+.IP \(bu 2
+check \fBsmartctl\fP for potential issues
+.UNINDENT
+.SS Solid state drives (SSD)
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-check
-\fIsmartctl\fR
-for potential issues
-.RE
-.SS "SOLID STATE DRIVES (SSD)"
+The mechanism of information storage is different from HDDs and this affects
+the failure mode as well. The data are stored in cells grouped in large blocks
+with limited number of resets and other write constraints. The firmware tries
+to avoid unnecessary resets and performs optimizations to maximize the storage
+media lifetime. The known techniques are deduplication (blocks with same
+fingerprint/hash are mapped to same physical block), compression or internal
+remapping and garbage collection of used memory cells. Due to the additional
+processing there are measures to verity the data e.g. by ECC codes.
 .sp
-The mechanism of information storage is different from HDDs and this affects the failure mode as well\&. The data are stored in cells grouped in large blocks with limited number of resets and other write constraints\&. The firmware tries to avoid unnecessary resets and performs optimizations to maximize the storage media lifetime\&. The known techniques are deduplication (blocks with same fingerprint/hash are mapped to same physical block), compression or internal remapping and garbage collection of used memory cells\&. Due to the additional processing there are measures to verity the data e\&.g\&. by ECC codes\&.
+The observations of failing SSDs show that the whole electronic fails at once
+or affects a lot of data (e.g. stored on one chip). Recovering such data
+may need specialized equipment and reading data repeatedly does not help as
+it\(aqs possible with HDDs.
 .sp
-The observations of failing SSDs show that the whole electronic fails at once or affects a lot of data (eg\&. stored on one chip)\&. Recovering such data may need specialized equipment and reading data repeatedly does not help as it\(cqs possible with HDDs\&.
+There are several technologies of the memory cells with different
+characteristics and price. The lifetime is directly affected by the type and
+frequency of data written.  Writing \(dqtoo much\(dq distinct data (e.g. encrypted)
+may render the internal deduplication ineffective and lead to a lot of rewrites
+and increased wear of the memory cells.
 .sp
-There are several technologies of the memory cells with different characteristics and price\&. The lifetime is directly affected by the type and frequency of data written\&. Writing "too much" distinct data (e\&.g\&. encrypted) may render the internal deduplication ineffective and lead to a lot of rewrites and increased wear of the memory cells\&.
+There are several technologies and manufacturers so it\(aqs hard to describe them
+but there are some that exhibit similar behaviour:
+.INDENT 0.0
+.IP \(bu 2
+expensive SSD will use more durable memory cells and is optimized for
+reliability and high load
+.IP \(bu 2
+cheap SSD is projected for a lower load (\(dqdesktop user\(dq) and is optimized for
+cost, it may employ the optimizations and/or extended error reporting
+partially or not at all
+.UNINDENT
 .sp
-There are several technologies and manufacturers so it\(cqs hard to describe them but there are some that exhibit similar behaviour:
+It\(aqs not possible to reliably determine the expected lifetime of an SSD due to
+lack of information about how it works or due to lack of reliable stats provided
+by the device.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-expensive SSD will use more durable memory cells and is optimized for reliability and high load
-.RE
+Metadata writes tend to be the biggest component of lifetime writes to a SSD,
+so there is some value in reducing them. Depending on the device class (high
+end/low end) the features like DUP block group profiles may affect the
+reliability in both ways:
+.INDENT 0.0
+.IP \(bu 2
+\fIhigh end\fP are typically more reliable and using \fIsingle\fP for data and
+metadata could be suitable to reduce device wear
+.IP \(bu 2
+\fIlow end\fP could lack ability to identify errors so an additional redundancy
+at the filesystem level (checksums, \fIDUP\fP) could help
+.UNINDENT
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-cheap SSD is projected for a lower load ("desktop user") and is optimized for cost, it may employ the optimizations and/or extended error reporting partially or not at all
-.RE
-.sp
-It\(cqs not possible to reliably determine the expected lifetime of an SSD due to lack of information about how it works or due to lack of reliable stats provided by the device\&.
-.sp
-Metadata writes tend to be the biggest component of lifetime writes to a SSD, so there is some value in reducing them\&. Depending on the device class (high end/low end) the features like DUP block group profiles may affect the reliability in both ways:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIhigh end\fR
-are typically more reliable and using
-\fIsingle\fR
-for data and metadata could be suitable to reduce device wear
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\fIlow end\fR
-could lack ability to identify errors so an additional redundancy at the filesystem level (checksums,
-\fIDUP\fR) could help
-.RE
-.sp
-Only users who consume 50 to 100% of the SSD\(cqs actual lifetime writes need to be concerned by the write amplification of btrfs DUP metadata\&. Most users will be far below 50% of the actual lifetime, or will write the drive to death and discover how many writes 100% of the actual lifetime was\&. SSD firmware often adds its own write multipliers that can be arbitrary and unpredictable and dependent on application behavior, and these will typically have far greater effect on SSD lifespan than DUP metadata\&. It\(cqs more or less impossible to predict when a SSD will run out of lifetime writes to within a factor of two, so it\(cqs hard to justify wear reduction as a benefit\&.
+Only users who consume 50 to 100% of the SSD\(aqs actual lifetime writes need to be
+concerned by the write amplification of btrfs DUP metadata. Most users will be
+far below 50% of the actual lifetime, or will write the drive to death and
+discover how many writes 100% of the actual lifetime was. SSD firmware often
+adds its own write multipliers that can be arbitrary and unpredictable and
+dependent on application behavior, and these will typically have far greater
+effect on SSD lifespan than DUP metadata. It\(aqs more or less impossible to
+predict when a SSD will run out of lifetime writes to within a factor of two, so
+it\(aqs hard to justify wear reduction as a benefit.
 .sp
 Further reading:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\m[blue]\fBhttps://www\&.snia\&.org/educational\-library/ssd\-and\-deduplication\-end\-spinning\-disk\-2012\fR\m[]
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\m[blue]\fBhttps://www\&.snia\&.org/educational\-library/realities\-solid\-state\-storage\-2013\-2013\fR\m[]
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\m[blue]\fBhttps://www\&.snia\&.org/educational\-library/ssd\-performance\-primer\-2013\fR\m[]
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\m[blue]\fBhttps://www\&.snia\&.org/educational\-library/how\-controllers\-maximize\-ssd\-life\-2013\fR\m[]
-.RE
+.INDENT 0.0
+.IP \(bu 2
+\fI\%https://www.snia.org/educational\-library/ssd\-and\-deduplication\-end\-spinning\-disk\-2012\fP
+.IP \(bu 2
+\fI\%https://www.snia.org/educational\-library/realities\-solid\-state\-storage\-2013\-2013\fP
+.IP \(bu 2
+\fI\%https://www.snia.org/educational\-library/ssd\-performance\-primer\-2013\fP
+.IP \(bu 2
+\fI\%https://www.snia.org/educational\-library/how\-controllers\-maximize\-ssd\-life\-2013\fP
+.UNINDENT
 .sp
 What to do:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-run
-\fIsmartctl\fR
-or self\-tests to look for potential issues
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.INDENT 0.0
+.IP \(bu 2
+run \fBsmartctl\fP or self\-tests to look for potential issues
+.IP \(bu 2
 keep the firmware up\-to\-date
-.RE
-.SS "NVM EXPRESS, NON\-VOLATILE MEMORY (NVMe)"
+.UNINDENT
+.SS NVM express, non\-volatile memory (NVMe)
 .sp
-NVMe is a type of persistent memory usually connected over a system bus (PCIe) or similar interface and the speeds are an order of magnitude faster than SSD\&. It is also a non\-rotating type of storage, and is not typically connected by a cable\&. It\(cqs not a SCSI type device either but rather a complete specification for logical device interface\&.
+NVMe is a type of persistent memory usually connected over a system bus (PCIe)
+or similar interface and the speeds are an order of magnitude faster than SSD.
+It is also a non\-rotating type of storage, and is not typically connected by a
+cable. It\(aqs not a SCSI type device either but rather a complete specification
+for logical device interface.
 .sp
-In a way the errors could be compared to a combination of SSD class and regular memory\&. Errors may exhibit as random bit flips or IO failures\&. There are tools to access the internal log (\fInvme log\fR and \fInvme\-cli\fR) for a more detailed analysis\&.
+In a way the errors could be compared to a combination of SSD class and regular
+memory. Errors may exhibit as random bit flips or IO failures. There are tools
+to access the internal log (\fBnvme log\fP and \fBnvme\-cli\fP) for a more detailed
+analysis.
 .sp
-There are separate error detection and correction steps performed e\&.g\&. on the bus level and in most cases never making in to the filesystem level\&. Once this happens it could mean there\(cqs some systematic error like overheating or bad physical connection of the device\&. You may want to run self\-tests (using \fIsmartctl\fR)\&.
+There are separate error detection and correction steps performed e.g. on the
+bus level and in most cases never making in to the filesystem level. Once this
+happens it could mean there\(aqs some systematic error like overheating or bad
+physical connection of the device. You may want to run self\-tests (using
+\fBsmartctl\fP).
+.INDENT 0.0
+.IP \(bu 2
+\fI\%https://en.wikipedia.org/wiki/NVM_Express\fP
+.IP \(bu 2
+\fI\%https://www.smartmontools.org/wiki/NVMe_Support\fP
+.UNINDENT
+.SS Drive firmware
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\m[blue]\fBhttps://en\&.wikipedia\&.org/wiki/NVM_Express\fR\m[]
-.RE
+Firmware is technically still software but embedded into the hardware. As all
+software has bugs, so does firmware. Storage devices can update the firmware
+and fix known bugs. In some cases the it\(aqs possible to avoid certain bugs by
+quirks (device\-specific workarounds) in Linux kernel.
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-\m[blue]\fBhttps://www\&.smartmontools\&.org/wiki/NVMe_Support\fR\m[]
-.RE
-.SS "DRIVE FIRMWARE"
-.sp
-Firmware is technically still software but embedded into the hardware\&. As all software has bugs, so does firmware\&. Storage devices can update the firmware and fix known bugs\&. In some cases the it\(cqs possible to avoid certain bugs by quirks (device\-specific workarounds) in Linux kernel\&.
-.sp
-A faulty firmware can cause wide range of corruptions from small and localized to large affecting lots of data\&. Self\-repair capabilities may not be sufficient\&.
+A faulty firmware can cause wide range of corruptions from small and localized
+to large affecting lots of data. Self\-repair capabilities may not be sufficient.
 .sp
 What to do:
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
-check for firmware updates in case there are known problems, note that updating firmware can be risky on itself
-.RE
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.sp -1
-.IP \(bu 2.3
-.\}
+.INDENT 0.0
+.IP \(bu 2
+check for firmware updates in case there are known problems, note that
+updating firmware can be risky on itself
+.IP \(bu 2
 use up\-to\-date kernel (recent releases or maintained long term support versions)
-.RE
-.SS "SD FLASH CARDS"
+.UNINDENT
+.SS SD flash cards
 .sp
-There are a lot of devices with low power consumption and thus using storage media based on low power consumption too, typically flash memory stored on a chip enclosed in a detachable card package\&. An improperly inserted card may be damaged by electrical spikes when the device is turned on or off\&. The chips storing data in turn may be damaged permanently\&. All types of flash memory have a limited number of rewrites, so the data are internally translated by FTL (flash translation layer)\&. This is implemented in firmware (technically a software) and prone to bugs that manifest as hardware errors\&.
+There are a lot of devices with low power consumption and thus using storage
+media based on low power consumption too, typically flash memory stored on
+a chip enclosed in a detachable card package. An improperly inserted card may be
+damaged by electrical spikes when the device is turned on or off. The chips
+storing data in turn may be damaged permanently. All types of flash memory
+have a limited number of rewrites, so the data are internally translated by FTL
+(flash translation layer). This is implemented in firmware (technically a
+software) and prone to bugs that manifest as hardware errors.
 .sp
-Adding redundancy like using DUP profiles for both data and metadata can help in some cases but a full backup might be the best option once problems appear and replacing the card could be required as well\&.
-.SS "HARDWARE AS THE MAIN SOURCE OF FILESYSTEM CORRUPTIONS"
+Adding redundancy like using DUP profiles for both data and metadata can help
+in some cases but a full backup might be the best option once problems appear
+and replacing the card could be required as well.
+.SS Hardware as the main source of filesystem corruptions
 .sp
-\fBIf you use unreliable hardware and don\(cqt know about that, don\(cqt blame the filesystem when it tells you\&.\fR
-.SH "SEE ALSO"
+\fBIf you use unreliable hardware and don\(aqt know about that, don\(aqt blame the
+filesystem when it tells you.\fP
+.SH SEE ALSO
 .sp
-\fBacl\fR(5), \fBbtrfs\fR(8), \fBchattr\fR(1), \fBfstrim\fR(8), \fBioctl\fR(2), \fBmkfs\&.btrfs\fR(8), \fBmount\fR(8), \fBswapon\fR(8)
+\fBacl(5)\fP,
+\fI\%btrfs(8)\fP,
+\fBchattr(1)\fP,
+\fBfstrim(8)\fP,
+\fBioctl(2)\fP,
+\fI\%mkfs.btrfs(8)\fP,
+\fBmount(8)\fP,
+\fBswapon(8)\fP
+.\" Generated by docutils manpage writer.
+.

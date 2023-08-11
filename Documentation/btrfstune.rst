@@ -9,20 +9,38 @@ SYNOPSIS
 DESCRIPTION
 -----------
 
-**btrfstune** can be used to enable, disable, or set various filesystem
+:command:`btrfstune` can be used to enable, disable, or set various filesystem
 parameters. The filesystem must be unmounted.
 
-The common usecase is to enable features that were not enabled at mkfs time.
+The common use case is to enable features that were not enabled at mkfs time.
 Please make sure that you have kernel support for the features.  You can find a
 complete list of features and kernel version of their introduction at
-https://btrfs.wiki.kernel.org/index.php/Changelog#By_feature .  Also, the
-manual page ``mkfs.btrfs(8)`` contains more details about the features.
+:doc:`Feature by version<Feature-by-version>` page.  Also, the manual page
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>` contains more details about the features.
 
 Some of the features could be also enabled on a mounted filesystem by other
-means.  Please refer to the *FILESYSTEM FEATURES* in ``btrfs(5)``.
+means.  Please refer to the *FILESYSTEM FEATURES* in :doc:`btrfs(5)<btrfs-man5>`.
 
 OPTIONS
 -------
+
+--convert-to-block-group-tree
+        (since kernel 6.1)
+
+        Convert portions of extent tree that tracks block groups to a separate
+        block group tree. This greatly reduces mount time. Can be also enabled
+        at mkfs time.
+
+--convert-from-block-group-tree
+        (since kernel 6.1)
+
+        Convert block groups tracked in standalone block group tree back to
+        extent tree and remove 'block-group-tree' feature bit from the filesystem.
+
+--convert-to-free-space-tree
+        (since kernel 4.5)
+
+        Convert to free-space-tree feature (v2 of space cache).
 
 -f
         Allow dangerous changes, e.g. clear the seeding flag or change fsid.
@@ -63,8 +81,9 @@ OPTIONS
         Enable seeding on a given device. Value 1 will enable seeding, 0 will
         disable it.  A seeding filesystem is forced to be mounted read-only. A
         new device can be added to the filesystem and will capture all writes
-        keeping the seeding device intact.  See also section *SEEDING DEVICE*
-        in ``btrfs(5)``.
+        keeping the seeding device intact.  See also section
+        :ref:`SEEDING DEVICE<man-btrfs5-seeding-device>`
+        in :doc:`btrfs(5)<btrfs-man5>`.
 
         .. warning::
                 Clearing the seeding flag on a device may be dangerous.  If a
@@ -95,7 +114,7 @@ OPTIONS
         .. warning::
                 Cancelling or interrupting a UUID change operation will make
                 the filesystem temporarily unmountable.  To fix it, rerun
-                *btrfstune -u* and let it complete.
+                :command:`btrfstune -u` and let it complete.
 
 -x
         (since kernel: 3.10)
@@ -105,7 +124,7 @@ OPTIONS
 
         All newly created extents will use the new representation. To
         completely switch the entire filesystem, run a full balance of the
-        metadata. Please refer to ``btrfs-balance(8)``.
+        metadata. Please refer to :doc:`btrfs-balance(8)<btrfs-balance>`.
 
 
 EXIT STATUS
@@ -123,6 +142,6 @@ will be declared obsolete and scheduled for removal.
 SEE ALSO
 --------
 
-``btrfs(5)``,
-``btrfs-balance(8)``,
-``mkfs.btrfs(8)``
+:doc:`btrfs(5)<btrfs-man5>`,
+:doc:`btrfs-balance(8)<btrfs-balance>`,
+:doc:`mkfs.btrfs(8)<mkfs.btrfs>`

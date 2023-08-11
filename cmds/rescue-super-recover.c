@@ -16,24 +16,18 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <sys/stat.h>
-#include <uuid/uuid.h>
 #include <errno.h>
 #include <unistd.h>
-#include <ctype.h>
-#include <getopt.h>
-
-#include "kerncompat.h"
+#include <string.h>
+#include "kernel-lib/list.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
-#include "kernel-lib/list.h"
-#include "common/utils.h"
-#include "crypto/crc32c.h"
 #include "kernel-shared/volumes.h"
-#include "cmds/commands.h"
+#include "common/utils.h"
 #include "cmds/rescue.h"
 
 struct btrfs_recover_superblock {
