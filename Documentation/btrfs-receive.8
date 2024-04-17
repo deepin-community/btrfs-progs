@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-RECEIVE" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-RECEIVE" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-receive \- receive subvolumes from send stream
 .SH SYNOPSIS
@@ -90,8 +90,8 @@ Default value is 1. A value of 0 means no limit.
 .BI \-m \ <ROOTMOUNT>
 the root mount point of the destination filesystem
 .sp
-By default the mount point is searched in \fI/proc/self/mounts\fP\&.
-If \fI/proc\fP is not accessible, e.g. in a chroot environment, use this option to
+By default the mount point is searched in :\fI\%file:/proc/self\fP/mounts\(ga.
+If \fB/proc\fP is not accessible, e.g. in a chroot environment, use this option to
 tell us where this filesystem is mounted.
 .TP
 .B  \-\-force\-decompress

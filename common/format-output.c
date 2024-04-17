@@ -22,7 +22,8 @@
 #include <string.h>
 #include <time.h>
 #include <uuid/uuid.h>
-#include "common/defs.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "common/messages.h"
 #include "common/format-output.h"
 #include "common/utils.h"
 #include "common/units.h"
@@ -33,7 +34,7 @@ static void print_uuid(const u8 *uuid)
 	char uuidparse[BTRFS_UUID_UNPARSED_SIZE];
 
 	if (uuid_is_null(uuid)) {
-		putchar('-');
+		printf("null");
 	} else {
 		uuid_unparse(uuid, uuidparse);
 		printf("%s", uuidparse);
@@ -142,6 +143,30 @@ static void fmt_separator(struct format_ctx *fctx)
 	}
 }
 
+/* Detect formats or values that must not be quoted (null, bool) */
+static bool fmt_set_unquoted(struct format_ctx *fctx, const struct rowspec *row,
+			     va_list args)
+{
+	static const char *types[] = { "%llu", "bool" };
+
+	for (int i = 0; i < sizeof(types) / sizeof(types[0]); i++)
+		if (strcmp(types[i], row->fmt) == 0)
+			return true;
+
+	/* Null value */
+	if (strcmp("uuid", row->fmt) == 0) {
+		va_list tmpargs;
+		const u8 *uuid;
+
+		va_copy(tmpargs, args);
+		uuid = va_arg(tmpargs, const u8 *);
+
+		if (uuid_is_null(uuid))
+			return true;
+	}
+	return false;
+}
+
 void fmt_start(struct format_ctx *fctx, const struct rowspec *spec, int width,
 		int indent)
 {
@@ -206,6 +231,7 @@ void fmt_start_value(struct format_ctx *fctx, const struct rowspec *row)
 	} else if (bconf.output_format == CMD_FORMAT_JSON) {
 		if (strcmp(row->fmt, "list") == 0) {
 		} else if (strcmp(row->fmt, "map") == 0) {
+		} else if (fctx->unquoted) {
 		} else {
 			putchar('"');
 		}
@@ -224,6 +250,7 @@ void fmt_end_value(struct format_ctx *fctx, const struct rowspec *row)
 	if (bconf.output_format == CMD_FORMAT_JSON) {
 		if (strcmp(row->fmt, "list") == 0) {
 		} else if (strcmp(row->fmt, "map") == 0) {
+		} else if (fctx->unquoted) {
 		} else {
 			putchar('"');
 		}
@@ -319,10 +346,16 @@ void fmt_print(struct format_ctx *fctx, const char* key, ...)
 		}
 	}
 
+	fctx->unquoted = fmt_set_unquoted(fctx, row, args);
 	fmt_start_value(fctx, row);
 
 	if (row->fmt[0] == '%') {
 		vprintf(row->fmt, args);
+	} else if (strcmp(row->fmt, "bool") == 0) {
+		/* Bool is passed as int to varargs */
+		bool value = va_arg(args, int);
+
+		printf("%s", value ? "true" : "false");
 	} else if (strcmp(row->fmt, "str") == 0) {
 		const char *str = va_arg(args, const char *);
 
@@ -331,7 +364,7 @@ void fmt_print(struct format_ctx *fctx, const char* key, ...)
 		const u8 *uuid = va_arg(args, const u8*);
 
 		print_uuid(uuid);
-	} else if (strcmp(row->fmt, "time-long") == 0) {
+	} else if (strcmp(row->fmt, "date-time") == 0) {
 		const time_t ts = va_arg(args, time_t);
 
 		if (ts) {

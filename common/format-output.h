@@ -18,6 +18,7 @@
 #define __BTRFS_FORMAT_OUTPUT_H__
 
 #include <stddef.h>
+#include <stdbool.h>
 
 struct rowspec {
 	/* Identifier for the row */
@@ -26,8 +27,14 @@ struct rowspec {
 	 * Format to print:
 	 * - starting with %: must be a valid printf spec
 	 *   (values: va_args)
+	 * - bool: print boolean value true/false (unquoted, native type)
+	 *   (values: bool or int)
+	 * - str: string type with quoted special characters (use for unknown input source)
+	 *   (values: const char *)
 	 * - uuid: format UUID as text
 	 *   (value: u8 *uuid)
+	 * - date-time: pretty print timestamp, date, time and timezone
+	 *   (values: time_t)
 	 * - list: print list opening bracket [
 	 *   (values printed separately)
 	 * - map:  start a new group, opens {
@@ -71,6 +78,8 @@ struct format_ctx {
 
 	char jtype[JSON_NESTING_LIMIT];
 	enum json_type memb[JSON_NESTING_LIMIT];
+	/* Set if the value needs to be printed unquoted */
+	bool unquoted;
 };
 
 void fmt_start(struct format_ctx *fctx, const struct rowspec *spec, int width,

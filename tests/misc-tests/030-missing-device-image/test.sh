@@ -2,7 +2,7 @@
 # Test that btrfs-image can dump image correctly for a missing device (RAID1)
 #
 # At least for RAID1, btrfs-image should be able to handle one missing device
-# without any problem
+# without any problem. Only space cache v2 supported.
 
 source "$TEST_TOP/common" || exit
 
@@ -32,18 +32,11 @@ test_missing()
 	run_check $SUDO_HELPER "$TOP/mkfs.btrfs" -f -d raid1 -m raid1 "$dev1" "$dev2"
 
 	# fill the fs with some data, we could create space cache
+	cond_wait_for_loopdevs
 	run_check $SUDO_HELPER mount "$dev1" "$TEST_MNT"
 	run_check $SUDO_HELPER dd if=/dev/zero of="$TEST_MNT/a" bs=1M count=10
 	run_check $SUDO_HELPER dd if=/dev/zero of="$TEST_MNT/b" bs=4k count=1000 conv=sync
 	run_check $SUDO_HELPER umount "$TEST_MNT"
-
-	# make sure we have space cache
-	if ! run_check_stdout "$TOP/btrfs" inspect dump-tree -t root "$dev1" |
-		grep -q "EXTENT_DATA"; then
-		# Normally the above operation should create the space cache.
-		# If not, it may mean we have migrated to v2 cache by default
-		_not_run "unable to create v1 space cache"
-	fi
 
 	# now wipe the device
 	run_check wipefs -fa "$bad_dev"

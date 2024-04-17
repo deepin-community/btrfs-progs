@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-RESCUE" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-RESCUE" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-rescue \- recover a damaged btrfs filesystem
 .SH SYNOPSIS
@@ -66,7 +66,7 @@ slow especially executed on a large device.
 .INDENT 0.0
 .TP
 .B fix\-device\-size <device>
-fix device size and super block total bytes values that are do not match
+fix device size and super block total bytes values that do not match
 .sp
 Kernel 4.11 starts to check the device size more strictly and this might
 mismatch the stored value of total bytes. See the exact error message below.
@@ -95,6 +95,21 @@ WARNING: CPU: 3 PID: 439 at fs/btrfs/ctree.h:1559 btrfs_update_device+0x1c5/0x1d
 .fi
 .UNINDENT
 .UNINDENT
+.UNINDENT
+.INDENT 0.0
+.TP
+.B clear\-ino\-cache <device>
+Remove leftover items pertaining to the deprecated \fIinode cache\fP feature.
+.sp
+The \fIinode cache\fP feature (enabled by mount option \(dqinode_cache\(dq) has been
+completely removed in 5.11 kernel.
+.TP
+.B clear\-space\-cache <v1|v2> <device>
+Completely remove the on\-disk data of free space cache of given version.
+.sp
+Especially for v1 free space cache, \fIclear_cache\fP mount option would only
+remove the cache for updated block groups, the remaining would not be removed.
+Thus this command is provided to manually clear the free space cache.
 .TP
 .B clear\-uuid\-tree <device>
 Clear UUID tree, so that kernel can re\-generate it at next read\-write

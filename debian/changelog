@@ -1,3 +1,16 @@
+btrfs-progs (6.6.3-1) unstable; urgency=medium
+
+  * New upstream release (closes: #1055372).
+  * Add B-Dep on python3-sphinx-rtd-theme, required for building docs.
+  * Fix failure to build twice in a row (closes: #1044007).
+  * Query udevdir via pkg-config, fixing FTBFS (closes: #1057231).
+  * Build with support for converting from reiserfs (closes: #1030950).
+  * Temporarily move the VCS to sr.ht
+  * Slightly improve description.
+  * Standardize debian/rules somewhat.
+
+ -- Adam Borowski <kilobyte@angband.pl>  Fri, 29 Dec 2023 19:03:32 +0100
+
 btrfs-progs (6.3.2-1) unstable; urgency=medium
 
   * New upstream bugfix release.

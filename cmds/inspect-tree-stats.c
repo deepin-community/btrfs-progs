@@ -18,18 +18,20 @@
 
 #include "kerncompat.h"
 #include <sys/time.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <getopt.h>
 #include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
 #include "kernel-lib/rbtree.h"
 #include "kernel-lib/rbtree_types.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/extent_io.h"
 #include "kernel-shared/file-item.h"
-#include "common/utils.h"
+#include "kernel-shared/tree-checker.h"
 #include "common/help.h"
 #include "common/messages.h"
 #include "common/open-utils.h"
@@ -152,10 +154,12 @@ static int walk_nodes(struct btrfs_root *root, struct btrfs_path *path,
 
 		path->slots[level] = i;
 		if ((level - 1) > 0 || find_inline) {
-			tmp = read_tree_block(root->fs_info, cur_blocknr,
-					      btrfs_header_owner(b),
-					      btrfs_node_ptr_generation(b, i),
-					      level - 1, NULL);
+			struct btrfs_tree_parent_check check = {
+				.owner_root = btrfs_header_owner(b),
+				.transid = btrfs_node_ptr_generation(b, i),
+				.level = level - 1,
+			};
+			tmp = read_tree_block(root->fs_info, cur_blocknr, &check);
 			if (!extent_buffer_uptodate(tmp)) {
 				error("failed to read blocknr %llu",
 					btrfs_node_blockptr(b, i));
@@ -314,7 +318,7 @@ static int calc_root_size(struct btrfs_root *tree_root, struct btrfs_key *key,
 			  int find_inline)
 {
 	struct btrfs_root *root;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct rb_node *n;
 	struct timeval start, end, diff = {0};
 	struct root_stats stat;
@@ -329,7 +333,6 @@ static int calc_root_size(struct btrfs_root *tree_root, struct btrfs_key *key,
 		return 1;
 	}
 
-	btrfs_init_path(&path);
 	memset(&stat, 0, sizeof(stat));
 	level = btrfs_header_level(root->node);
 	stat.lowest_bytenr = btrfs_header_bytenr(root->node);

@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS" "5" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS" "5" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs \- topics about the BTRFS filesystem (mount options, supported file attributes and other)
 .SH DESCRIPTION
@@ -99,6 +99,8 @@ Enable/disable support for POSIX Access Control Lists (ACLs).  See the
 .sp
 The support for ACL is build\-time configurable (BTRFS_FS_POSIX_ACL) and
 mount fails if \fIacl\fP is requested but the feature is not compiled in.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B autodefrag, noautodefrag
 (since: 3.0, default: off)
@@ -106,7 +108,7 @@ mount fails if \fIacl\fP is requested but the feature is not compiled in.
 Enable automatic file defragmentation.
 When enabled, small random writes into files (in a range of tens of kilobytes,
 currently it\(aqs 64KiB) are detected and queued up for the defragmentation process.
-Not well suited for large database workloads.
+May not be well suited for large database workloads.
 .sp
 The read latency may increase due to reading the adjacent blocks that make up the
 range for defragmentation, successive write will merge the blocks in the new
@@ -258,11 +260,13 @@ There is a slight performance gain when checksums are turned off, the
 corresponding metadata blocks holding the checksums do not need to updated.
 The cost of checksumming of the blocks in memory is much lower than the IO,
 modern CPUs feature hardware support of the checksumming algorithm.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B degraded
 (default: off)
 .sp
-Allow mounts with less devices than the RAID profile constraints
+Allow mounts with fewer devices than the RAID profile constraints
 require.  A read\-write mount (or remount) may fail when there are too many devices
 missing, for example if a stripe member is completely missing from RAID0.
 .sp
@@ -271,13 +275,15 @@ chunk level, not at the device level. This allows degraded mounts of
 filesystems with mixed RAID profiles for data and metadata, even if the
 device number constraints would not be satisfied for some of the profiles.
 .sp
-Example: metadata \-\- raid1, data \-\- single, devices \-\- /dev/sda, /dev/sdb
+Example: metadata \-\- raid1, data \-\- single, devices \-\- \fB/dev/sda\fP, \fB/dev/sdb\fP
 .sp
 Suppose the data are completely stored on \fIsda\fP, then missing \fIsdb\fP will not
 prevent the mount, even if 1 missing device would normally prevent (any)
 \fIsingle\fP profile to mount. In case some of the data chunks are stored on \fIsdb\fP,
 then the constraint of single/data is not satisfied and the filesystem
 cannot be mounted.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B device=<devicepath>
 Specify a path to a device that will be scanned for BTRFS filesystem during
@@ -355,12 +361,12 @@ When off, the filesystem is consistent but buffered writes may last more than
 one transaction commit.
 .TP
 .B fragment=<type>
-(depends on compile\-time option BTRFS_DEBUG, since: 4.4, default: off)
+(depends on compile\-time option CONFIG_BTRFS_DEBUG, since: 4.4, default: off)
 .sp
 A debugging helper to intentionally fragment given \fItype\fP of block groups. The
 type can be \fIdata\fP, \fImetadata\fP or \fIall\fP\&. This mount option should not be used
 outside of debugging environments and is not recognized if the kernel config
-option \fIBTRFS_DEBUG\fP is not enabled.
+option \fICONFIG_BTRFS_DEBUG\fP is not enabled.
 .TP
 .B nologreplay
 (default: off, even read\-only)
@@ -385,8 +391,8 @@ a metadata b\-tree leaf.  The value is specified in bytes, optionally
 with a K suffix (case insensitive).  In practice, this value
 is limited by the filesystem block size (named \fIsectorsize\fP at mkfs time),
 and memory page size of the system. In case of sectorsize limit, there\(aqs
-some space unavailable due to leaf headers.  For example, a 4KiB sectorsize,
-maximum size of inline data is about 3900 bytes.
+some space unavailable due to b\-tree leaf headers.  For example, a 4KiB
+sectorsize, maximum size of inline data is about 3900 bytes.
 .sp
 Inlining can be completely turned off by specifying 0. This will increase data
 block slack if file sizes are much smaller than block size but will reduce
@@ -482,7 +488,7 @@ support will only be able to mount the filesystem in read\-only mode.
 On an unmounted filesystem the caches (both versions) can be cleared by
 \(dqbtrfs check \-\-clear\-space\-cache\(dq.
 .sp
-The \fI\%btrfs\-check(8)\fP and \fI:doc:\(gamkfs.btrfs(8)<mkfs.btrfs>\fP commands have full \fIv2\fP free space
+The \fI\%btrfs\-check(8)\fP and \fI:doc:\(gamkfs.btrfs\fP commands have full \fIv2\fP free space
 cache support since v4.19.
 .sp
 If a version is not explicitly specified, the default implementation will be
@@ -622,7 +628,8 @@ but will work on 4.5+ kernels.
 .INDENT 7.0
 .INDENT 3.5
 The functionality has been removed in 5.11, any stale data created by
-previous use of the \fIinode_cache\fP option can be removed by \fBbtrfs check \-\-clear\-ino\-cache\fP\&.
+previous use of the \fIinode_cache\fP option can be removed by
+\fI\%btrfs rescue clear\-ino\-cache\fP\&.
 .UNINDENT
 .UNINDENT
 .UNINDENT
@@ -667,12 +674,12 @@ will dump a superblock, you can map the value of
 .TP
 .B after mkfs, on a mounted filesystem
 The features of a filesystem (with a given UUID) are listed in
-\fI/sys/fs/btrfs/UUID/features/\fP, one file per feature. The status is stored
+\fB/sys/fs/btrfs/UUID/features/\fP, one file per feature. The status is stored
 inside the file. The value \fI1\fP is for enabled and active, while \fI0\fP means the
 feature was enabled at mount time but turned off afterwards.
 .sp
 Whether a particular feature can be turned on a mounted filesystem can be found
-in the directory \fI/sys/fs/btrfs/features/\fP, one file per feature. The value \fI1\fP
+in the directory \fB/sys/fs/btrfs/features/\fP, one file per feature. The value \fI1\fP
 means the feature can be enabled.
 .UNINDENT
 .sp
@@ -782,7 +789,7 @@ number of the highest supported send stream version
 .sp
 list of checksum algorithms supported by the kernel module, the respective
 modules or built\-in implementing the algorithms need to be present to mount
-the filesystem, see \fICHECKSUM ALGORITHMS\fP
+the filesystem, see section \fI\%CHECKSUM ALGORITHMS\fP\&.
 .TP
 .B supported_sectorsizes
 (since: 5.13)
@@ -801,7 +808,7 @@ kernel, see \fI\%btrfs(5)\fP
 .sp
 zoned mode is allocation/write friendly to host\-managed zoned devices,
 allocation space is partitioned into fixed\-size zones that must be updated
-sequentially, see \fIZONED MODE\fP
+sequentially, see section \fI\%ZONED MODE\fP
 .UNINDENT
 .SH SWAPFILE SUPPORT
 .sp
@@ -891,7 +898,7 @@ Please note that the UUID returned by the \fImkswap\fP utility identifies the sw
 \(dqfilesystem\(dq and because it\(aqs stored in a file, it\(aqs not generally visible and
 usable as an identifier unlike if it was on a block device.
 .sp
-Once activated the file will appear in \fI/proc/swaps\fP:
+Once activated the file will appear in \fB/proc/swaps\fP:
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -945,9 +952,10 @@ the physical can still map to one or more device\-specific physical block
 addresses. It\(aqs the device\-specific physical offset that is suitable as resume
 offset.
 .sp
-Since version 6.1 there\(aqs a command \fBbtrfs inspect\-internal map\-swapfile\fP that will
-print the device physical offset and the adjusted value for \fI/sys/power/resume_offset\fP\&.
-Note that the value is divided by page size, i.e. it\(aqs not the offset itself.
+Since version 6.1 there\(aqs a command \fI\%btrfs inspect\-internal map\-swapfile\fP
+that will print the device physical offset and the adjusted value for
+\fB/sys/power/resume_offset\fP\&.  Note that the value is divided by page size, i.e.
+it\(aqs not the offset itself.
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -975,7 +983,7 @@ For scripting and convenience the option \fI\-r\fP will print just the offset:
 .UNINDENT
 .UNINDENT
 .sp
-The command \fImap\-swapfile\fP also verifies all the requirements, i.e. no holes,
+The command \fBmap\-swapfile\fP also verifies all the requirements, i.e. no holes,
 single device, etc.
 .SH TROUBLESHOOTING
 .sp
@@ -1150,10 +1158,10 @@ _
 Many kernels are configured with SHA256 as built\-in and not as a module.
 The accelerated versions are however provided by the modules and must be loaded
 explicitly (\fBmodprobe sha256\fP) before mounting the filesystem to make use of
-them. You can check in \fI/sys/fs/btrfs/FSID/checksum\fP which one is used. If you
+them. You can check in \fB/sys/fs/btrfs/FSID/checksum\fP which one is used. If you
 see \fIsha256\-generic\fP, then you may want to unmount and mount the filesystem
 again, changing that on a mounted filesystem is not possible.
-Check the file \fI/proc/crypto\fP, when the implementation is built\-in, you\(aqd find
+Check the file \fB/proc/crypto\fP, when the implementation is built\-in, you\(aqd find
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -1768,7 +1776,7 @@ in parallel. Attempt to start one while another is running will fail (see
 exceptions below).
 .sp
 Since kernel 5.10 the currently running operation can be obtained from
-\fI/sys/fs/UUID/exclusive_operation\fP with following values and operations:
+\fB/sys/fs/UUID/exclusive_operation\fP with following values and operations:
 .INDENT 0.0
 .IP \(bu 2
 balance
@@ -1936,7 +1944,7 @@ No other attributes are supported.  For the complete list please refer to the
 \fBchattr(1)\fP manual page.
 .SS XFLAGS
 .sp
-There\(aqs overlap of letters assigned to the bits with the attributes, this list
+There\(aqs an overlap of letters assigned to the bits with the attributes, this list
 refers to what \fBxfs_io(8)\fP provides:
 .INDENT 0.0
 .TP
@@ -2059,7 +2067,7 @@ testing. There are some quirks setting up the devices. The module must be
 loaded with \fInr_devices=0\fP or the numbering of device nodes will be offset. The
 \fIconfigfs\fP must be mounted at \fI/sys/kernel/config\fP and the administration of
 the null_blk devices is done in \fI/sys/kernel/config/nullb\fP\&. The device nodes
-are named like \fI/dev/nullb0\fP and are numbered sequentially. NOTE: the device
+are named like \fB/dev/nullb0\fP and are numbered sequentially. NOTE: the device
 name may be different than the named directory in sysfs!
 .sp
 Setup:
@@ -2096,7 +2104,7 @@ echo\ 1\ >\ power
 .UNINDENT
 .UNINDENT
 .sp
-This will create a device \fI/dev/nullb0\fP and the value of file \fIindex\fP will
+This will create a device \fB/dev/nullb0\fP and the value of file \fIindex\fP will
 match the ending number of the device node.
 .sp
 Remove the device:
@@ -2111,7 +2119,7 @@ rmdir\ /sys/kernel/config/nullb/mydev
 .UNINDENT
 .UNINDENT
 .sp
-Then continue with \fImkfs.btrfs /dev/nullb0\fP, the zoned mode is auto\-detected.
+Then continue with \fBmkfs.btrfs /dev/nullb0\fP, the zoned mode is auto\-detected.
 .sp
 For convenience, there\(aqs a script wrapping the basic null_blk management operations
 \fI\%https://github.com/kdave/nullb.git\fP, the above commands become:
@@ -2182,8 +2190,8 @@ Append: A New Way of Writing to Zoned Storage
 .UNINDENT
 .SH CONTROL DEVICE
 .sp
-There\(aqs a character special device \fI/dev/btrfs\-control\fP with major and minor
-numbers 10 and 234 (the device can be found under the \(aqmisc\(aq category).
+There\(aqs a character special device \fB/dev/btrfs\-control\fP with major and minor
+numbers 10 and 234 (the device can be found under the \fImisc\fP category).
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -2206,7 +2214,7 @@ automatically) and register them with the kernel module
 similar to scan, but also wait until the device scanning process is finished
 for a given filesystem
 .IP \(bu 2
-get the supported features (can be also found under \fI/sys/fs/btrfs/features\fP)
+get the supported features (can be also found under \fB/sys/fs/btrfs/features\fP)
 .UNINDENT
 .sp
 The device is created when btrfs is initialized, either as a module or a
@@ -2336,7 +2344,9 @@ imagine an immutable golden image of an operating system enhanced with another
 device that allows to use the data from the golden image and normal operation.
 This idea originated on CD\-ROMs with base OS and allowing to use them for live
 systems, but this became obsolete. There are technologies providing similar
-functionality, like \fIunionmount\fP, \fIoverlayfs\fP or \fIqcow2\fP image snapshot.
+functionality, like \fI\%unionmount\fP,
+\fI\%overlayfs\fP or
+\fI\%qcow2\fP image snapshot.
 .sp
 The seeding device starts as a normal filesystem, once the contents is ready,
 \fBbtrfstune \-S 1\fP is used to flag it as a seeding device. Mounting such device
@@ -2396,7 +2406,7 @@ Example how to create and use one seeding device:
 .UNINDENT
 .UNINDENT
 .sp
-Now \fI/mnt/mnt1\fP can be used normally. The device \fI/dev/sda\fP can be mounted
+Now \fB/mnt/mnt1\fP can be used normally. The device \fB/dev/sda\fP can be mounted
 again with a another writable device:
 .INDENT 0.0
 .INDENT 3.5
@@ -2413,7 +2423,7 @@ again with a another writable device:
 .UNINDENT
 .UNINDENT
 .sp
-The writable device (\fI/dev/sdb\fP) can be decoupled from the seeding device and
+The writable device (file:\fI/dev/sdb\fP) can be decoupled from the seeding device and
 used independently:
 .INDENT 0.0
 .INDENT 3.5
@@ -2427,7 +2437,7 @@ used independently:
 .UNINDENT
 .sp
 As the contents originated in the seeding device, it\(aqs possible to turn
-\fI/dev/sdb\fP to a seeding device again and repeat the whole process.
+\fB/dev/sdb\fP to a seeding device again and repeat the whole process.
 .sp
 A few things to note:
 .INDENT 0.0
@@ -2451,9 +2461,9 @@ is mounted read\-write again before making it seeding again
 .sp
 Though it\(aqs not recommended and is rather an obscure and untested use case,
 chaining seeding devices is possible. In the first example, the writable device
-\fI/dev/sdb\fP can be turned onto another seeding device again, depending on the
-unchanged seeding device \fI/dev/sda\fP\&. Then using \fI/dev/sdb\fP as the primary
-seeding device it can be extended with another writable device, say \fI/dev/sdd\fP,
+\fB/dev/sdb\fP can be turned onto another seeding device again, depending on the
+unchanged seeding device \fB/dev/sda\fP\&. Then using \fB/dev/sdb\fP as the primary
+seeding device it can be extended with another writable device, say \fB/dev/sdd\fP,
 and it continues as before as a simple tree structure on devices.
 .INDENT 0.0
 .INDENT 3.5

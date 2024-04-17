@@ -9,7 +9,7 @@ Adding a new ioctl, extending an existing one
 
 -  add code to `strace <https://github.com/strace/strace>`__ so the ioctl calls
    are parsed into a human readable form. Most of the ioctls are already
-   `implemented <https://github.com/strace/strace/blob/master/btrfs.c>`__ and
+   `implemented <https://github.com/strace/strace/blob/master/src/btrfs.c>`__ and
    can be used a reference.
 
 Tracepoints
@@ -112,15 +112,53 @@ nuclear option and do BUG_ON, that is otherwise highly discouraged.
 
 There are several ways how to react to the unexpected conditions:
 
--  ASSERT -- conditionally compiled in and crashes when the condition is false,
-   this is supposed to catch 'must never happen' at the time of development,
-   code must not continue
--  WARN_ON -- light check that is visible in the log and allows the code to
-   continue but the reasons must be investigated
--  BUG_ON -- last resort, checks condition that 'must never happen' and
-   continuing would cause more harm than the instant crash; code should always
-   try to avoid using it, but there are cases when sanity and invariant checks
-   are done in advance
+-  btrfs_abort_transaction()
+
+   The recommended way if and only if we can not recover from the situation and
+   have a transaction handle.
+
+   This would cause the filesystem to be flipped read-only to prevent further
+   corruption.
+
+   Additionally call trace would be dumpped for the first btrfs_abort_transaction()
+   call site.
+
+-  ASSERT()
+
+   Conditionally compiled in and crashes when the condition is false.
+
+   This should only be utilized for debugging purposes, acts as a fail-fast
+   option for developers, thus should not be utilized for error handling.
+
+   It's recommended only for very basic (thus sometimes unnecessary) requirements.
+   Such usage should be easy to locate, have no complex call chain.
+   E.g. to rule out invalid function parameter combinations.
+
+   Should not be utilized on any data/metadata reads from disks, as they can be
+   invalid. For sanity check examples of on-disk metadata, please refer to
+   `Tree checker`.
+
+-  WARN_ON
+
+   Unconditional and noisy checks, but still allow the code to continue.
+
+   Should only be utilized if a call trace is critical for debugging.
+
+   Not recommended if:
+
+   *  The call site is unique or can be easily located
+
+      In that case, an error message is recommended.
+
+   *  The call site would eventually lead to a btrfs_abort_transaction() call
+
+      btrfs_abort_transaction() call would dump the stack anyway.
+      If the call trace is critical, it's recommended to move the
+      btrfs_abort_transaction() call closer to the place where the error happens.
+
+-  BUG_ON
+
+   Should not be utilized, and is incrementally removed or replaced in the code.
 
 Error injection using eBPF
 --------------------------
@@ -134,8 +172,8 @@ helpers (e.g. memory allocation), you can use something like
 
 Resources:
 
--  eBPF
--  BCC tools
+-  `eBPF <https://ebpf.io/>`_
+-  `BCC tools <https://github.com/iovisor/bcc>`_
 
 Warnings and issues found by static checkers and similar tools
 --------------------------------------------------------------
@@ -206,7 +244,7 @@ Patches
     -  steps to reproduce a bug (that will also get turned to a proper fstests
        case)
     -  sample output before/after if it could have impact on userspace
-    -  *pahole* output if structure is being reorganized and optimized
+    -  `pahole <https://linux.die.net/man/1/pahole>`_ output if structure is being reorganized and optimized
 
 Function declarations
 ^^^^^^^^^^^^^^^^^^^^^
@@ -410,13 +448,16 @@ Please refer to the option documentation for further details.
 BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low!
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Not a bug. Increase the config value of LOCKDEP_CHAINS_BITS, default is
+Not a bug. The lockdep structures can get in some cases full and cannot
+properly track locks anymore. There's only a workaround to increase the kernel
+config value of CONFIG_LOCKDEP_CHAINS_BITS, default is
 16, 18 tends to work, increase if needed.
 
 fstests setup
 -------------
 
-The fstests suite has very few "hard" requirements and will succeed without
+The `fstests <https://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git/>`_
+suite has very few "hard" requirements and will succeed without
 actually running many tests. In order to ensure full test coverage, your test
 environment should provide the settings from the following sections. Please
 note that newly added tests silently add new dependencies, so you should always
@@ -471,7 +512,7 @@ Storage environment
 ^^^^^^^^^^^^^^^^^^^
 
 -  At least 4 identically sized partitions/disks/virtual disks, specified using
-   ``$SCRATCH_DEV_POOL``, some tests may require 6 such partitions
+   ``$SCRATCH_DEV_POOL``, some tests may require 8 such partitions
 -  some tests need at least 10G of free space, as determined by ``df``, i.e.
    the size of the device may need to be larger
 -  some tests require ``$LOGWRITES_DEV``, yet another separate block device,

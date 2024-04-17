@@ -30,6 +30,7 @@
 #                  tsan    - enable thread sanitizer compiler feature
 #                  ubsan   - undefined behaviour sanitizer compiler feature
 #                  bcheck  - extended build checks
+#                  gcov    - enable GCOV support during build
 #   W=123          build with warnings (default: off)
 #   DEBUG_CFLAGS   additional compiler flags for debugging build
 #   EXTRA_CFLAGS   additional compiler flags
@@ -66,7 +67,7 @@ include Makefile.extrawarn
 EXTRA_CFLAGS :=
 EXTRA_LDFLAGS :=
 
-DEBUG_CFLAGS_DEFAULT = -O0 -U_FORTIFY_SOURCE -ggdb3
+DEBUG_CFLAGS_DEFAULT = -O0 -U_FORTIFY_SOURCE -ggdb3 -DINJECT
 DEBUG_CFLAGS_INTERNAL =
 DEBUG_CFLAGS :=
 
@@ -85,7 +86,10 @@ DISABLE_WARNING_FLAGS := $(call cc-disable-warning, format-truncation) \
 
 # Warnings that we want by default
 ENABLE_WARNING_FLAGS := $(call cc-option, -Wimplicit-fallthrough) \
-			$(call cc-option, -Wmissing-prototypes)
+			$(call cc-option, -Wmissing-prototypes) \
+			-Wshadow
+
+ASFLAGS =
 
 # Common build flags
 CFLAGS = $(SUBST_CFLAGS) \
@@ -193,14 +197,17 @@ objects = \
 	kernel-shared/uuid-tree.o	\
 	kernel-shared/volumes.o	\
 	kernel-shared/zoned.o	\
+	common/array.o		\
 	common/cpu-utils.o	\
 	common/device-scan.o	\
 	common/device-utils.o	\
 	common/extent-cache.o	\
+	common/extent-tree-utils.o	\
 	common/filesystem-utils.o	\
 	common/format-output.o	\
 	common/fsfeatures.o	\
 	common/help.o	\
+	common/inject-error.o	\
 	common/messages.o	\
 	common/open-utils.o	\
 	common/parse-utils.o	\
@@ -208,8 +215,10 @@ objects = \
 	common/rbtree-utils.o	\
 	common/send-stream.o	\
 	common/send-utils.o	\
+	common/sort-utils.o	\
 	common/string-table.o	\
 	common/string-utils.o	\
+	common/sysfs-utils.o	\
 	common/task-utils.o \
 	common/units.o	\
 	common/utils.o	\
@@ -233,7 +242,7 @@ cmds_objects = cmds/subvolume.o cmds/subvolume-list.o \
 	       cmds/inspect-dump-super.o cmds/inspect-tree-stats.o cmds/filesystem-du.o \
 	       cmds/reflink.o \
 	       mkfs/common.o check/mode-common.o check/mode-lowmem.o \
-	       check/clear-cache.o
+	       common/clear-cache.o
 
 libbtrfs_objects = \
 		kernel-lib/rbtree.o	\
@@ -253,11 +262,12 @@ libbtrfsutil_objects = libbtrfsutil/errors.o libbtrfsutil/filesystem.o \
 		       libbtrfsutil/stubs.o
 convert_objects = convert/main.o convert/common.o convert/source-fs.o \
 		  convert/source-ext2.o convert/source-reiserfs.o \
-		  mkfs/common.o check/clear-cache.o
+		  mkfs/common.o common/clear-cache.o
 mkfs_objects = mkfs/main.o mkfs/common.o mkfs/rootdir.o
-image_objects = image/main.o image/sanitize.o
+image_objects = image/main.o image/sanitize.o image/image-create.o image/common.o \
+		image/image-restore.o
 tune_objects = tune/main.o tune/seeding.o tune/change-uuid.o tune/change-metadata-uuid.o \
-	       tune/convert-bgt.o tune/change-csum.o check/clear-cache.o
+	       tune/convert-bgt.o tune/change-csum.o common/clear-cache.o tune/quota.o
 all_objects = $(objects) $(cmds_objects) $(libbtrfs_objects) $(convert_objects) \
 	      $(mkfs_objects) $(image_objects) $(tune_objects) $(libbtrfsutil_objects)
 
@@ -281,6 +291,11 @@ endif
 ifeq ("$(origin D)", "command line")
   DEBUG_CFLAGS_INTERNAL = $(DEBUG_CFLAGS_DEFAULT) $(DEBUG_CFLAGS)
   DEBUG_LDFLAGS_INTERNAL = $(DEBUG_LDFLAGS_DEFAULT) $(DEBUG_LDFLAGS)
+endif
+
+ifneq (,$(findstring gcov,$(D)))
+  DEBUG_CFLAGS_INTERNAL += -fprofile-arcs -ftest-coverage --coverage
+  DEBUG_LDFLAGS_INTERNAL += -fprofile-generate --coverage
 endif
 
 ifneq (,$(findstring verbose,$(D)))
@@ -325,7 +340,7 @@ MAKEOPTS = --no-print-directory Q=$(Q)
 # built-in sources into "busybox", all files that contain the main function and
 # are not compiled standalone
 progs_box_main = btrfs.o mkfs/main.o image/main.o convert/main.o \
-		 tune/main.o
+		 tune/main.o btrfs-find-root.o
 
 progs_box_all_objects = $(mkfs_objects) $(image_objects) $(convert_objects) $(tune_objects)
 progs_box_all_static_objects = $(static_mkfs_objects) $(static_image_objects) \
@@ -345,7 +360,7 @@ progs_build = $(progs_install) btrfsck btrfs-corrupt-block
 
 # All programs. Use := instead of = so that this is expanded before we reassign
 # progs_build below.
-progs := $(progs_build) btrfs-convert btrfs-fragments btrfs-sb-mod
+progs := $(progs_build) btrfs-convert btrfs-sb-mod
 
 ifneq ($(DISABLE_BTRFSCONVERT),1)
 progs_install += btrfs-convert
@@ -364,13 +379,20 @@ endif
 # specify btrfs_foo_libs = <list of libs>; see $($(subst...)) rules below
 btrfs_convert_cflags = -DBTRFSCONVERT_EXT2=$(BTRFSCONVERT_EXT2)
 btrfs_convert_cflags += -DBTRFSCONVERT_REISERFS=$(BTRFSCONVERT_REISERFS)
-btrfs_fragments_libs = -lgd -lpng -ljpeg -lfreetype
 cmds_restore_cflags = -DCOMPRESSION_LZO=$(COMPRESSION_LZO) -DCOMPRESSION_ZSTD=$(COMPRESSION_ZSTD)
 
 ifeq ($(CRYPTOPROVIDER_BUILTIN),1)
 CRYPTO_OBJECTS = crypto/sha224-256.o crypto/blake2b-ref.o crypto/blake2b-sse2.o \
 		 crypto/blake2b-sse41.o crypto/blake2b-avx2.o crypto/sha256-x86.o
 CRYPTO_CFLAGS = -DCRYPTOPROVIDER_BUILTIN=1
+endif
+
+ifeq ($(TARGET_CPU),x86_64)
+# FIXME: linkage is broken on musl for some reason
+ifeq ($(HAVE_GLIBC),1)
+CRYPTO_OBJECTS += crypto/crc32c-pcl-intel-asm_64.o
+ASFLAGS += -fPIC
+endif
 endif
 
 CHECKER_FLAGS += $(btrfs_convert_cflags)
@@ -440,6 +462,13 @@ endif
 		-MT $($(dir $@).deps/$(notdir $@):.o.d=.static.o) \
 		-MT $(dir $@).deps/$(notdir $@) $(CFLAGS) $<
 
+.S.o:
+	@echo "    [AS]     $@"
+	$(Q)$(CC) $(CFLAGS) $(ASFLAGS) -c $< -o $@
+
+%.static.o: %.S
+	@echo "    [AS]     $@"
+	$(Q)$(CC) $(CFLAGS) $(ASFLAGS) -c $< -o $@
 #
 # Pick from per-file variables, btrfs_*_cflags
 #
@@ -535,7 +564,19 @@ test-string-table: string-table-test
 		done							\
 	}
 
-test: test-check test-check-lowmem test-mkfs test-misc test-cli test-convert test-fuzz
+test-array: array-test
+	@echo "    [TEST]   dynamic array"
+	@{								\
+		max=`./array-test`;					\
+		for testno in `seq 1 $$max`; do				\
+			echo "    [TEST/array]  $$testno";		\
+			./array-test $$testno >/dev/null;		\
+		done							\
+	}
+
+test-api: test-json test-string-table test-array
+
+test: test-check test-check-lowmem test-mkfs test-misc test-cli test-fuzz
 
 testsuite: btrfs-corrupt-block btrfs-find-root btrfs-select-super fssum fsstress
 	@echo "Export tests as a package"
@@ -703,9 +744,9 @@ btrfs-convert.static: $(static_convert_objects) $(static_objects) $(static_libbt
 	@echo "    [LD]     $@"
 	$(Q)$(CC) -o $@ $^ $(STATIC_LDFLAGS) $(btrfs_convert_libs) $(STATIC_LIBS)
 
-quick-test: quick-test.o $(objects) libbtrfsutil.a $(libs_shared)
-	@echo "    [LD]     $@"
-	$(Q)$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
+btree-test: tests/btree-test.c $(objects) libbtrfsutil.a $(libs_shared)
+	@echo "    [CC]     $@"
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 ioctl-test.o: tests/ioctl-test.c kernel-shared/uapi/btrfs.h include/kerncompat.h kernel-shared/ctree.h
 	@echo "    [CC]     $@"
@@ -788,6 +829,10 @@ string-table-test: tests/string-table-test.c $(objects) libbtrfsutil.a
 	@echo "    [LD]     $@"
 	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
+array-test: tests/array-test.c $(objects) libbtrfsutil.a
+	@echo "    [LD]     $@"
+	$(Q)$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+
 test-build: test-build-pre test-build-real
 
 test-build-pre:
@@ -829,27 +874,35 @@ cscope: FORCE
 clean-all: clean clean-doc clean-gen
 
 clean: $(CLEANDIRS)
-	@echo "Cleaning"
-	$(Q)$(RM) -f -- $(progs) *.o .deps/*.o.d \
+	@echo "Cleaning tools and libraries"
+	$(Q)$(RM) -f -- $(progs) $(progs_static) mktables \
+		btrfs.box btrfs.box.static \
+		libbtrfs.a libbtrfsutil.a $(libs_shared) $(lib_links)
+	@echo "Cleaning object files and dependencies"
+	$(Q)$(RM) -f -- *.o .deps/*.o.d  \
+		check/*.o check/.deps/*.o.d \
+		cmds/*.o cmds/.deps/*.o.d \
+		common/*.o common/.deps/*.o.d \
+		convert/*.o convert/.deps/*.o.d \
+		crypto/*.o crypto/.deps/*.o.d \
+		image/*.o image/.deps/*.o.d \
 		kernel-lib/*.o kernel-lib/.deps/*.o.d \
 		kernel-shared/*.o kernel-shared/.deps/*.o.d \
-		image/*.o image/.deps/*.o.d \
-		convert/*.o convert/.deps/*.o.d \
-		mkfs/*.o mkfs/.deps/*.o.d check/*.o check/.deps/*.o.d \
-		cmds/*.o cmds/.deps/*.o.d common/*.o common/.deps/*.o.d \
-		crypto/*.o crypto/.deps/*.o.d \
-		tune/*.o tune/.deps/*.o.d \
+		kernel-shared/*.o kernel-shared/.deps/*.o.d \
 		libbtrfs/*.o libbtrfs/.deps/*.o.d \
-	      ioctl-test quick-test library-test library-test-static \
-              mktables btrfs.static mkfs.btrfs.static fssum \
-	      btrfs.box btrfs.box.static json-formatter-test \
-	      hash-speedtest \
-	      $(check_defs) \
-	      libbtrfs.a libbtrfsutil.a $(libs_shared) $(lib_links) \
-	      $(progs_static) \
-	      libbtrfsutil/*.o libbtrfsutil/.deps/*.o.d
+		libbtrfsutil/*.o libbtrfsutil/.deps/*.o.d \
+		mkfs/*.o mkfs/.deps/*.o.d \
+		tune/*.o tune/.deps/*.o.d
 	$(Q)$(RM) -fd -- .deps */.deps */*/.deps
+	@echo "Cleaning test targets"
+	$(Q)$(RM) -f -- \
+		array-test fsstress fsstum hash-speedtest hash-vectest ioctl-test \
+		json-formatter-test library-test library-test-static btree-test
+	@echo "Cleanin other generated files"
+	$(Q)$(RM) -f -- $(check_defs) \
+		*.gcno *.gcda *.gcov */*.gcno */*.gcda */*/.gcov
 ifeq ($(PYTHON_BINDINGS),1)
+	@echo "Cleanin libbtrfs python generated files"
 	$(Q)cd libbtrfsutil/python; \
 		$(PYTHON) setup.py $(SETUP_PY_Q) clean -a
 endif
@@ -863,9 +916,10 @@ clean-gen:
 	$(Q)$(RM) -rf -- libbtrfs/version.h config.status config.cache config.log \
 		configure.lineno config.status.lineno Makefile.inc \
 		Documentation/Makefile tags TAGS \
+		libbtrfsutil/libbtrfsutil.pc \
 		cscope.files cscope.out cscope.in.out cscope.po.out \
 		config.log include/config.h include/config.h.in~ aclocal.m4 \
-		configure autom4te.cache/
+		configure configure~ autom4te.cache/
 
 clean-dep:
 	@echo "Cleaning dependency files"

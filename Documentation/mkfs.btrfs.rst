@@ -21,7 +21,7 @@ for more details.
 The default block group profiles for data and metadata depend on number of
 devices and possibly other factors. It's recommended to use specific profiles
 but the defaults should be OK and allowing future conversions to other profiles.
-Please see options *-d* and *-m* for further details and :doc:`btrfs-balance(8)<btrfs-balance>` for
+Please see options *-d* and *-m* for further details and :doc:`btrfs-balance` for
 the profile conversion post mkfs.
 
 OPTIONS
@@ -37,7 +37,7 @@ OPTIONS
         Specify the checksum algorithm. Default is *crc32c*. Valid values are *crc32c*,
         *xxhash*, *sha256* or *blake2*. To mount such filesystem kernel must support the
         checksums as well. See section :ref:`CHECKSUM ALGORITHMS<man-mkfs-checksum-algorithms>`
-        in :doc:`btrfs(5)<btrfs-man5>`.
+        in :doc:`btrfs-man5`.
 
 -d|--data <profile>
         Specify the profile for the data block groups.  Valid values are *raid0*,
@@ -78,6 +78,8 @@ OPTIONS
                 for more details.
 
         On multiple devices the default is *raid1*.
+
+.. _mkfs-feature-mixed-bg:
 
 -M|--mixed
         Normally the data and metadata block groups are isolated. The *mixed* mode
@@ -132,7 +134,7 @@ OPTIONS
 -K|--nodiscard
         Do not perform whole device TRIM operation on devices that are capable of that.
         This does not affect discard/trim operation when the filesystem is mounted.
-        Please see the mount option *discard* for that in :doc:`btrfs(5)<btrfs-man5>`.
+        Please see the mount option *discard* for that in :doc:`btrfs-man5`.
 
 -r|--rootdir <rootdir>
         Populate the toplevel subvolume with files from *rootdir*.  This does not
@@ -177,8 +179,15 @@ OPTIONS
         Resets any previous effects of *--verbose*.
 
 -U|--uuid <UUID>
-        Create the filesystem with the given *UUID*. The UUID must not exist on any
-        filesystem currently present.
+        Create the filesystem with the given *UUID*. For a single-device filesystem,
+        you can duplicate the UUID. However, for a multi-device filesystem, the UUID
+        must not already exist on any currently present filesystem.
+
+--device-uuid <UUID>
+        Create the filesystem with the given device-uuid *UUID* (also known as
+        UUID_SUB in :command:`blkid`).  For a single device filesystem, you can
+        duplicate the device-uuid. However, used for a multi-device filesystem
+        this option will not work at the moment.
 
 -v|--verbose
         Increase verbosity level, default is 1.
@@ -242,7 +251,7 @@ devices to scan at the time of mount.
 FILESYSTEM FEATURES
 -------------------
 
-Features that can be enabled during creation time. See also :doc:`btrfs(5)<btrfs-man5>` section
+Features that can be enabled during creation time. See also :doc:`btrfs-man5` section
 :ref:`FILESYSTEM FEATURES<man-btrfs5-filesystem-features>`.
 
 mixed-bg
@@ -285,14 +294,14 @@ zoned
 
         zoned mode, data allocation and write friendly to zoned/SMR/ZBC/ZNS devices,
         see :ref:`ZONED MODE<man-btrfs5-zoned-mode>` in
-        :doc:`btrfs(5)<btrfs-man5>`, the mode is automatically selected when a
+        :doc:`btrfs-man5`, the mode is automatically selected when a
         zoned device is detected
 
 quota
         (kernel support since 3.4)
 
         Enable quota support (qgroups). The qgroup accounting will be consistent,
-        can be used together with *--rootdir*.  See also :doc:`btrfs-quota(8)<btrfs-quota>`.
+        can be used together with *--rootdir*.  See also :doc:`btrfs-quota`.
 
 .. _mkfs-feature-free-space-tree:
 
@@ -300,12 +309,48 @@ free-space-tree
         (default since btrfs-progs 5.15, kernel support since 4.5)
 
         Enable the free space tree (mount option *space_cache=v2*) for persisting the
-        free space cache.
+        free space cache in a b-tree. This is built on top of the COW mechanism
+        and has better performance than v1.
+
+        Offline conversion from filesystems that don't have this feature
+        enabled at *mkfs* time is possible, see :doc:`btrfstune`.
+
+        Online conversion can be done by mounting with ``space_cache=v2``, this
+        is sufficient to be done one time.
+
+.. _mkfs-feature-block-group-tree:
 
 block-group-tree
         (kernel support since 6.1)
 
-        Enable the block group tree to greatly reduce mount time for large filesystems.
+        Enable a dedicated b-tree for block group items, this greatly reduces
+        mount time for large filesystems due to better data locality that
+        avoids seeking. On rotational devices the *large* size is considered
+        starting from the 2-4TiB. Can be used on other types of devices (SSD,
+        NVMe, ...) as well.
+
+        Offline conversion from filesystems that don't have this feature
+        enabled at *mkfs* time is possible, see :doc:`btrfstune`. Online
+        conversion is not possible.
+
+.. _mkfs-feature-raid-stripe-tree:
+
+raid-stripe-tree
+        (kernel support since 6.7)
+
+        New tree for logical file extent mapping where the physical mapping
+        may not match on multiple devices. this is now used in zoned mode to
+        implement RAID0/RAID1* profiles, but can be used in non-zoned mode as
+        well. The support for RAID56 is in development and will eventually
+        fix the problems with the current implementation. This is a backward
+        incompatible feature and has to be enabled at mkfs time.
+
+squota
+	(kernel support since 6.7)
+
+        Enable simple quota accounting (squotas). This is an alternative to
+        qgroups with a smaller performance impact but no notion of shared vs.
+        exclusive usage.
 
 .. _mkfs-section-profiles:
 
@@ -558,7 +603,7 @@ AVAILABILITY
 SEE ALSO
 --------
 
-:doc:`btrfs(5)<btrfs-man5>`,
-:doc:`btrfs(8)<btrfs>`,
-:doc:`btrfs-balance(8)<btrfs-balance>`,
+:doc:`btrfs-man5`,
+:doc:`btrfs`,
+:doc:`btrfs-balance`,
 ``wipefs(8)``

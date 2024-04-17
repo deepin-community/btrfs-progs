@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/xattr.h>
 #include <sys/stat.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -38,6 +39,8 @@
 #if COMPRESSION_ZSTD
 #include <zstd.h>
 #endif
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/print-tree.h"
@@ -45,6 +48,7 @@
 #include "kernel-shared/extent_io.h"
 #include "kernel-shared/compression.h"
 #include "kernel-shared/file-item.h"
+#include "kernel-shared/tree-checker.h"
 #include "common/utils.h"
 #include "common/help.h"
 #include "common/open-utils.h"
@@ -240,7 +244,6 @@ static int next_leaf(struct btrfs_root *root, struct btrfs_path *path)
 	int offset = 1;
 	struct extent_buffer *c;
 	struct extent_buffer *next = NULL;
-	struct btrfs_fs_info *fs_info = root->fs_info;
 
 again:
 	for (; level < BTRFS_MAX_LEVEL; level++) {
@@ -267,7 +270,7 @@ again:
 			continue;
 		}
 
-		next = read_node_slot(fs_info, c, slot);
+		next = btrfs_read_node_slot(c, slot);
 		if (extent_buffer_uptodate(next))
 			break;
 		offset++;
@@ -281,7 +284,7 @@ again:
 		path->slots[level] = 0;
 		if (!level)
 			break;
-		next = read_node_slot(fs_info, next, 0);
+		next = btrfs_read_node_slot(next, 0);
 		if (!extent_buffer_uptodate(next))
 			goto again;
 	}
@@ -475,7 +478,7 @@ static int set_file_xattrs(struct btrfs_root *root, u64 inode,
 			   int fd, const char *file_name)
 {
 	struct btrfs_key key;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct extent_buffer *leaf;
 	struct btrfs_dir_item *di;
 	u32 name_len = 0;
@@ -486,7 +489,6 @@ static int set_file_xattrs(struct btrfs_root *root, u64 inode,
 	char *data = NULL;
 	int ret = 0;
 
-	btrfs_init_path(&path);
 	key.objectid = inode;
 	key.type = BTRFS_XATTR_ITEM_KEY;
 	key.offset = 0;
@@ -572,11 +574,10 @@ out:
 static int copy_metadata(struct btrfs_root *root, int fd,
 		struct btrfs_key *key)
 {
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_inode_item *inode_item;
 	int ret;
 
-	btrfs_init_path(&path);
 	ret = btrfs_lookup_inode(NULL, root, &path, key, 0);
 	if (ret == 0) {
 		struct btrfs_timespec *bts;
@@ -621,7 +622,7 @@ static int copy_file(struct btrfs_root *root, int fd, struct btrfs_key *key,
 		     const char *file)
 {
 	struct extent_buffer *leaf;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_file_extent_item *fi;
 	struct btrfs_inode_item *inode_item;
 	struct btrfs_timespec *bts;
@@ -633,7 +634,6 @@ static int copy_file(struct btrfs_root *root, int fd, struct btrfs_key *key,
 	struct timespec times[2];
 	bool times_ok = false;
 
-	btrfs_init_path(&path);
 	ret = btrfs_lookup_inode(NULL, root, &path, key, 0);
 	if (ret == 0) {
 		inode_item = btrfs_item_ptr(path.nodes[0], path.slots[0],
@@ -799,7 +799,7 @@ static int overwrite_ok(const char * path)
 static int copy_symlink(struct btrfs_root *root, struct btrfs_key *key,
 		     const char *file)
 {
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct extent_buffer *leaf;
 	struct btrfs_file_extent_item *extent_item;
 	struct btrfs_inode_item *inode_item;
@@ -822,7 +822,6 @@ static int copy_symlink(struct btrfs_root *root, struct btrfs_key *key,
 		}
 	}
 
-	btrfs_init_path(&path);
 	key->type = BTRFS_EXTENT_DATA_KEY;
 	key->offset = 0;
 	ret = btrfs_search_slot(NULL, root, key, &path, 0, 0);
@@ -914,7 +913,7 @@ static int search_dir(struct btrfs_root *root, struct btrfs_key *key,
 		      const char *output_rootdir, const char *in_dir,
 		      const regex_t *mreg)
 {
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct extent_buffer *leaf;
 	struct btrfs_dir_item *dir_item;
 	struct btrfs_key found_key, location;
@@ -925,7 +924,6 @@ static int search_dir(struct btrfs_root *root, struct btrfs_key *key,
 	int fd;
 	u8 type;
 
-	btrfs_init_path(&path);
 	key->offset = 0;
 	key->type = BTRFS_DIR_INDEX_KEY;
 	ret = btrfs_search_slot(NULL, root, key, &path, 0, 0);
@@ -1160,7 +1158,7 @@ static int do_list_roots(struct btrfs_root *root)
 	struct btrfs_key key;
 	struct btrfs_key found_key;
 	struct btrfs_disk_key disk_key;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct extent_buffer *leaf;
 	struct btrfs_root_item ri;
 	unsigned long offset;
@@ -1169,7 +1167,6 @@ static int do_list_roots(struct btrfs_root *root)
 
 	root = root->fs_info->tree_root;
 
-	btrfs_init_path(&path);
 	key.offset = 0;
 	key.objectid = 0;
 	key.type = BTRFS_ROOT_ITEM_KEY;
@@ -1216,7 +1213,7 @@ static struct btrfs_root *open_fs(const char *dev, u64 root_location,
 {
 	struct btrfs_fs_info *fs_info = NULL;
 	struct btrfs_root *root = NULL;
-	struct open_ctree_flags ocf = { 0 };
+	struct open_ctree_args oca = { 0 };
 	u64 bytenr;
 	int i;
 
@@ -1228,12 +1225,12 @@ static struct btrfs_root *open_fs(const char *dev, u64 root_location,
 		 * in extent tree. Skip block group item search will allow
 		 * restore to be executed on heavily damaged fs.
 		 */
-		ocf.filename = dev;
-		ocf.sb_bytenr = bytenr;
-		ocf.root_tree_bytenr = root_location;
-		ocf.flags = OPEN_CTREE_PARTIAL | OPEN_CTREE_NO_BLOCK_GROUPS |
+		oca.filename = dev;
+		oca.sb_bytenr = bytenr;
+		oca.root_tree_bytenr = root_location;
+		oca.flags = OPEN_CTREE_PARTIAL | OPEN_CTREE_NO_BLOCK_GROUPS |
 			    OPEN_CTREE_ALLOW_TRANSID_MISMATCH;
-		fs_info = open_ctree_fs_info(&ocf);
+		fs_info = open_ctree_fs_info(&oca);
 		if (fs_info)
 			break;
 		pr_stderr(LOG_DEFAULT, "Could not open root, trying backup super\n");
@@ -1248,15 +1245,17 @@ static struct btrfs_root *open_fs(const char *dev, u64 root_location,
 	 * the fs_root.
 	 */
 	if (!extent_buffer_uptodate(fs_info->tree_root->node)) {
+		struct btrfs_tree_parent_check check = { 0 };
 		u64 generation;
 
 		root = fs_info->tree_root;
 		if (!root_location)
 			root_location = btrfs_super_root(fs_info->super_copy);
 		generation = btrfs_super_generation(fs_info->super_copy);
-		root->node = read_tree_block(fs_info, root_location,
-					     btrfs_root_id(root), generation,
-					     0, NULL);
+
+		check.owner_root = btrfs_root_id(root);
+		check.transid = generation;
+		root->node = read_tree_block(fs_info, root_location, &check);
 		if (!extent_buffer_uptodate(root->node)) {
 			error("opening tree root failed");
 			close_ctree(root);
@@ -1288,13 +1287,12 @@ static struct btrfs_root *open_fs(const char *dev, u64 root_location,
 
 static int find_first_dir(struct btrfs_root *root, u64 *objectid)
 {
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_key found_key;
 	struct btrfs_key key;
 	int ret = -1;
 	int i;
 
-	btrfs_init_path(&path);
 	key.objectid = 0;
 	key.type = BTRFS_DIR_INDEX_KEY;
 	key.offset = 0;
@@ -1522,9 +1520,9 @@ static int cmd_restore(const struct cmd_struct *cmd, int argc, char **argv)
 		goto out;
 
 	if (fs_location != 0) {
+		struct btrfs_tree_parent_check check = { 0 };
 		free_extent_buffer(root->node);
-		root->node = read_tree_block(root->fs_info, fs_location, 0, 0,
-					     0, NULL);
+		root->node = read_tree_block(root->fs_info, fs_location, &check);
 		if (!extent_buffer_uptodate(root->node)) {
 			error("failed to read fs location");
 			ret = 1;

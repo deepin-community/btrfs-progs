@@ -8,12 +8,14 @@ Build-Depends: debhelper-compat (= 13),
                libacl1-dev,
                libblkid-dev,
                liblzo2-dev,
+               libreiserfscore-dev,
                libudev-dev,
                libzstd-dev,
                uuid-dev,
                udev,
                zlib1g-dev,
                sphinx,
+               python3-sphinx-rtd-theme,
                xmlto,
                bash-completion,
 	       python3-dev,
@@ -22,8 +24,8 @@ Build-Depends: debhelper-compat (= 13),
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Homepage: http://btrfs.wiki.kernel.org/
-Vcs-Browser: https://salsa.debian.org/debian/btrfs-progs/tree/debian
-Vcs-Git: https://salsa.debian.org/debian/btrfs-progs.git -b debian
+Vcs-Browser: https://git.sr.ht/~kilobyte/btrfs-progs
+Vcs-Git: https://git.sr.ht/~kilobyte/btrfs-progs -b debian
 
 Package: btrfs-progs
 Architecture: linux-any
@@ -92,7 +94,7 @@ Multi-Arch: same
 Section: python
 Depends: ${misc:Depends}, ${shlibs:Depends}, ${python3:Depends}
 Description: Checksumming Copy on Write Filesystem utilities (python3 bindings)
- Btrfs is a new copy on write filesystem for Linux aimed at implementing
+ Btrfs is a copy on write filesystem for Linux aimed at implementing
  advanced features while focusing on fault tolerance, repair and easy
  administration.
  .

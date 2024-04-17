@@ -19,13 +19,13 @@
 #include "common/utils.h"
 #include "common/string-table.h"
 
-void test_simple_create_free()
+static void test_simple_create_free()
 {
 	struct string_table *tab;
 
 	tab = table_create(2, 2);
 	if (!tab) {
-		fprintf(stderr, "ERROR: cannot alocate table\n");
+		fprintf(stderr, "ERROR: cannot allocate table\n");
 		return;
 	}
 	table_printf(tab, 0, 0, ">00");
@@ -38,14 +38,14 @@ void test_simple_create_free()
 	table_free(tab);
 }
 
-void test_simple_header()
+static void test_simple_header()
 {
 	struct string_table *tab;
 	int i;
 
 	tab = table_create(2, 6);
 	if (!tab) {
-		fprintf(stderr, "ERROR: cannot alocate table\n");
+		fprintf(stderr, "ERROR: cannot allocate table\n");
 		return;
 	}
 	tab->hrows = 2;
@@ -68,7 +68,7 @@ void test_simple_header()
 	table_free(tab);
 }
 
-void test_simple_paginate()
+static void test_simple_paginate()
 {
 	struct string_table *tab;
 	unsigned int page_size = 4;
@@ -77,7 +77,7 @@ void test_simple_paginate()
 
 	tab = table_create(2, 2 + page_size * pages);
 	if (!tab) {
-		fprintf(stderr, "ERROR: cannot alocate table\n");
+		fprintf(stderr, "ERROR: cannot allocate table\n");
 		return;
 	}
 	tab->hrows = 2;
