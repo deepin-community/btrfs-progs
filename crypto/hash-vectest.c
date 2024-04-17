@@ -442,7 +442,7 @@ static const struct hash_testspec test_spec[] = {
 		.digest_size = 4,
 		.testvec = crc32c_tv,
 		.count = ARRAY_SIZE(crc32c_tv),
-		.cpu_flag = CPU_FLAG_SSE42,
+		.cpu_flag = CPU_FLAG_PCLMUL,
 		.hash = hash_crc32c
 	}, {
 		.name = "XXHASH",
@@ -482,6 +482,22 @@ static const struct hash_testspec test_spec[] = {
 		.cpu_flag = CPU_FLAG_NONE,
 		.hash = hash_sha256,
 		.backend = CRYPTOPROVIDER_LIBKCAPI + 1
+	}, {
+		.name = "SHA256-botan",
+		.digest_size = 32,
+		.testvec = sha256_tv,
+		.count = ARRAY_SIZE(sha256_tv),
+		.cpu_flag = CPU_FLAG_NONE,
+		.hash = hash_sha256,
+		.backend = CRYPTOPROVIDER_BOTAN + 1
+	}, {
+		.name = "SHA256-openssl",
+		.digest_size = 32,
+		.testvec = sha256_tv,
+		.count = ARRAY_SIZE(sha256_tv),
+		.cpu_flag = CPU_FLAG_NONE,
+		.hash = hash_sha256,
+		.backend = CRYPTOPROVIDER_OPENSSL + 1
 	}, {
 		.name = "SHA256-NI",
 		.digest_size = 32,
@@ -523,6 +539,22 @@ static const struct hash_testspec test_spec[] = {
 		.hash = hash_blake2b,
 		.backend = CRYPTOPROVIDER_LIBKCAPI + 1
 	}, {
+		.name = "BLAKE2-botan",
+		.digest_size = 32,
+		.testvec = blake2b_256_tv,
+		.count = ARRAY_SIZE(blake2b_256_tv),
+		.cpu_flag = CPU_FLAG_NONE,
+		.hash = hash_blake2b,
+		.backend = CRYPTOPROVIDER_BOTAN + 1
+	}, {
+		.name = "BLAKE2-openssl",
+		.digest_size = 32,
+		.testvec = blake2b_256_tv,
+		.count = ARRAY_SIZE(blake2b_256_tv),
+		.cpu_flag = CPU_FLAG_NONE,
+		.hash = hash_blake2b,
+		.backend = CRYPTOPROVIDER_OPENSSL + 1
+	}, {
 		.name = "BLAKE2-SSE2",
 		.digest_size = 32,
 		.testvec = blake2b_256_tv,
@@ -549,7 +581,7 @@ static const struct hash_testspec test_spec[] = {
 	}
 };
 
-int test_hash(const struct hash_testspec *spec)
+static int test_hash(const struct hash_testspec *spec)
 {
 	int i;
 	bool header = false;

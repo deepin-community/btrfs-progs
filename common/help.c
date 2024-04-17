@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
+#include <unistd.h>
 #include "common/help.h"
 #include "common/string-utils.h"
 #include "cmds/commands.h"
@@ -156,11 +157,13 @@ static void format_text(const char *line, FILE *outf)
 		while (*line && *line == ' ')
 			line++;
 		while (*line && *line != ' ') {
+			if (*line == '\n')
+				break;
 			fputc(*line, outf);
 			line++;
 			i++;
 		}
-		if (i > HELPINFO_DESC_WIDTH) {
+		if (i > HELPINFO_DESC_WIDTH || (*line == '\n')) {
 			if (*line) {
 				fputc('\n', outf);
 				line++;
@@ -513,7 +516,7 @@ void help_ambiguous_token(const char *arg, const struct cmd_group *grp)
 
 	for (i = 0; grp->commands[i]; i++) {
 		const struct cmd_struct *cmd = grp->commands[i];
-		if (!prefixcmp(cmd->token, arg))
+		if (!string_has_prefix(cmd->token, arg))
 			fprintf(stderr, "\t%s\n", cmd->token);
 	}
 

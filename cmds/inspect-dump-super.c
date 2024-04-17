@@ -15,11 +15,16 @@
  */
 
 #include "kerncompat.h"
+#include <sys/stat.h>
+#include <linux/fs.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <getopt.h>
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/print-tree.h"
@@ -33,7 +38,26 @@ static int load_and_dump_sb(char *filename, int fd, u64 sb_bytenr, int full,
 		int force)
 {
 	struct btrfs_super_block sb;
+	struct stat st;
 	u64 ret;
+
+	if (fstat(fd, &st) < 0) {
+		error("unable to stat %s to when loading superblock: %m", filename);
+		return 1;
+	}
+
+	if (S_ISBLK(st.st_mode) || S_ISREG(st.st_mode)) {
+		off_t last_byte;
+
+		last_byte = lseek(fd, 0, SEEK_END);
+		if (last_byte == -1) {
+			error("cannot read end of file %s: %m", filename);
+			return 1;
+		}
+
+		if (sb_bytenr > last_byte)
+			return 0;
+	}
 
 	ret = sbread(fd, &sb, sb_bytenr);
 	if (ret != BTRFS_SUPER_INFO_SIZE) {
@@ -41,7 +65,8 @@ static int load_and_dump_sb(char *filename, int fd, u64 sb_bytenr, int full,
 		if (ret == 0 && errno == 0)
 			return 0;
 
-		error("failed to read the superblock on %s at %llu", filename, sb_bytenr);
+		error("failed to read the superblock on %s at %llu read %llu/%d bytes",
+		       filename, sb_bytenr, ret, BTRFS_SUPER_INFO_SIZE);
 		error("error = '%m', errno = %d", errno);
 		return 1;
 	}
@@ -53,6 +78,7 @@ static int load_and_dump_sb(char *filename, int fd, u64 sb_bytenr, int full,
 		return 1;
 	}
 	btrfs_print_superblock(&sb, full);
+	putchar('\n');
 	return 0;
 }
 
@@ -83,7 +109,6 @@ static int cmd_inspect_dump_super(const struct cmd_struct *cmd,
 	char *filename;
 	int fd = -1;
 	int i;
-	int ret = 0;
 	u64 arg;
 	u64 sb_bytenr = btrfs_sb_offset(0);
 
@@ -155,8 +180,7 @@ static int cmd_inspect_dump_super(const struct cmd_struct *cmd,
 		fd = open(filename, O_RDONLY);
 		if (fd < 0) {
 			error("cannot open %s: %m", filename);
-			ret = 1;
-			goto out;
+			return 1;
 		}
 
 		if (all) {
@@ -167,24 +191,18 @@ static int cmd_inspect_dump_super(const struct cmd_struct *cmd,
 				if (load_and_dump_sb(filename, fd,
 						sb_bytenr, full, force)) {
 					close(fd);
-					ret = 1;
-					goto out;
+					return 1;
 				}
-
-				putchar('\n');
 			}
 		} else {
 			if (load_and_dump_sb(filename, fd, sb_bytenr, full, force)) {
 				close(fd);
-				ret = 1;
-				goto out;
+				return 1;
 			}
-			putchar('\n');
 		}
 		close(fd);
 	}
 
-out:
-	return ret;
+	return 0;
 }
 DEFINE_SIMPLE_COMMAND(inspect_dump_super, "dump-super");

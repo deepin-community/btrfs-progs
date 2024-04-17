@@ -17,13 +17,20 @@
  */
 
 #include "kerncompat.h"
-#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
+#include "kernel-lib/bitops.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/extent_io.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
-#include "kernel-shared/disk-io.h"
-#include "kernel-shared/transaction.h"
 #include "kernel-shared/compression.h"
 #include "kernel-shared/file-item.h"
-#include "common/utils.h"
+#include "common/internal.h"
+#include "common/messages.h"
+
+struct btrfs_trans_handle;
 
 /*
  * Get the first file extent that covers (part of) the given range
@@ -187,7 +194,7 @@ int btrfs_read_file(struct btrfs_root *root, u64 ino, u64 start, int len,
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_key key;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct extent_buffer *leaf;
 	struct btrfs_inode_item *ii;
 	u64 isize;
@@ -203,7 +210,6 @@ int btrfs_read_file(struct btrfs_root *root, u64 ino, u64 start, int len,
 		return -EINVAL;
 	}
 
-	btrfs_init_path(&path);
 	key.objectid = ino;
 	key.offset = start;
 	key.type = BTRFS_EXTENT_DATA_KEY;

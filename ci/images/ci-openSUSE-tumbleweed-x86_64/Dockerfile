@@ -2,12 +2,11 @@ FROM opensuse/tumbleweed
 
 WORKDIR /tmp
 
-RUN zypper install -y --no-recommends make gcc tar gzip
-RUN zypper install -y --no-recommends clang
+RUN zypper install -y --no-recommends make gcc tar gzip clang dwarves
 RUN zypper install -y --no-recommends libattr-devel libblkid-devel libuuid-devel
 RUN zypper install -y --no-recommends libext2fs-devel
 RUN zypper install -y --no-recommends zlib-devel lzo-devel libzstd-devel
-RUN zypper install -y --no-recommends autoconf automake pkg-config
+RUN zypper install -y --no-recommends autoconf automake pkg-config gawk
 RUN zypper install -y --no-recommends python3 python3-devel python3-setuptools
 RUN zypper install -y --no-recommends libudev-devel
 
@@ -27,7 +26,8 @@ RUN zypper install -y --no-recommends glibc-devel-static libblkid-devel-static \
 	    libzstd-devel-static lzo-devel-static zlib-devel-static
 
 RUN zypper install -y --no-recommends gcc13
-RUN zypper install -y --no-recommends libgcrypt-devel libsodium-devel libkcapi-devel
+RUN zypper install -y --no-recommends libgcrypt-devel libsodium-devel libkcapi-devel \
+	   libbotan-devel libopenssl-3-devel
 
 COPY ./test-build .
 COPY ./run-tests .

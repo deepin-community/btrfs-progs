@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFSTUNE" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFSTUNE" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfstune \- tune various filesystem parameters
 .SH SYNOPSIS
@@ -60,7 +60,7 @@ at mkfs time.
 (since kernel 6.1)
 .sp
 Convert block groups tracked in standalone block group tree back to
-extent tree and remove \(aqblock\-group\-tree\(aq feature bit from the filesystem.
+extent tree and remove \fIblock\-group\-tree\fP feature bit from the filesystem.
 .TP
 .B  \-\-convert\-to\-free\-space\-tree
 (since kernel 4.5)
@@ -74,8 +74,10 @@ Make sure that you are aware of the dangers.
 .B  \-m
 (since kernel: 5.0)
 .sp
-change fsid stored as \(aqmetadata_uuid\(aq to a randomly generated UUID,
-see also \(aq\-U\(aq
+change fsid stored as \fImetadata_uuid\fP to a randomly generated UUID,
+see also \fI\-U\fP
+.UNINDENT
+.INDENT 0.0
 .TP
 .BI \-M \ <UUID>
 (since kernel: 5.0)
@@ -118,7 +120,7 @@ previously\-seeding device is changed, all filesystems that used
 that device will become unmountable. Setting the seeding flag
 back will not fix that.
 .sp
-A valid usecase is \(aqseeding device as a base image\(aq. Clear the
+A valid usecase is \fIseeding device as a base image\fP\&. Clear the
 seeding flag, update the filesystem and make it seeding again,
 provided that it\(aqs OK to throw away all filesystems built on
 top of the previous base.
@@ -130,10 +132,10 @@ Change fsid to a randomly generated UUID or continue previous fsid
 change operation in case it was interrupted.
 .TP
 .BI \-U \ <UUID>
-Change fsid to \(aqUUID\(aq in all metadata blocks.
+Change fsid to \fIUUID\fP in all metadata blocks.
 .sp
 The \fIUUID\fP should be a 36 bytes string in \fBprintf(3)\fP format
-\fI\(dq%08x\-%04x\-%04x\-%04x\-%012x\(dq\fP\&.
+\fB%08x\-%04x\-%04x\-%04x\-%012x\fP\&.
 If there is a previous unfinished fsid change, it will continue only if the
 \fIUUID\fP matches the unfinished one or if you use the option \fI\-u\fP\&.
 .sp

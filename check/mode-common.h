@@ -25,11 +25,13 @@
 #include <sys/stat.h>
 #include <stdbool.h>
 #include "kernel-lib/list.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "common/messages.h"
 
 struct btrfs_trans_handle;
 struct extent_buffer;
+struct task_ctx;
 
 extern struct task_ctx g_task_ctx;
 
@@ -101,11 +103,11 @@ static inline u8 imode_to_type(u32 imode)
 #undef S_SHIFT
 }
 
-static inline int fs_root_objectid(u64 objectid)
+static inline bool fs_root_objectid(u64 objectid)
 {
 	if (objectid == BTRFS_TREE_RELOC_OBJECTID ||
 	    objectid == BTRFS_DATA_RELOC_TREE_OBJECTID)
-		return 1;
+		return true;
 	return is_fstree(objectid);
 }
 

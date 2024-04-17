@@ -1,0 +1,14 @@
+Documentation/_build/
+Documentation/Makefile
+Makefile.inc
+config.guess
+config.log
+config.status
+config/config.guess
+config/config.sub
+include/config.h
+libbtrfs/version.h
+libbtrfsutil/libbtrfsutil.pc
+libbtrfsutil/python/*.so
+libbtrfsutil/python/btrfsutil.egg-info/
+libbtrfsutil/python/constants.c
