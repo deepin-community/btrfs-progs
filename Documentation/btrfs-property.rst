@@ -54,7 +54,7 @@ Subvolume properties
 
 ro
         read-only flag of subvolume: true or false. Please also see section *SUBVOLUME FLAGS*
-        in :doc:`btrfs-subvolume(8)<btrfs-subvolume>` for possible implications regarding incremental send.
+        in :doc:`btrfs-subvolume` for possible implications regarding incremental send.
 
 Filesystem properties
 ^^^^^^^^^^^^^^^^^^^^^
@@ -72,6 +72,8 @@ get [-t <type>] <object> [<name>]
 
 list [-t <type>] <object>
         List available properties with their descriptions for the given object.
+
+.. _man-property-set:
 
 set [-f] [-t <type>] <object> <name> <value>
         Set *value* of property *name* on a given btrfs object.
@@ -122,6 +124,6 @@ AVAILABILITY
 SEE ALSO
 --------
 
-:doc:`mkfs.btrfs(8)<mkfs.btrfs>`,
+:doc:`mkfs.btrfs`,
 ``lsattr(1)``,
 ``chattr(1)``

@@ -32,7 +32,7 @@ chunk-recover [options] <device>
    slow especially executed on a large device.
 
 fix-device-size <device>
-        fix device size and super block total bytes values that are do not match
+        fix device size and super block total bytes values that do not match
 
         Kernel 4.11 starts to check the device size more strictly and this might
         mismatch the stored value of total bytes. See the exact error message below.
@@ -49,6 +49,21 @@ fix-device-size <device>
         .. code-block:: none
 
                 WARNING: CPU: 3 PID: 439 at fs/btrfs/ctree.h:1559 btrfs_update_device+0x1c5/0x1d0 [btrfs]
+
+.. _man-rescue-clear-ino-cache:
+
+clear-ino-cache <device>
+        Remove leftover items pertaining to the deprecated `inode cache` feature.
+
+	The `inode cache` feature (enabled by mount option "inode_cache") has been
+	completely removed in 5.11 kernel.
+
+clear-space-cache <v1|v2> <device>
+	Completely remove the on-disk data of free space cache of given version.
+
+	Especially for v1 free space cache, `clear_cache` mount option would only
+	remove the cache for updated block groups, the remaining would not be removed.
+	Thus this command is provided to manually clear the free space cache.
 
 clear-uuid-tree <device>
         Clear UUID tree, so that kernel can re-generate it at next read-write
@@ -119,6 +134,6 @@ AVAILABILITY
 SEE ALSO
 --------
 
-:doc:`btrfs-check(8)<btrfs-check>`,
-:doc:`btrfs-scrub(8)<btrfs-scrub>`,
-:doc:`mkfs.btrfs(8)<mkfs.btrfs>`
+:doc:`btrfs-check`,
+:doc:`btrfs-scrub`,
+:doc:`mkfs.btrfs`

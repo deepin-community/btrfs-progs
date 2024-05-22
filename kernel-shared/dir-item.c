@@ -16,11 +16,28 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
 #include <linux/limits.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include "kernel-lib/bitops.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
-#include "kernel-shared/transaction.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/extent_io.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 
+struct btrfs_trans_handle;
+
+/*
+ * insert a name into a directory, doing overflow properly if there is a hash
+ * collision.  data_size indicates how big the item inserted should be.  On
+ * success a struct btrfs_dir_item pointer is returned, otherwise it is
+ * an ERR_PTR.
+ *
+ * The name is not copied into the dir item, you have to do that yourself.
+ */
 static struct btrfs_dir_item *insert_with_overflow(struct btrfs_trans_handle
 						   *trans,
 						   struct btrfs_root *root,
@@ -40,8 +57,8 @@ static struct btrfs_dir_item *insert_with_overflow(struct btrfs_trans_handle
 		di = btrfs_match_dir_item_name(root, path, name, name_len);
 		if (di)
 			return ERR_PTR(-EEXIST);
-		ret = btrfs_extend_item(root, path, data_size);
-		WARN_ON(ret > 0);
+		btrfs_extend_item(path, data_size);
+		ret = 0;
 	}
 	if (ret < 0)
 		return ERR_PTR(ret);
@@ -53,6 +70,10 @@ static struct btrfs_dir_item *insert_with_overflow(struct btrfs_trans_handle
 	return (struct btrfs_dir_item *)ptr;
 }
 
+/*
+ * xattrs work a lot like directories, this inserts an xattr item
+ * into the tree
+ */
 int btrfs_insert_xattr_item(struct btrfs_trans_handle *trans,
 			    struct btrfs_root *root, const char *name,
 			    u16 name_len, const void *data, u16 data_len,
@@ -103,6 +124,14 @@ int btrfs_insert_xattr_item(struct btrfs_trans_handle *trans,
 	return ret;
 }
 
+/*
+ * insert a directory item in the tree, doing all the magic for
+ * both indexes. 'dir' indicates which objectid to insert it into,
+ * 'location' is the key to stuff into the directory item, 'type' is the
+ * type of the inode we're pointing to, and 'index' is the sequence number
+ * to use for the second index (if one is created).
+ * Will return 0 or -ENOMEM
+ */
 int btrfs_insert_dir_item(struct btrfs_trans_handle *trans, struct btrfs_root
 			  *root, const char *name, int name_len, u64 dir,
 			  struct btrfs_key *location, u8 type, u64 index)

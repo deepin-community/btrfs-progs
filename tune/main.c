@@ -17,30 +17,29 @@
  */
 
 #include "kerncompat.h"
-#include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <uuid/uuid.h>
+#include "kernel-shared/accessors.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/transaction.h"
 #include "kernel-shared/volumes.h"
-#include "kernel-shared/free-space-cache.h"
 #include "kernel-shared/free-space-tree.h"
 #include "common/utils.h"
 #include "common/open-utils.h"
-#include "common/parse-utils.h"
 #include "common/device-scan.h"
 #include "common/messages.h"
+#include "common/parse-utils.h"
 #include "common/string-utils.h"
 #include "common/help.h"
 #include "common/box.h"
+#include "common/clear-cache.h"
 #include "cmds/commands.h"
 #include "tune/tune.h"
-#include "check/clear-cache.h"
 
 static char *device;
 static int force = 0;
@@ -103,6 +102,7 @@ static const char * const tune_usage[] = {
 	OPTLINE("-x", "enable skinny metadata extent refs (mkfs: skinny-metadata)"),
 	OPTLINE("-n", "enable no-holes feature (mkfs: no-holes, more efficient sparse file representation)"),
 	OPTLINE("-S <0|1>", "set/unset seeding status of a device"),
+	OPTLINE("-q", "enable simple quotas on the file system. (mkfs: squota)"),
 	OPTLINE("--convert-to-block-group-tree", "convert filesystem to track block groups in "
 			"the separate block-group-tree instead of extent tree (sets the incompat bit)"),
 	OPTLINE("--convert-from-block-group-tree",
@@ -126,6 +126,52 @@ static const char * const tune_usage[] = {
 	NULL
 };
 
+enum btrfstune_group_enum {
+	/* Extent/block group tree feature. */
+	EXTENT_TREE,
+
+	/* V1/v2 free space cache. */
+	SPACE_CACHE,
+
+	/* Metadata UUID. */
+	METADATA_UUID,
+
+	/* FSID change. */
+	FSID_CHANGE,
+
+	/* Seed device. */
+	SEED,
+
+	/* Csum conversion */
+	CSUM_CHANGE,
+
+	/*
+	 * Legacy features (which later become default), including:
+	 * - no-holes
+	 * - extref
+	 * - skinny-metadata
+	 */
+	LEGACY,
+
+	/* Qgroup options */
+	QGROUP,
+
+	BTRFSTUNE_NR_GROUPS,
+};
+
+static bool btrfstune_cmd_groups[BTRFSTUNE_NR_GROUPS] = { 0 };
+
+static unsigned int btrfstune_count_set_groups()
+{
+	int ret = 0;
+
+	for (int i = 0; i < BTRFSTUNE_NR_GROUPS; i++) {
+		if (btrfstune_cmd_groups[i])
+			ret++;
+	}
+	return ret;
+}
+
 static const struct cmd_struct tune_cmd = {
 	.usagestr = tune_usage
 };
@@ -133,9 +179,8 @@ static const struct cmd_struct tune_cmd = {
 int BOX_MAIN(btrfstune)(int argc, char *argv[])
 {
 	struct btrfs_root *root;
+	struct btrfs_fs_info *fs_info;
 	unsigned ctree_flags = OPEN_CTREE_WRITES;
-	int success = 0;
-	int total = 0;
 	int seeding_flag = 0;
 	u64 seeding_value = 0;
 	int random_fsid = 0;
@@ -147,6 +192,7 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 	char *new_fsid_str = NULL;
 	int ret;
 	u64 super_flags = 0;
+	int quota = 0;
 	int fd = -1;
 
 	btrfs_config_init();
@@ -155,7 +201,10 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		enum { GETOPT_VAL_CSUM = GETOPT_VAL_FIRST,
 		       GETOPT_VAL_ENABLE_BLOCK_GROUP_TREE,
 		       GETOPT_VAL_DISABLE_BLOCK_GROUP_TREE,
-		       GETOPT_VAL_ENABLE_FREE_SPACE_TREE };
+		       GETOPT_VAL_ENABLE_FREE_SPACE_TREE,
+		       GETOPT_VAL_ENABLE_SIMPLE_QUOTA,
+
+		};
 		static const struct option long_options[] = {
 			{ "help", no_argument, NULL, GETOPT_VAL_HELP},
 			{ "convert-to-block-group-tree", no_argument, NULL,
@@ -164,6 +213,8 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 				GETOPT_VAL_DISABLE_BLOCK_GROUP_TREE},
 			{ "convert-to-free-space-tree", no_argument, NULL,
 				GETOPT_VAL_ENABLE_FREE_SPACE_TREE},
+			{ "enable-simple-quota", no_argument, NULL,
+				GETOPT_VAL_ENABLE_SIMPLE_QUOTA },
 #if EXPERIMENTAL
 			{ "csum", required_argument, NULL, GETOPT_VAL_CSUM },
 #endif
@@ -177,15 +228,19 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		case 'S':
 			seeding_flag = 1;
 			seeding_value = arg_strtou64(optarg);
+			btrfstune_cmd_groups[SEED] = true;
 			break;
 		case 'r':
 			super_flags |= BTRFS_FEATURE_INCOMPAT_EXTENDED_IREF;
+			btrfstune_cmd_groups[LEGACY] = true;
 			break;
 		case 'x':
 			super_flags |= BTRFS_FEATURE_INCOMPAT_SKINNY_METADATA;
+			btrfstune_cmd_groups[LEGACY] = true;
 			break;
 		case 'n':
 			super_flags |= BTRFS_FEATURE_INCOMPAT_NO_HOLES;
+			btrfstune_cmd_groups[LEGACY] = true;
 			break;
 		case 'f':
 			force = 1;
@@ -193,28 +248,39 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		case 'U':
 			ctree_flags |= OPEN_CTREE_IGNORE_FSID_MISMATCH;
 			new_fsid_str = optarg;
+			btrfstune_cmd_groups[FSID_CHANGE] = true;
 			break;
 		case 'u':
 			ctree_flags |= OPEN_CTREE_IGNORE_FSID_MISMATCH;
 			random_fsid = 1;
+			btrfstune_cmd_groups[FSID_CHANGE] = true;
 			break;
 		case 'M':
 			ctree_flags |= OPEN_CTREE_IGNORE_FSID_MISMATCH;
 			change_metadata_uuid = 1;
 			new_fsid_str = optarg;
+			btrfstune_cmd_groups[METADATA_UUID] = true;
 			break;
 		case 'm':
 			ctree_flags |= OPEN_CTREE_IGNORE_FSID_MISMATCH;
 			change_metadata_uuid = 1;
+			btrfstune_cmd_groups[METADATA_UUID] = true;
 			break;
 		case GETOPT_VAL_ENABLE_BLOCK_GROUP_TREE:
 			to_bg_tree = true;
+			btrfstune_cmd_groups[EXTENT_TREE] = true;
 			break;
 		case GETOPT_VAL_DISABLE_BLOCK_GROUP_TREE:
 			to_extent_tree = true;
+			btrfstune_cmd_groups[EXTENT_TREE] = true;
 			break;
 		case GETOPT_VAL_ENABLE_FREE_SPACE_TREE:
 			to_fst = true;
+			btrfstune_cmd_groups[SPACE_CACHE] = true;
+			break;
+		case GETOPT_VAL_ENABLE_SIMPLE_QUOTA:
+			quota = 1;
+			btrfstune_cmd_groups[QGROUP] = true;
 			break;
 #if EXPERIMENTAL
 		case GETOPT_VAL_CSUM:
@@ -222,6 +288,7 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 				"Switching checksums is experimental, do not use for valuable data!");
 			ctree_flags |= OPEN_CTREE_SKIP_CSUM_CHECK;
 			csum_type = parse_csum_type(optarg);
+			btrfstune_cmd_groups[CSUM_CHANGE] = true;
 			break;
 #endif
 		case GETOPT_VAL_HELP:
@@ -232,78 +299,119 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 
 	set_argv0(argv);
 	device = argv[optind];
-	if (check_argc_exact(argc - optind, 1))
-		return 1;
-
-	if (random_fsid && new_fsid_str) {
-		error("random fsid can't be used with specified fsid");
-		return 1;
+	if (check_argc_exact(argc - optind, 1)) {
+		ret = 1;
+		goto free_out;
 	}
-	if (!super_flags && !seeding_flag && !(random_fsid || new_fsid_str) &&
-	    !change_metadata_uuid && csum_type == -1 && !to_bg_tree &&
-	    !to_extent_tree && !to_fst) {
+
+	if (btrfstune_count_set_groups() == 0) {
 		error("at least one option should be specified");
 		usage(&tune_cmd, 1);
-		return 1;
+		ret = 1;
+		goto free_out;
 	}
-
+	if (btrfstune_count_set_groups() > 1) {
+		error("too many conflicting options specified");
+		usage(&tune_cmd, 1);
+		ret = 1;
+		goto free_out;
+	}
+	if (random_fsid && new_fsid_str) {
+		error("random fsid can't be used with specified fsid");
+		ret = 1;
+		goto free_out;
+	}
 	if (new_fsid_str) {
 		uuid_t tmp;
 
 		ret = uuid_parse(new_fsid_str, tmp);
 		if (ret < 0) {
 			error("could not parse UUID: %s", new_fsid_str);
-			return 1;
+			ret = 1;
+			goto free_out;
 		}
 		if (!test_uuid_unique(new_fsid_str)) {
 			error("fsid %s is not unique", new_fsid_str);
-			return 1;
+			ret = 1;
+			goto free_out;
 		}
 	}
 
 	fd = open(device, O_RDWR);
 	if (fd < 0) {
 		error("mount check: cannot open %s: %m", device);
-		return 1;
+		ret = 1;
+		goto free_out;
 	}
 
 	ret = check_mounted_where(fd, device, NULL, 0, NULL,
-			SBREAD_IGNORE_FSID_MISMATCH);
+				  SBREAD_IGNORE_FSID_MISMATCH, false);
 	if (ret < 0) {
 		errno = -ret;
 		error("could not check mount status of %s: %m", device);
 		close(fd);
-		return 1;
+		ret = 1;
+		goto free_out;
 	} else if (ret) {
 		error("%s is mounted", device);
 		close(fd);
-		return 1;
+		ret = 1;
+		goto free_out;
 	}
+
+	/*
+	 * For fsid changes we must use the latest device (not necessarily the
+	 * one specified on command line so the matching of the device
+	 * belonging to the filesystem works.
+	 */
+	if (change_metadata_uuid || random_fsid || new_fsid_str)
+		ctree_flags |= OPEN_CTREE_USE_LATEST_BDEV;
 
 	root = open_ctree_fd(fd, device, 0, ctree_flags);
 
 	if (!root) {
 		error("open ctree failed");
-		return 1;
+		ret = 1;
+		goto free_out;
+	}
+	fs_info = root->fs_info;
+
+	/*
+	 * As we increment the generation number here, it is unlikely that the
+	 * missing device will have a higher generation number, and the kernel
+	 * won't use its super block for any further commits, even if it is not
+	 * missing during mount.
+	 *
+	 * So, we allow all operations except for -m, -M, -u, and -U, as these
+	 * operations also change the fsid/metadata_uuid, which are key
+	 * parameters for assembling the devices and need to be consistent on
+	 * all the partner devices.
+	 */
+	if ((change_metadata_uuid || random_fsid || new_fsid_str) &&
+	     fs_info->fs_devices->missing_devices > 0) {
+		error("missing %lld device(s), failing the command",
+		       fs_info->fs_devices->missing_devices);
+		ret = 1;
+		goto out;
 	}
 
  	if (to_bg_tree) {
 		if (to_extent_tree) {
 			error("option --convert-to-block-group-tree conflicts with --convert-from-block-group-tree");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
-		if (btrfs_fs_compat_ro(root->fs_info, BLOCK_GROUP_TREE)) {
+		if (btrfs_fs_compat_ro(fs_info, BLOCK_GROUP_TREE)) {
 			error("the filesystem already has block group tree feature");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
-		if (!btrfs_fs_compat_ro(root->fs_info, FREE_SPACE_TREE_VALID)) {
+		if (!btrfs_fs_compat_ro(fs_info, FREE_SPACE_TREE_VALID)) {
 			error("the filesystem doesn't have space cache v2, needs to be mounted with \"-o space_cache=v2\" first");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
-		ret = convert_to_bg_tree(root->fs_info);
+		ret = convert_to_bg_tree(fs_info);
 		if (ret < 0) {
 			error("failed to convert the filesystem to block group tree feature");
 			goto out;
@@ -311,12 +419,12 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		goto out;
 	}
 	if (to_fst) {
-		if (btrfs_fs_compat_ro(root->fs_info, FREE_SPACE_TREE_VALID)) {
+		if (btrfs_fs_compat_ro(fs_info, FREE_SPACE_TREE_VALID)) {
 			error("filesystem already has free-space-tree feature");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
-		ret = convert_to_fst(root->fs_info);
+		ret = convert_to_fst(fs_info);
 		if (ret < 0)
 			error("failed to convert the filesystem to free-space-tree feature");
 		goto out;
@@ -324,15 +432,15 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 	if (to_extent_tree) {
 		if (to_bg_tree) {
 			error("option --convert-to-block-group-tree conflicts with --convert-from-block-group-tree");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
-		if (!btrfs_fs_compat_ro(root->fs_info, BLOCK_GROUP_TREE)) {
+		if (!btrfs_fs_compat_ro(fs_info, BLOCK_GROUP_TREE)) {
 			error("filesystem doesn't have block-group-tree feature");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
-		ret = convert_to_extent_tree(root->fs_info);
+		ret = convert_to_extent_tree(fs_info);
 		if (ret < 0) {
 			error("failed to convert the filesystem from block group tree feature");
 			goto out;
@@ -340,9 +448,9 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		goto out;
 	}
 	if (seeding_flag) {
-		if (btrfs_fs_incompat(root->fs_info, METADATA_UUID)) {
+		if (btrfs_fs_incompat(fs_info, METADATA_UUID)) {
 			error("SEED flag cannot be changed on a metadata-uuid changed fs");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
 
@@ -352,34 +460,30 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 			ret = ask_user("We are going to clear the seeding flag, are you sure?");
 			if (!ret) {
 				error("clear seeding flag canceled");
-				ret = 1;
+				ret = -EINVAL;
 				goto out;
 			}
 		}
 
 		ret = update_seeding_flag(root, device, seeding_value, force);
-		if (!ret)
-			success++;
-		total++;
+		goto out;
 	}
 
 	if (super_flags) {
 		ret = set_super_incompat_flags(root, super_flags);
-		if (!ret)
-			success++;
-		total++;
+		goto out;
 	}
 
 	if (csum_type != -1) {
-		/* TODO: check conflicting flags */
 		pr_verbose(LOG_DEFAULT, "Proceed to switch checksums\n");
-		ret = btrfs_change_csum_type(root->fs_info, csum_type);
+		ret = btrfs_change_csum_type(fs_info, csum_type);
+		goto out;
 	}
 
 	if (change_metadata_uuid) {
 		if (seeding_flag) {
 			error("not allowed to set both seeding flag and uuid metadata");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
 
@@ -388,17 +492,16 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		else
 			ret = set_metadata_uuid(root, NULL);
 
-		if (!ret)
-			success++;
-		total++;
+		btrfs_register_all_devices();
+		goto out;
 	}
 
 	if (random_fsid || (new_fsid_str && !change_metadata_uuid)) {
-		if (btrfs_fs_incompat(root->fs_info, METADATA_UUID)) {
+		if (fs_info->fs_devices->active_metadata_uuid) {
 			error(
 		"Cannot rewrite fsid while METADATA_UUID flag is active. \n"
 		"Ensure fsid and metadata_uuid match before retrying.");
-			ret = 1;
+			ret = -EINVAL;
 			goto out;
 		}
 
@@ -410,26 +513,29 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 			ret = ask_user("We are going to change UUID, are your sure?");
 			if (!ret) {
 				error("UUID change canceled");
-				ret = 1;
+				ret = -EINVAL;
 				goto out;
 			}
 		}
-		ret = change_uuid(root->fs_info, new_fsid_str);
-		if (!ret)
-			success++;
-		total++;
+		ret = change_uuid(fs_info, new_fsid_str);
+		goto out;
 	}
 
-	if (success == total) {
-		ret = 0;
-	} else {
-		root->fs_info->readonly = 1;
+	if (quota) {
+		ret = enable_quota(root->fs_info, true);
+		if (ret)
+			goto out;
+	}
+
+out:
+	if (ret < 0) {
+		fs_info->readonly = 1;
 		ret = 1;
 		error("btrfstune failed");
 	}
-out:
 	close_ctree(root);
 	btrfs_close_all_devices();
 
+free_out:
 	return ret;
 }

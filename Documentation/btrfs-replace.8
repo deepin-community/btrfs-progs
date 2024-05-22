@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-REPLACE" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-REPLACE" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-replace \- replace devices managed by btrfs with other device
 .SH SYNOPSIS
@@ -110,7 +110,7 @@ operation finishes (or is cancelled)
 .SH EXAMPLES
 .SS Replacing an online drive with a bigger one
 .sp
-Given the following filesystem mounted at \fI/mnt/my\-vault\fP
+Given the following filesystem mounted at \fB/mnt/my\-vault\fP
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -125,8 +125,8 @@ Label: \(aqMyVault\(aq  uuid: ae20903e\-b72d\-49ba\-b944\-901fc6d888a1
 .UNINDENT
 .UNINDENT
 .sp
-In order to replace \fI/dev/sda\fP (\fIdevid 1\fP) with a bigger drive located at
-\fI/dev/sdc\fP you would run the following:
+In order to replace \fB/dev/sda\fP (\fIdevid 1\fP) with a bigger drive located at
+\fB/dev/sdc\fP you would run the following:
 .INDENT 0.0
 .INDENT 3.5
 .sp

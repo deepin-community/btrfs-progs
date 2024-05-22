@@ -25,8 +25,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <stdbool.h>
-#include "kernel-shared/uapi/btrfs.h"
-#include "kernel-shared/ctree.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/volumes.h"
 #include "common/open-utils.h"
 #include "common/utils.h"
@@ -37,7 +36,6 @@
 
 static const char * const balance_cmd_group_usage[] = {
 	"btrfs balance <command> [options] <path>",
-	"btrfs balance <path>        (deprecated, use 'btrfs balance start')",
 	NULL
 };
 
@@ -292,8 +290,8 @@ static int do_balance_v1(int fd)
 }
 
 enum {
-	BALANCE_START_FILTERS = 1 << 0,
-	BALANCE_START_NOWARN  = 1 << 1
+	BALANCE_START_FILTERS = 1U << 0,
+	BALANCE_START_NOWARN  = 1U << 1
 };
 
 static int do_balance(const char *path, struct btrfs_ioctl_balance_args *args,
@@ -366,7 +364,7 @@ static const char * const cmd_balance_start_usage[] = {
 	"a delay to stop it.",
 	"",
 	OPTLINE("-d[filters]", "act on data chunks with optional filters (no space in between)"),
-	OPTLINE("-m[filters]", "act on metadata chunks with optinal filters (no space in between)"),
+	OPTLINE("-m[filters]", "act on metadata chunks with optional filters (no space in between)"),
 	OPTLINE("-s[filters]", "act on system chunks (only under -f) with optional filters (no space in between)"),
 	OPTLINE("-f", "force a reduction of metadata integrity, or skip timeout when converting to RAID56 profiles"),
 	OPTLINE("--full-balance", "do not print warning and do not delay start"),
@@ -863,37 +861,4 @@ static const struct cmd_group balance_cmd_group = {
 	}
 };
 
-static int cmd_balance(const struct cmd_struct *cmd, int argc, char **argv)
-{
-	bool old_syntax = true;
-
-	/*
-	 * Exclude all valid subcommands from being potentially confused as path
-	 * for the obsolete syntax: btrfs balance <path>
-	 */
-	if (argc == 2) {
-		for (int i = 0; balance_cmd_group.commands[i] != NULL; i++) {
-			if (strcmp(argv[1], balance_cmd_group.commands[i]->token) == 0) {
-				old_syntax = false;
-				break;
-			}
-		}
-	} else {
-		old_syntax = false;
-	}
-
-	if (old_syntax) {
-		struct btrfs_ioctl_balance_args args;
-
-		warning("deprecated syntax, please use 'btrfs balance start'");
-		memset(&args, 0, sizeof(args));
-		args.flags |= BTRFS_BALANCE_TYPE_MASK;
-
-		/* No enqueueing supported for the obsolete syntax */
-		return do_balance(argv[1], &args, 0, false);
-	}
-
-	return handle_command_group(cmd, argc, argv);
-}
-
-DEFINE_COMMAND(balance, "balance", cmd_balance, NULL, &balance_cmd_group, 0);
+DEFINE_GROUP_COMMAND_TOKEN(balance);

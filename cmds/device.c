@@ -25,9 +25,8 @@
 #include <getopt.h>
 #include <dirent.h>
 #include <stdbool.h>
-#include "kernel-shared/uapi/btrfs.h"
-#include "kernel-shared/ctree.h"
 #include "kernel-shared/zoned.h"
+#include "kernel-shared/volumes.h"
 #include "common/string-table.h"
 #include "common/utils.h"
 #include "common/help.h"
@@ -195,13 +194,16 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 	DIR	*dirstream = NULL;
 	bool enqueue = false;
 	bool cancel = false;
+	bool force = false;
 
 	optind = 0;
 	while (1) {
 		int c;
-		enum { GETOPT_VAL_ENQUEUE = GETOPT_VAL_FIRST };
+		enum { GETOPT_VAL_ENQUEUE = GETOPT_VAL_FIRST,
+		       GETOPT_VAL_FORCE };
 		static const struct option long_options[] = {
 			{ "enqueue", no_argument, NULL, GETOPT_VAL_ENQUEUE},
+			{ "force", no_argument, NULL, GETOPT_VAL_FORCE },
 			{ NULL, 0, NULL, 0}
 		};
 
@@ -211,6 +213,9 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 		switch (c) {
 		case GETOPT_VAL_ENQUEUE:
 			enqueue = true;
+			break;
+		case GETOPT_VAL_FORCE:
+			force = true;
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -237,6 +242,25 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 		if (strcmp("cancel", argv[i]) == 0) {
 			cancel = true;
 			pr_verbose(LOG_DEFAULT, "Request to cancel running device deletion\n");
+		}
+	}
+
+	if (!cancel && argc - optind > 2) {
+		warning("there are %d devices for removal, this will not remove them at once\n"
+			"\t but one by one and the remaining devices can still be written to.\n"
+			"\t Use --force to skip the timeout.\n"
+			"\t If this is not expected, press Ctrl-C to stop.\n",
+			argc - optind - 1);
+		if (force) {
+			pr_verbose(LOG_DEFAULT, "Safety timeout skipped due to --force\n\n");
+		} else {
+			int delay = 10;
+
+			while (delay) {
+				printf("%2d", delay--);
+				fflush(stdout);
+				sleep(1);
+			}
 		}
 	}
 
@@ -835,29 +859,28 @@ static const char * const cmd_device_usage_usage[] = {
 
 static int _cmd_device_usage(int fd, const char *path, unsigned unit_mode)
 {
-	int i;
 	int ret = 0;
-	struct chunk_info *chunkinfo = NULL;
-	struct device_info *devinfo = NULL;
-	int chunkcount = 0;
-	int devcount = 0;
+	struct array chunkinfos = { 0 };
+	struct array devinfos = { 0 };
 
-	ret = load_chunk_and_device_info(fd, &chunkinfo, &chunkcount, &devinfo,
-			&devcount);
+	ret = load_chunk_and_device_info(fd, &chunkinfos, &devinfos);
 	if (ret)
 		goto out;
 
-	for (i = 0; i < devcount; i++) {
-		pr_verbose(LOG_DEFAULT, "%s, ID: %llu\n", devinfo[i].path, devinfo[i].devid);
-		print_device_sizes(&devinfo[i], unit_mode);
-		print_device_chunks(&devinfo[i], chunkinfo, chunkcount,
-				unit_mode);
+	for (int i = 0; i < devinfos.length; i++) {
+		const struct device_info *devinfo = devinfos.data[i];
+
+		pr_verbose(LOG_DEFAULT, "%s, ID: %llu\n", devinfo->path, devinfo->devid);
+		print_device_sizes(devinfo, unit_mode);
+		print_device_chunks(devinfo, &chunkinfos, unit_mode);
 		pr_verbose(LOG_DEFAULT, "\n");
 	}
 
 out:
-	free(devinfo);
-	free(chunkinfo);
+	array_free_elements(&devinfos);
+	array_free(&devinfos);
+	array_free_elements(&chunkinfos);
+	array_free(&chunkinfos);
 
 	return ret;
 }

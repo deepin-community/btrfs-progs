@@ -32,12 +32,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <uuid/uuid.h>
 #include "common/utils.h"
 #include "common/format-output.h"
 #include "cmds/commands.h"
 
 /* Default empty output */
-void test_simple_empty()
+static void test1_simple_empty()
 {
 	static const struct rowspec rows[] = {
 		ROWSPEC_END
@@ -49,7 +50,7 @@ void test_simple_empty()
 }
 
 /* Single object with a few members */
-void test1()
+static void test2()
 {
 	static const struct rowspec rows1[] = {
 		{ .key = "device", .fmt = "%s", .out_text = "device", .out_json = "device" },
@@ -67,7 +68,7 @@ void test1()
 }
 
 /* Escaped strings */
-void test2_escape()
+static void test3_escape()
 {
 	static const struct rowspec rows1[] = {
 		{ .key = "devid", .fmt = "%llu", .out_text = "devid", .out_json = "devid" },
@@ -91,29 +92,74 @@ void test2_escape()
 	fmt_end(&fctx);
 }
 
+static void test4_unquoted_bool()
+{
+	static const struct rowspec rows1[] = {
+		{ .key = "readonly", .fmt = "bool", .out_text = "readonly", .out_json = "readonly" },
+		ROWSPEC_END
+	};
+	struct format_ctx fctx;
+
+	fmt_start(&fctx, rows1, 32, 0);
+	fmt_print_start_group(&fctx, "flags1", JSON_TYPE_MAP);
+	fmt_print(&fctx, "readonly", 0);
+	fmt_print_end_group(&fctx, NULL);
+	fmt_print_start_group(&fctx, "flags2", JSON_TYPE_MAP);
+	fmt_print(&fctx, "readonly", 1);
+	fmt_print_end_group(&fctx, NULL);
+	fmt_print_start_group(&fctx, "flags3", JSON_TYPE_MAP);
+	fmt_print(&fctx, "readonly", false);
+	fmt_print_end_group(&fctx, NULL);
+	fmt_print_start_group(&fctx, "flags4", JSON_TYPE_MAP);
+	fmt_print(&fctx, "readonly", true);
+	fmt_print_end_group(&fctx, NULL);
+	fmt_end(&fctx);
+}
+
+static void test5_uuid()
+{
+	static const struct rowspec rows1[] = {
+		{ .key = "randomuuid", .fmt = "uuid", .out_text = "randomuuid", .out_json = "randomuuid" },
+		{ .key = "nulluuid", .fmt = "uuid", .out_text = "nulluuid", .out_json = "nulluuid" },
+		ROWSPEC_END
+	};
+	struct format_ctx fctx;
+	uuid_t randomuuid, nulluuid;
+
+	uuid_generate(randomuuid);
+	uuid_clear(nulluuid);
+
+	fmt_start(&fctx, rows1, 32, 0);
+	fmt_print(&fctx, "randomuuid", randomuuid);
+	fmt_print(&fctx, "nulluuid", nulluuid);
+	fmt_end(&fctx);
+}
+
 int main(int argc, char **argv)
 {
 	int testno;
 	static void (*tests[])() = {
-		test_simple_empty,
-		test1,
-		test2_escape,
+		NULL,
+		test1_simple_empty,
+		test2,
+		test3_escape,
+		test4_unquoted_bool,
+		test5_uuid,
 	};
+	const int testmax = ARRAY_SIZE(tests) - 1;
 
 	btrfs_config_init();
 	bconf.output_format = CMD_FORMAT_JSON;
 
 	/* Without arguments, print the number of tests available */
 	if (argc == 1) {
-		printf("%zu\n", ARRAY_SIZE(tests));
+		printf("%d\n", testmax);
 		return 0;
 	}
 	testno = atoi(argv[1]);
-	testno--;
-
-	if (testno < 0 || testno >= ARRAY_SIZE(tests)) {
-		fprintf(stderr, "ERROR: test number %d is out of range (max %zu)\n",
-				testno + 1, ARRAY_SIZE(tests));
+	if (testno < 1 || testno > ARRAY_SIZE(tests)) {
+		fprintf(stderr, "ERROR: test number %d is out of range (min 1, max %d)\n",
+				testno, testmax);
 		return 1;
 	}
 	tests[testno]();

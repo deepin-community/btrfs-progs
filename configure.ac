@@ -40,9 +40,12 @@ AC_PREFIX_DEFAULT([/usr/local])
 
 AC_PROG_CC
 AC_CANONICAL_HOST
+AC_CANONICAL_TARGET
 AC_C_CONST
 AC_C_VOLATILE
 AC_C_BIGENDIAN
+
+if test "x$target_cpu" == 'xx86_64'; then
 
 AX_CHECK_COMPILE_FLAG([-msse2], [HAVE_CFLAG_msse2=1], [HAVE_CFLAG_msse2=0])
 AC_SUBST([HAVE_CFLAG_msse2])
@@ -59,6 +62,8 @@ AC_DEFINE_UNQUOTED([HAVE_CFLAG_mavx2], [$HAVE_CFLAG_mavx2], [Compiler supports -
 AX_CHECK_COMPILE_FLAG([-msha], [HAVE_CFLAG_msha=1], [HAVE_CFLAG_msha=0])
 AC_SUBST([HAVE_CFLAG_msha])
 AC_DEFINE_UNQUOTED([HAVE_CFLAG_msha], [$HAVE_CFLAG_msha], [Compiler supports -msha])
+
+fi
 
 AX_CHECK_COMPILE_FLAG([-std=gnu11], [],
 	[AC_MSG_ERROR([std=gnu11 compiler required])])
@@ -79,9 +84,13 @@ AC_CHECK_FUNCS([reallocarray])
 
 AC_CHECK_FUNCS([clock_gettime])
 
+AX_CHECK_DEFINE([features.h],[__GLIBC__],[HAVE_GLIBC=1],[HAVE_GLIBC=0])
+AC_SUBST([HAVE_GLIBC])
+
 AX_GCC_BUILTIN([__builtin_add_overflow])
 AX_GCC_BUILTIN([__builtin_sub_overflow])
 AX_GCC_BUILTIN([__builtin_mul_overflow])
+AX_GCC_BUILTIN([__builtin_cpu_supports__pclmul])
 
 AC_CHECK_HEADERS([linux/perf_event.h])
 AC_CHECK_HEADERS([linux/hw_breakpoint.h])
@@ -231,7 +240,7 @@ if test "$DISABLE_BTRFSCONVERT" = 0 && test "x$convertfs" = "x"; then
 fi
 
 AC_ARG_WITH([crypto],
-	    AS_HELP_STRING([[[]--with-crypto[[=builtin]]]], [provider of cryptographic primitives: builtin, libgcrypt, libsodium, libkcapi]),
+	    AS_HELP_STRING([[[]--with-crypto[[=builtin]]]], [provider of cryptographic primitives: builtin, libgcrypt, libsodium, libkcapi, botan, openssl]),
   [], [with_crypto=builtin]
 )
 
@@ -241,6 +250,8 @@ CRYPTOPROVIDER_BUILTIN=0
 CRYPTOPROVIDER_LIBGCRYPT=0
 CRYPTOPROVIDER_LIBSODIUM=0
 CRYPTOPROVIDER_LIBKCAPI=0
+CRYPTOPROVIDER_BOTAN=0
+CRYPTOPROVIDER_OPENSSL=0
 if test "$with_crypto" = "builtin"; then
 	cryptoprovider="builtin"
 	CRYPTOPROVIDER_BUILTIN=1
@@ -248,17 +259,27 @@ elif test "$with_crypto" = "libgcrypt"; then
 	cryptoprovider="libgcrypt"
 	PKG_CHECK_MODULES(GCRYPT, [libgcrypt >= 1.8.0])
 	CRYPTOPROVIDER_LIBGCRYPT=1
-	cryptoproviderversion=`${PKG_CONFIG} libgcrypt --version`
+	cryptoproviderversion=`${PKG_CONFIG} libgcrypt --modversion`
 elif test "$with_crypto" = "libsodium"; then
 	cryptoprovider="libsodium"
 	PKG_CHECK_MODULES(SODIUM, [libsodium >= 1.0.4])
 	CRYPTOPROVIDER_LIBSODIUM=1
-	cryptoproviderversion=`${PKG_CONFIG} libsodium --version`
+	cryptoproviderversion=`${PKG_CONFIG} libsodium --modversion`
 elif test "$with_crypto" = "libkcapi"; then
 	cryptoprovider="libkcapi"
 	PKG_CHECK_MODULES(KCAPI, [libkcapi >= 1.0.0])
 	CRYPTOPROVIDER_LIBKCAPI=1
-	cryptoproviderversion=`${PKG_CONFIG} libkcapi --version`
+	cryptoproviderversion=`${PKG_CONFIG} libkcapi --modversion`
+elif test "$with_crypto" = "botan"; then
+	cryptoprovider="botan"
+	PKG_CHECK_MODULES(BOTAN, [botan-2 >= 2.19.0])
+	CRYPTOPROVIDER_BOTAN=1
+	cryptoproviderversion=`${PKG_CONFIG} botan-2 --modversion`
+elif test "$with_crypto" = "openssl"; then
+	cryptoprovider="openssl"
+	PKG_CHECK_MODULES(OPENSSL, [libcrypto >= 3.2.0])
+	CRYPTOPROVIDER_OPENSSL=1
+	cryptoproviderversion=`${PKG_CONFIG} libcrypto --modversion`
 else
 	AC_MSG_ERROR([unrecognized crypto provider: $with_crypto])
 fi
@@ -270,6 +291,10 @@ AC_SUBST([CRYPTOPROVIDER_LIBSODIUM])
 AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_LIBSODIUM],[$CRYPTOPROVIDER_LIBSODIUM],[Use libsodium])
 AC_SUBST([CRYPTOPROVIDER_LIBKCAPI])
 AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_LIBKCAPI],[$CRYPTOPROVIDER_LIBKCAPI],[Use libkcapi])
+AC_SUBST([CRYPTOPROVIDER_BOTAN])
+AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_BOTAN],[$CRYPTOPROVIDER_BOTAN],[Use Botan])
+AC_SUBST([CRYPTOPROVIDER_OPENSSL])
+AC_DEFINE_UNQUOTED([CRYPTOPROVIDER_OPENSSL],[$CRYPTOPROVIDER_OPENSSL],[Use OpenSSL])
 AC_DEFINE_UNQUOTED([CRYPTOPROVIDER],["$cryptoprovider"],[Crypto implementation source name])
 
 AX_CHECK_DEFINE([linux/fiemap.h], [FIEMAP_EXTENT_SHARED], [],

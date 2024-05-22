@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-SUBVOLUME" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-SUBVOLUME" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-subvolume \- manage btrfs subvolumes
 .SH SYNOPSIS
@@ -71,7 +71,7 @@ similar to a bind mount, and in fact the subvolume mount does exactly that.
 A freshly created filesystem is also a subvolume, called \fItop\-level\fP,
 internally has an id 5. This subvolume cannot be removed or replaced by another
 subvolume. This is also the subvolume that will be mounted by default, unless
-the default subvolume has been changed (see \fBbtrfs subvolume set\-default\fP).
+the default subvolume has been changed (see \fI\%btrfs subvolume set\-default\fP).
 .sp
 A snapshot is a subvolume like any other, with given initial content. By
 default, snapshots are created read\-write. File modifications in a snapshot
@@ -114,14 +114,15 @@ the subvolume on the filesystem that produced the stream. The use case relies
 on matching data on both sides. Changing the subvolume to read\-write after it
 has been received requires to reset the \fIreceived_uuid\fP\&. As this is a notable
 change and could potentially break the incremental send use case, performing
-it by \fBbtrfs property set\fP requires force if that is really desired by user.
+it by \fI\%btrfs property set\fP requires force if that is
+really desired by user.
 .sp
 \fBNOTE:\fP
 .INDENT 0.0
 .INDENT 3.5
 The safety checks have been implemented in 5.14.2, any subvolumes previously
 received (with a valid \fIreceived_uuid\fP) and read\-write status may exist and
-could still lead to problems with send/receive. You can use \fBbtrfs subvolume show\fP
+could still lead to problems with send/receive. You can use \fI\%btrfs subvolume show\fP
 to identify them. Flipping the flags to read\-only and back to
 read\-write will reset the \fIreceived_uuid\fP manually.  There may exist a
 convenience tool in the future.
@@ -136,14 +137,14 @@ descendants of the toplevel one), or nested.
 What should be mentioned early is that a snapshotting is not recursive, so a
 subvolume or a snapshot is effectively a barrier and no files in the nested
 appear in the snapshot. Instead there\(aqs a stub subvolume (also sometimes
-\fBempty subvolume\fP with the same name as original subvolume, with inode number
+\fIempty subvolume\fP with the same name as original subvolume, with inode number
 2).  This can be used intentionally but could be confusing in case of nested
 layouts.
 .SS Case study: system root layouts
 .sp
 There are two ways how the system root directory and subvolume layout could be
 organized. The interesting use case for root is to allow rollbacks to previous
-version, as one atomic step. If the entire filesystem hierarchy starting in \(dq/\(dq
+version, as one atomic step. If the entire filesystem hierarchy starting in \fB/\fP
 is in one subvolume, taking snapshot will encompass all files. This is easy for
 the snapshotting part but has undesirable consequences for rollback. For example,
 log files would get rolled back too, or any data that are stored on the root
@@ -209,6 +210,8 @@ directories in the target snapshot preserve their original inode numbers.
 .INDENT 3.5
 Inode number is not a filesystem\-wide unique identifier, some applications
 assume that. Please use pair \fIsubvolumeid:inodenumber\fP for that purpose.
+The subvolume id can be read by \fI\%btrfs inspect\-internal rootid\fP
+or by the ioctl \fI\%BTRFS_IOC_INO_LOOKUP\fP\&.
 .UNINDENT
 .UNINDENT
 .SH PERFORMANCE
@@ -254,7 +257,7 @@ similar to a bind mount, and in fact the subvolume mount does exactly that.
 A freshly created filesystem is also a subvolume, called \fItop\-level\fP,
 internally has an id 5. This subvolume cannot be removed or replaced by another
 subvolume. This is also the subvolume that will be mounted by default, unless
-the default subvolume has been changed (see subcommand \fIset\-default\fP).
+the default subvolume has been changed (see subcommand \fI\%set\-default\fP).
 .sp
 A snapshot is a subvolume like any other, with given initial content. By
 default, snapshots are created read\-write. File modifications in a snapshot
@@ -262,11 +265,18 @@ do not affect the files in the original subvolume.
 .SH SUBCOMMAND
 .INDENT 0.0
 .TP
-.B create [\-i <qgroupid>] [<dest>/]<name>
-Create a subvolume \fIname\fP in \fIdest\fP\&.
+.B create [options] [<dest>/]<name> [[<dest2>/]<name2> ...]
+Create subvolume(s) at the destination(s).
 .sp
-If \fIdest\fP is not given, subvolume \fIname\fP will be created in the current
-directory.
+If \fIdest\fP part of the path is not given, subvolume \fIname\fP will be
+created in the current directory.
+.sp
+If multiple desinations are given, then given options are applied to all
+subvolumes.
+.sp
+If failure happens for any of the destinations, the command would
+still retry the remaining destinations, but would return 1 to indicate
+the failure (similar to what \fBmkdir\fP would do.
 .sp
 \fBOptions\fP
 .INDENT 7.0
@@ -274,6 +284,11 @@ directory.
 .BI \-i \ <qgroupid>
 Add the newly created subvolume to a qgroup. This option can be given multiple
 times.
+.UNINDENT
+.INDENT 7.0
+.TP
+.B \-p|\-\-parents
+Create any missing parent directories for each argument (like \fBmkdir \-p\fP).
 .UNINDENT
 .TP
 .B delete [options] [<subvolume> [<subvolume>...]], delete \-i|\-\-subvolid <subvolid> <path>
@@ -283,12 +298,13 @@ If \fIsubvolume\fP is not a subvolume, btrfs returns an error but continues if
 there are more arguments to process.
 .sp
 If \fI\-\-subvolid\fP is used, \fIpath\fP must point to a btrfs filesystem. See
-\fBbtrfs subvolume list\fP or \fBbtrfs inspect\-internal rootid\fP
+\fI\%btrfs subvolume list\fP or
+\fI\%btrfs inspect\-internal rootid\fP
 how to get the subvolume id.
 .sp
 The corresponding directory is removed instantly but the data blocks are
 removed later in the background. The command returns immediately. See
-\fBbtrfs subvolume sync\fP how to wait until the subvolume gets completely removed.
+\fI\%btrfs subvolume sync\fP how to wait until the subvolume gets completely removed.
 .sp
 The deletion does not involve full transaction commit by default due to
 performance reasons.  As a consequence, the subvolume may appear again after a
@@ -298,9 +314,11 @@ safely stored on the device.
 Deleting subvolume needs sufficient permissions, by default the owner
 cannot delete it unless it\(aqs enabled by a mount option
 \fIuser_subvol_rm_allowed\fP, or deletion is run as root.
-The default subvolume (see \fBbtrfs subvolume set\-default\fP) cannot be deleted and
+The default subvolume (see \fI\%btrfs subvolume set\-default\fP)
+cannot be deleted and
 returns error (EPERM) and this is logged to the system log. A subvolume that\(aqs
-currently involved in send (see \fBbtrfs send\fP) also cannot be deleted until the
+currently involved in send (see \fI\%btrfs\-send(8)\fP)
+also cannot be deleted until the
 send is finished. This is also logged in the system log.
 .sp
 \fBOptions\fP
@@ -315,6 +333,16 @@ wait for transaction commit after deleting each subvolume.
 .B \-i|\-\-subvolid <subvolid>
 subvolume id to be removed instead of the <path> that should point to the
 filesystem with the subvolume
+.UNINDENT
+.INDENT 7.0
+.TP
+.B  \-\-delete\-qgroup
+also delete the qgroup 0/subvolid if it exists
+.TP
+.B  \-\-no\-delete\-qgroup
+do not delete the 0/subvolid qgroup (default)
+.UNINDENT
+.INDENT 7.0
 .TP
 .B \-v|\-\-verbose
 (deprecated) alias for global \fI\-v\fP option
@@ -327,6 +355,8 @@ List the recently modified files in a subvolume, after \fIlast_gen\fP generation
 Get the default subvolume of the filesystem \fIpath\fP\&.
 .sp
 The output format is similar to \fBsubvolume list\fP command.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B list [options] [\-G [+|\-]<value>] [\-C [+|\-]<value>] [\-\-sort=rootid,gen,ogen,path] <path>
 List the subvolumes present in the filesystem \fIpath\fP\&.
@@ -347,7 +377,8 @@ Path filtering:
 .INDENT 7.0
 .TP
 .B  \-o
-print only subvolumes below specified <path>.
+Print only subvolumes below specified <path>. Note that this is not a
+recursive command, and won\(aqt show nested subvolumes under <path>.
 .TP
 .B  \-a
 print all the subvolumes in the filesystem and distinguish between
@@ -420,6 +451,8 @@ you can add \fI+\fP or \fI\-\fP in front of each items, \fI+\fP means ascending,
 for \fI\-\-sort\fP you can combine some items together by \fI,\fP, just like
 \fI\-\-sort=+ogen,\-gen,path,rootid\fP\&.
 .UNINDENT
+.UNINDENT
+.INDENT 0.0
 .TP
 .B set\-default [<subvolume>|<id> <path>]
 Set the default subvolume for the (mounted) filesystem.
@@ -430,8 +463,11 @@ Takes action on next mount.
 .sp
 There are two ways how to specify the subvolume, by \fIid\fP or by the \fIsubvolume\fP
 path.
-The id can be obtained from \fBbtrfs subvolume list\fP,
-\fBbtrfs subvolume show\fP or \fBbtrfs inspect\-internal rootid\fP\&.
+The id can be obtained from \fI\%btrfs subvolume list\fP
+\fI\%btrfs subvolume show\fP or
+\fI\%btrfs inspect\-internal rootid\fP\&.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B show [options] <path>
 Show more information about a subvolume (UUIDs, generations, times, flags,
@@ -486,11 +522,15 @@ Make the new snapshot read only.
 Add the newly created subvolume to a qgroup. This option can be given multiple
 times.
 .UNINDENT
+.UNINDENT
+.INDENT 0.0
 .TP
 .B sync <path> [subvolid...]
 Wait until given subvolume(s) are completely removed from the filesystem after
 deletion. If no subvolume id is given, wait until all current deletion requests
 are completed, but do not wait for subvolumes deleted in the meantime.
+.sp
+If the filesystem status changes to read\-only then the waiting is interrupted.
 .sp
 \fBOptions\fP
 .INDENT 7.0
@@ -503,7 +543,7 @@ sleep N seconds between checks (default: 1)
 .SS Deleting a subvolume
 .sp
 If we want to delete a subvolume called \fIfoo\fP from a btrfs volume mounted at
-\fI/mnt/bar\fP we could run the following:
+\fB/mnt/bar\fP we could run the following:
 .INDENT 0.0
 .INDENT 3.5
 .sp

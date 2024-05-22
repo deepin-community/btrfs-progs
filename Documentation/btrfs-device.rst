@@ -45,15 +45,24 @@ remove [options] <device>|<devid> [<device>|<devid>...] <path>
         Remove device(s) from a filesystem identified by <path>
 
         Device removal must satisfy the profile constraints, otherwise the command
-        fails. The filesystem must be converted to profile(s) that would allow the
-        removal. This can typically happen when going down from 2 devices to 1 and
-        using the RAID1 profile. See the section *TYPICAL USECASES*.
+        fails and cannot be enforced. The filesystem must be converted to
+        profile(s) that would allow the removal. This can for example happen when
+        going down from 2 devices to 1 and using the RAID1 profile. See the
+        section :ref:`Typical use cases<man-device-typical-use-cases>`.
 
         The operation can take long as it needs to move all data from the device.
 
+        .. note::
+                It's possible to specify more than one device on the command
+                line but the devices will be removed one by one, not at once.
+                This means that the remaining devices to be deleted can be
+                still used for writes. In that case there's a warning and safety
+                timeout as this can be confusing and unexpected. The timeout can
+                be overridden by option *--force*.
+
         It is possible to delete the device that was used to mount the filesystem. The
-        device entry in the mount table will be replaced by another device name with
-        the lowest device id.
+        device entry in the mount table (:file:`/proc/self/mounts`) will be
+        replaced by another device name with the lowest device id.
 
         If the filesystem is mounted in degraded mode (*-o degraded*), special term
         *missing* can be used for *device*. In that case, the first device that is
@@ -71,12 +80,16 @@ remove [options] <device>|<devid> [<device>|<devid>...] <path>
         --enqueue
                 wait if there's another exclusive operation running, otherwise continue
 
+        --force
+                skip the safety timeout when there are multiple devices for removal, this
+                does not force removing devices that would break the profile constraints
+
 delete <device>|<devid> [<device>|<devid>...] <path>
         Alias of remove kept for backward compatibility
 
 replace <command> [options] <path>
         Alias of whole command group *btrfs replace* for convenience. See
-        :doc:`btrfs-replace(8)<btrfs-replace>`.
+        :doc:`btrfs-replace`.
 
 ready <device>
         Wait until all devices of a multiple-device filesystem are scanned and
@@ -99,7 +112,7 @@ scan [options] [<device> [<device>...]]
         The command can be run repeatedly. Devices that have been already registered
         remain as such. Reloading the kernel module will drop this information. There's
         an alternative way of mounting multiple-device filesystem without the need for
-        prior scanning. See the mount option *device*.
+        prior scanning. See the mount option :ref:`device<mount-option-device>`.
 
         ``Options``
 
@@ -250,7 +263,7 @@ AVAILABILITY
 SEE ALSO
 --------
 
-:doc:`btrfs-balance(8)<btrfs-balance>`
-:doc:`btrfs-device(8)<btrfs-device>`,
-:doc:`btrfs-replace(8)<btrfs-replace>`,
-:doc:`mkfs.btrfs(8)<mkfs.btrfs>`,
+:doc:`btrfs-balance`
+:doc:`btrfs-device`,
+:doc:`btrfs-replace`,
+:doc:`mkfs.btrfs`

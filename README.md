@@ -1,6 +1,11 @@
-[![devel](https://github.com/kdave/btrfs-progs/actions/workflows/devel.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/devel.yml)
 Btrfs-progs
 ===========
+
+[![devel](https://github.com/kdave/btrfs-progs/actions/workflows/devel.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/devel.yml)
+[![coverage](https://github.com/kdave/btrfs-progs/actions/workflows/coverage.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/coverage.yml)
+[![codecov](https://codecov.io/gh/kdave/btrfs-progs/branch/coverage-test/graph/badge.svg?token=fhLI8V9s0k)](https://codecov.io/gh/kdave/btrfs-progs)
+[![static](https://github.com/kdave/btrfs-progs/actions/workflows/artifacts-static-build.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/artifacts-static-build.yml)
+[![release](https://github.com/kdave/btrfs-progs/actions/workflows/ci-build-test.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/ci-build-test.yml)
 
 Userspace utilities to manage btrfs filesystems.
 License: GPLv2.
@@ -8,7 +13,6 @@ License: GPLv2.
 Btrfs is a copy on write (COW) filesystem for Linux aimed at implementing
 advanced features while focusing on fault tolerance, repair and easy
 administration.
-
 
 This repository hosts following utilities and also documentation:
 
@@ -33,6 +37,35 @@ The release tags are signed with a GPG key ID `F2B4 1200 C54E FB30 380C  1756 C5
 release tarballs are hosted at [kernel.org](https://www.kernel.org/pub/linux/kernel/people/kdave/btrfs-progs/).
 See file [CHANGES](CHANGES) or [changelogs on RTD](https://btrfs.readthedocs.io/en/latest/CHANGES.html).
 
+Releases with changelog are also published at [Github release page](https://github.com/kdave/btrfs-progs/releases).
+
+### Static binaries
+
+For each release there are static binaries of `btrfs` and `btrfs.box` provided.
+These can be used in rescue environments and are built for `x86_64`
+architecture (with maximum backward compatibility), inside the [Github Actions
+workflow](https://github.com/kdave/btrfs-progs/actions/workflows/artifacts-static-build.yml).
+The `btrfs.box` is an all-in-one tool in the [busybox](https://www.busybox.net)
+style, the functionality is determined by the binary names (either symlink,
+hradlink or a file copy).
+
+### Feature compatibility
+
+The *btrfs-progs* of version *X.Y* declare support of kernel features of the same
+version. New progs on old kernel are expected to work, limited only by features
+provided by the kernel.
+
+### Build compatibility
+
+Build is supported on the [GNU C library](https://www.gnu.org/software/libc/)
+as the primary target, and on the [musl libc](https://musl.libc.org/).
+
+The supported compilers are [gcc](https://gcc.gnu.org/) (minimal version 4.8)
+and [clang](https://clang.llvm.org/) (minimal version 3.4).
+
+Build tests are done on [several distributions](https://github.com/kdave/btrfs-progs/blob/master/.github/workflows/ci-build-test.yml), see
+[Github actions workflow](https://github.com/kdave/btrfs-progs/actions/workflows/ci-build-test.yml).
+
 Reporting bugs
 --------------
 
@@ -40,27 +73,26 @@ There are several ways, each has its own specifics and audience that can give
 feedback or work on a fix. The following list is sorted in the order of
 preference:
 
-* [github issue tracker](https://github.com/kdave/btrfs-progs/issues)
+* [Github issue tracker](https://github.com/kdave/btrfs-progs/issues)
 * to the mailing list *linux-btrfs@vger.kernel.org* -- (not required to
   subscribe), beware that the mail might get overlooked in other traffic
 * IRC (irc.libera.chat #btrfs) -- good for discussions eg. if a bug is already
   known, but reports could miss developers' attention
 * please don't use https://bugzilla.kernel.org for btrfs-progs bugs
 
-
 Development
 -----------
 
 The development takes place in the mailing list (*linux-btrfs@vger.kernel.org*)
-or at github (issues, pull requests). Changes should be split to logical parts
+or at Github (issues, pull requests). Changes should be split to logical parts
 if possible, documentation may be included in the same patch as to code or
 separately.
 
 The development model of btrfs-progs shares a lot with the kernel model. The
 
-* **one logical change per patch**: eg. not mixing bugfixes, cleanups, features
+* **one logical change per patch**: e.g. not mixing bugfixes, cleanups, features
   etc., sometimes it's not clear and will be usually pointed out during reviews
-* proper **subject line**: eg. prefix with _btrfs-progs: subpart, ..._ ,
+* proper **subject line**: e.g. prefix with _btrfs-progs: subpart, ..._ ,
   descriptive yet not too long, see `git log --oneline` for some inspiration
 * proper **changelog**: the changelogs are often missing or lacking explanation _why_
   the change was made, or _how_ is something broken, _what_ are user-visible
@@ -75,6 +107,18 @@ The development model of btrfs-progs shares a lot with the kernel model. The
     substitute in order to allow contributions without much bothering with
     formalities
 
+### Pull requests
+
+The pull requests on Github may be used for code or documentation
+contributions. There are basic build checks enabled in the Github actions CI
+for pull requests. The status can be checked at the
+[workflow page](https://github.com/kdave/btrfs-progs/actions/workflows/pull-request.yml).
+
+* open a PR against branches *devel* or *master*
+* push update to the same branch if you need to
+* close the PR in case it's wrong, a mistake or needs rework
+* if you're sure the changes don't need a CI build verification, please add `[skip ci]` to the changelog
+
 Source code coding style and preferences follow the
 [kernel coding style](https://www.kernel.org/doc/html/latest/process/coding-style.html).
 You can find the editor settings in `.editorconfig` and use the
@@ -84,8 +128,15 @@ or update your editor settings manually.
 Testing
 -------
 
-The testing documentation can be found in [tests/](tests/README.md) and
-continuous integration/container images in [ci/](ci/README.md).
+The documentation for writing and running tests can be found in
+[tests/](tests/README.md) and continuous integration/container images in
+[ci/](ci/README.md).
+
+Development branches are tested by Github
+[Action workflows](https://github.com/kdave/btrfs-progs/actions).
+
+Code coverage provided by [codecov.io](https://codecov.io) can be found
+[here](https://codecov.io/gh/kdave/btrfs-progs).
 
 Documentation updates
 ---------------------
@@ -93,7 +144,7 @@ Documentation updates
 Documentation fixes or updates do not need much explanation so sticking to the
 code rules in the previous section is not necessary. GitHub pull requests are
 OK, patches could be sent to me directly and not required to be also in the
-mailinglist. Pointing out typos via IRC also works, although might get
+mailing list. Pointing out typos via IRC also works, although might get
 accidentally lost in the noise.
 
 Documentation sources are written in
@@ -106,13 +157,18 @@ Build dependencies are listed in [INSTALL](INSTALL). Implementation of checksum/
 functions is provided by copies of the respective sources to avoid adding
 dependencies that would make deployments in rescue or limited environments
 harder. The implementations are portable and there are optimized versions for
-some architectures.  Optionally it's possible to use libgcrypt, libsodium or
-libkcapi implementations.
+some architectures.  Optionally it's possible to use
+[libgcrypt](https://www.gnupg.org/software/libgcrypt/index.html),
+[libsodium](https://doc.libsodium.org),
+[libkcapi](https://www.chronox.de/libkcapi.html),
+[Botan](https://botan.randombit.net) or
+[OpenSSL](https://www.openssl.org) implementations.
 
-* CRC32C: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/
-* XXHASH: https://github.com/Cyan4973/xxHash
-* SHA256: https://tools.ietf.org/html/rfc4634
-* BLAKE2: https://github.com/BLAKE2/BLAKE2
+The builtin implemtations uses the following sources:
+[CRC32C](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git),
+[XXHASH](https://github.com/Cyan4973/xxHash),
+[SHA256](https://tools.ietf.org/html/rfc4634),
+[BLAKE2](https://github.com/BLAKE2/BLAKE2).
 
 Some other code is borrowed from kernel, eg. the raid5 tables or data structure
 implementation (list, rb-tree).

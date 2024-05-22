@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "MKFS.BTRFS" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "MKFS.BTRFS" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 mkfs.btrfs \- create a btrfs filesystem
 .SH SYNOPSIS
@@ -111,6 +111,8 @@ for more details.
 .UNINDENT
 .sp
 On multiple devices the default is \fIraid1\fP\&.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B \-M|\-\-mixed
 Normally the data and metadata block groups are isolated. The \fImixed\fP mode
@@ -236,8 +238,19 @@ Print only error or warning messages. Options \fI\-\-features\fP or \fI\-\-help\
 Resets any previous effects of \fI\-\-verbose\fP\&.
 .TP
 .B \-U|\-\-uuid <UUID>
-Create the filesystem with the given \fIUUID\fP\&. The UUID must not exist on any
-filesystem currently present.
+Create the filesystem with the given \fIUUID\fP\&. For a single\-device filesystem,
+you can duplicate the UUID. However, for a multi\-device filesystem, the UUID
+must not already exist on any currently present filesystem.
+.UNINDENT
+.INDENT 0.0
+.TP
+.BI \-\-device\-uuid \ <UUID>
+Create the filesystem with the given device\-uuid \fIUUID\fP (also known as
+UUID_SUB in \fBblkid\fP).  For a single device filesystem, you can
+duplicate the device\-uuid. However, used for a multi\-device filesystem
+this option will not work at the moment.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B \-v|\-\-verbose
 Increase verbosity level, default is 1.
@@ -369,12 +382,48 @@ can be used together with \fI\-\-rootdir\fP\&.  See also \fI\%btrfs\-quota(8)\fP
 (default since btrfs\-progs 5.15, kernel support since 4.5)
 .sp
 Enable the free space tree (mount option \fIspace_cache=v2\fP) for persisting the
-free space cache.
+free space cache in a b\-tree. This is built on top of the COW mechanism
+and has better performance than v1.
+.sp
+Offline conversion from filesystems that don\(aqt have this feature
+enabled at \fImkfs\fP time is possible, see \fI\%btrfstune(8)\fP\&.
+.sp
+Online conversion can be done by mounting with \fBspace_cache=v2\fP, this
+is sufficient to be done one time.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B block\-group\-tree
 (kernel support since 6.1)
 .sp
-Enable the block group tree to greatly reduce mount time for large filesystems.
+Enable a dedicated b\-tree for block group items, this greatly reduces
+mount time for large filesystems due to better data locality that
+avoids seeking. On rotational devices the \fIlarge\fP size is considered
+starting from the 2\-4TiB. Can be used on other types of devices (SSD,
+NVMe, ...) as well.
+.sp
+Offline conversion from filesystems that don\(aqt have this feature
+enabled at \fImkfs\fP time is possible, see \fI\%btrfstune(8)\fP\&. Online
+conversion is not possible.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B raid\-stripe\-tree
+(kernel support since 6.7)
+.sp
+New tree for logical file extent mapping where the physical mapping
+may not match on multiple devices. this is now used in zoned mode to
+implement RAID0/RAID1* profiles, but can be used in non\-zoned mode as
+well. The support for RAID56 is in development and will eventually
+fix the problems with the current implementation. This is a backward
+incompatible feature and has to be enabled at mkfs time.
+.TP
+.B squota
+(kernel support since 6.7)
+.sp
+Enable simple quota accounting (squotas). This is an alternative to
+qgroups with a smaller performance impact but no notion of shared vs.
+exclusive usage.
 .UNINDENT
 .SH BLOCK GROUPS, CHUNKS, RAID
 .sp

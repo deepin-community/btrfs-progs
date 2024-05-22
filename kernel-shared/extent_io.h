@@ -20,10 +20,9 @@
 #define __BTRFS_EXTENT_IO_H__
 
 #include "kerncompat.h"
-#include "common/extent-cache.h"
+#include "kernel-lib/bitops.h"
 #include "kernel-lib/list.h"
-
-struct extent_io_tree;
+#include "common/extent-cache.h"
 
 #define EXTENT_BUFFER_UPTODATE		(1U << 0)
 #define EXTENT_BUFFER_DIRTY		(1U << 1)
@@ -54,6 +53,7 @@ static inline int le_test_bit(int nr, const u8 *addr)
 }
 
 struct btrfs_fs_info;
+struct btrfs_trans_handle;
 
 struct extent_buffer {
 	struct cache_extent cache_node;
@@ -109,14 +109,20 @@ int memcmp_extent_buffer(const struct extent_buffer *eb, const void *ptrv,
 			 unsigned long start, unsigned long len);
 void read_extent_buffer(const struct extent_buffer *eb, void *dst,
 			unsigned long start, unsigned long len);
+void write_extent_buffer_fsid(const struct extent_buffer *eb, const void *src);
+void write_extent_buffer_chunk_tree_uuid(const struct extent_buffer *eb,
+		const void *src);
 void write_extent_buffer(const struct extent_buffer *eb, const void *src,
 			 unsigned long start, unsigned long len);
+void copy_extent_buffer_full(const struct extent_buffer *dst,
+			     const struct extent_buffer *src);
 void copy_extent_buffer(const struct extent_buffer *dst,
 			const struct extent_buffer *src,
 			unsigned long dst_offset, unsigned long src_offset,
 			unsigned long len);
-void copy_extent_buffer_full(const struct extent_buffer *dst,
-			     const struct extent_buffer *src);
+void memcpy_extent_buffer(const struct extent_buffer *dst,
+			  unsigned long dst_offset, unsigned long src_offset,
+			  unsigned long len);
 void memmove_extent_buffer(const struct extent_buffer *dst,
 			   const unsigned long dst_offset,
 			   unsigned long src_offset, unsigned long len);
@@ -125,7 +131,8 @@ void memset_extent_buffer(const struct extent_buffer *eb, char c,
 int extent_buffer_test_bit(const struct extent_buffer *eb, unsigned long start,
 			   unsigned long nr);
 int set_extent_buffer_dirty(struct extent_buffer *eb);
-int btrfs_clear_buffer_dirty(struct extent_buffer *eb);
+int btrfs_clear_buffer_dirty(struct btrfs_trans_handle *trans,
+			     struct extent_buffer *eb);
 int read_data_from_disk(struct btrfs_fs_info *info, void *buf, u64 logical,
 			u64 *len, int mirror);
 int write_data_to_disk(struct btrfs_fs_info *info, const void *buf, u64 offset,
@@ -136,7 +143,6 @@ void extent_buffer_bitmap_set(struct extent_buffer *eb, unsigned long start,
                               unsigned long pos, unsigned long len);
 void extent_buffer_init_cache(struct btrfs_fs_info *fs_info);
 void extent_buffer_free_cache(struct btrfs_fs_info *fs_info);
-void write_extent_buffer_fsid(const struct extent_buffer *eb, const void *srcv);
 void btrfs_readahead_node_child(struct extent_buffer *node, int slot);
 
 #endif

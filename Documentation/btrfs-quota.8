@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-QUOTA" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-QUOTA" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-quota \- control the global quota status of a btrfs filesystem
 .SH SYNOPSIS
@@ -75,7 +75,7 @@ on the fly.
 On the other hand, the traditional approach has only a poor solution to
 restrict directories.
 At installation time, the harddisk can be partitioned so that every directory
-(e.g. /usr, /var/, ...) that needs a limit gets its own partition.  The obvious
+(e.g. \fB/usr\fP, \fB/var\fP, ...) that needs a limit gets its own partition.  The obvious
 problem is that those limits cannot be changed without a reinstallation.  The
 btrfs subvolume feature builds a bridge.  Subvolumes correspond in many ways to
 partitions, as every subvolume looks like its own filesystem.  With subvolume
@@ -111,7 +111,7 @@ from within this qgroup.
 .sp
 The basic notion of the Subvolume Quota feature is the quota group, short
 qgroup.  Qgroups are notated as \fIlevel/id\fP, e.g.  the qgroup 3/2 is a qgroup of
-level 3. For level 0, the leading \(aq0/\(aq can be omitted.
+level 3. For level 0, the leading \fI0/\fP can be omitted.
 Qgroups of level 0 get created automatically when a subvolume/snapshot gets
 created.  The ID of the qgroup corresponds to the ID of the subvolume, so 0/5
 is the qgroup for the root subvolume.
@@ -206,64 +206,145 @@ Below are some use cases that do not mean to be extensive. You can find your
 own way how to integrate qgroups.
 .SS Single\-user machine
 .sp
-\fBReplacement for partitions\fP
-.sp
+\fBReplacement for partitions.\fP
 The simplest use case is to use qgroups as simple replacement for partitions.
-Btrfs takes the disk as a whole, and /, /usr, /var, etc. are created as
+Btrfs takes the disk as a whole, and \fB/\fP, \fB/usr\fP, \fB/var\fP, etc. are created as
 subvolumes.  As each subvolume gets it own qgroup automatically, they can
 simply be restricted.  No hierarchy is needed for that.
 .sp
-\fBTrack usage of snapshots\fP
-.sp
+\fBTrack usage of snapshots.\fP
 When a snapshot is taken, a qgroup for it will automatically be created with
-the correct values.  \(aqReferenced\(aq will show how much is in it, possibly shared
-with other subvolumes.  \(aqExclusive\(aq will be the amount of space that gets freed
+the correct values.  \fIReferenced\fP will show how much is in it, possibly shared
+with other subvolumes.  \fIExclusive\fP will be the amount of space that gets freed
 when the subvolume is deleted.
 .SS Multi\-user machine
 .sp
-\fBRestricting homes\fP
-.sp
+\fBRestricting homes.\fP
 When you have several users on a machine, with home directories probably under
-/home, you might want to restrict /home as a whole, while restricting every
+\fB/home\fP, you might want to restrict \fB/home\fP as a whole, while restricting every
 user to an individual limit as well.  This is easily accomplished by creating a
-qgroup for /home , e.g. 1/1, and assigning all user subvolumes to it.
+qgroup for \fB/home\fP , e.g. 1/1, and assigning all user subvolumes to it.
 Restricting this qgroup will limit /home, while every user subvolume can get
 its own (lower) limit.
 .sp
-\fBAccounting snapshots to the user\fP
-.sp
+\fBAccounting snapshots to the user.\fP
 Let\(aqs say the user is allowed to create snapshots via some mechanism.  It would
 only be fair to account space used by the snapshots to the user.  This does not
 mean the user doubles his usage as soon as he takes a snapshot.  Of course,
 files that are present in his home and the snapshot should only be accounted
 once.  This can be accomplished by creating a qgroup for each user, say
-\(aq1/UID\(aq.  The user home and all snapshots are assigned to this qgroup.
+\fI1/UID\fP\&.  The user home and all snapshots are assigned to this qgroup.
 Limiting it will extend the limit to all snapshots, counting files only once.
-To limit /home as a whole, a higher level group 2/1 replacing 1/1 from the
+To limit \fB/home\fP as a whole, a higher level group 2/1 replacing 1/1 from the
 previous example is needed, with all user qgroups assigned to it.
 .sp
-\fBDo not account snapshots\fP
-.sp
+\fBDo not account snapshots.\fP
 On the other hand, when the snapshots get created automatically, the user has
 no chance to control them, so the space used by them should not be accounted to
 him.  This is already the case when creating snapshots in the example from
 the previous section.
 .sp
-\fBSnapshots for backup purposes\fP
-.sp
+\fBSnapshots for backup purposes.\fP
 This scenario is a mixture of the previous two.  The user can create snapshots,
 but some snapshots for backup purposes are being created by the system.  The
 user\(aqs snapshots should be accounted to the user, not the system.  The solution
-is similar to the one from section \(aqAccounting snapshots to the user\(aq, but do
+is similar to the one from section \fIAccounting snapshots to the user\fP, but do
 not assign system snapshots to user\(aqs qgroup.
+.SS Simple quotas (squota)
+.sp
+As detailed in this document, qgroups can handle many complex extent sharing
+and unsharing scenarios while maintaining an accurate count of exclusive and
+shared usage. However, this flexibility comes at a cost: many of the
+computations are global, in the sense that we must count up the number of trees
+referring to an extent after its references change. This can slow down
+transaction commits and lead to unacceptable latencies, especially in cases
+where snapshots scale up.
+.sp
+To work around this limitation of qgroups, btrfs also supports a second set of
+quota semantics: \fIsimple quotas\fP or \fIsquotas\fP\&. Squotas fully share the qgroups API
+and hierarchical model, but do not track shared vs. exclusive usage. Instead,
+they account all extents to the subvolume that first allocated it. With a bit
+of new bookkeeping, this allows all accounting decisions to be local to the
+allocation or freeing operation that deals with the extents themselves, and
+fully avoids the complex and costly back\-reference resolutions.
+.sp
+\fBExample\fP
+.sp
+To illustrate the difference between squotas and qgroups, consider the following
+basic example assuming a nodesize of 16KiB.
+.INDENT 0.0
+.IP 1. 3
+create subvolume 256
+.IP 2. 3
+rack up 1GiB of data and metadata usage in 256
+.IP 3. 3
+snapshot 256, creating subvolume 257
+.IP 4. 3
+COW 512MiB of the data and metadata in 257
+.IP 5. 3
+delete everything in 256
+.UNINDENT
+.sp
+At each step, qgroups would have the following accounting:
+.INDENT 0.0
+.IP 1. 3
+0/256: 16KiB excl 0 shared
+.IP 2. 3
+0/256: 1GiB excl 0 shared
+.IP 3. 3
+0/256: 0 excl 1GiB shared; 0/257: 0 excl 1GiB shared
+.IP 4. 3
+0/256: 512MiB excl 512MiB shared; 0/257: 512MiB excl 512MiB shared
+.IP 5. 3
+0/256: 16KiB excl 0 shared; 0/257: 1GiB excl 0 shared
+.UNINDENT
+.sp
+Whereas under squotas, the accounting would look like:
+.INDENT 0.0
+.IP 1. 3
+0/256: 16KiB excl 16KiB shared
+.IP 2. 3
+0/256: 1GiB excl 1GiB shared
+.IP 3. 3
+0/256: 1GiB excl 1GiB shared; 0/257: 16KiB excl 16KiB shared
+.IP 4. 3
+0/256: 1GiB excl 1GiB shared; 0/257: 512MiB excl 512MiB shared
+.IP 5. 3
+0/256: 512MiB excl 512MiB shared; 0/257: 512MiB excl 512MiB shared
+.UNINDENT
+.sp
+Note that since the original snapshotted 512MiB are still referenced by 257,
+they cannot be freed from 256, even after 256 is emptied, or even deleted.
+.sp
+\fBSummary\fP
+.sp
+If you want some of power and flexibility of quotas for tracking and limiting
+subvolume usage, but want to avoid the performance penalty of accurately
+tracking extent ownership life cycles, then squotas can be a useful option.
+.sp
+Furthermore, squotas is targeted at use cases where the original extent is
+immutable, like image snapshotting for container startup, in which case we avoid
+these awkward scenarios where a subvolume is empty or deleted but still has
+significant extents accounted to it. However, as long as you are aware of the
+accounting semantics, they can handle mutable original extents.
 .SH SUBCOMMAND
 .INDENT 0.0
 .TP
 .B disable <path>
 Disable subvolume quota support for a filesystem.
 .TP
-.B enable <path>
-Enable subvolume quota support for a filesystem.
+.B enable [options] <path>
+Enable subvolume quota support for a filesystem. At this point it\(aqs
+possible the two modes of accounting. The \fIfull\fP means that extent
+ownership by subvolumes will be tracked all the time, \fIsimple\fP will
+account everything to the first owner. See the section for more details.
+.sp
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B \-s|\-\-simple
+use simple quotas (squotas) instead of full qgroup accounting
+.UNINDENT
 .TP
 .B rescan [options] <path>
 Trash all qgroup numbers and scan the metadata again with the current config.

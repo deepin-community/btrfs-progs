@@ -45,7 +45,6 @@
 #include <zstd.h>
 #endif
 #include "kernel-shared/uapi/btrfs.h"
-#include "kernel-shared/ctree.h"
 #include "common/defs.h"
 #include "common/messages.h"
 #include "common/utils.h"
@@ -1185,8 +1184,8 @@ static int decompress_and_write(struct btrfs_receive *rctx,
 		if (ret)
 			goto out;
 		break;
-#if COMPRESSION_ZSTD
 	case BTRFS_ENCODED_IO_COMPRESSION_ZSTD:
+#if COMPRESSION_ZSTD
 		ret = decompress_zstd(rctx, encoded_data, encoded_len,
 				      unencoded_data, unencoded_len);
 		if (ret)

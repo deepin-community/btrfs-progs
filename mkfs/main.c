@@ -33,6 +33,9 @@
 #include "kernel-lib/list_sort.h"
 #include "kernel-lib/rbtree.h"
 #include "kernel-lib/sizes.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/extent_io.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/volumes.h"
@@ -54,10 +57,13 @@
 #include "common/box.h"
 #include "common/units.h"
 #include "common/string-utils.h"
+#include "common/string-table.h"
 #include "cmds/commands.h"
 #include "check/qgroup-verify.h"
 #include "mkfs/common.h"
 #include "mkfs/rootdir.h"
+
+#include "libbtrfs/ctree.h"
 
 struct mkfs_allocation {
 	u64 data;
@@ -235,11 +241,10 @@ err:
 
 static int __recow_root(struct btrfs_trans_handle *trans, struct btrfs_root *root)
 {
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_key key;
 	int ret;
 
-	btrfs_init_path(&path);
 	key.objectid = 0;
 	key.type = 0;
 	key.offset = 0;
@@ -426,7 +431,8 @@ static const char * const mkfs_usage[] = {
 	OPTLINE("-s|--sectorsize SIZE", "data block size (may not be mountable by current kernel)"),
 	OPTLINE("-O|--features LIST", "comma separated list of filesystem features (use '-O list-all' to list features)"),
 	OPTLINE("-L|--label LABEL", "set the filesystem label"),
-	OPTLINE("-U|--uuid UUID", "specify the filesystem UUID (must be unique)"),
+	OPTLINE("-U|--uuid UUID", "specify the filesystem UUID (must be unique for a filesystem with multiple devices)"),
+	OPTLINE("--device-uuid UUID", "Specify the filesystem device UUID (a.k.a sub-uuid) (for single device filesystem only)"),
 	"Creation:",
 	OPTLINE("-b|--byte-count SIZE", "set size of each device to SIZE (filesystem size is sum of all device sizes)"),
 	OPTLINE("-r|--rootdir DIR", "copy files from DIR to the image root directory"),
@@ -481,11 +487,13 @@ static int _cmp_device_by_id(void *priv, struct list_head *a,
 	       list_entry(b, struct btrfs_device, dev_list)->devid;
 }
 
-static void list_all_devices(struct btrfs_root *root)
+static void list_all_devices(struct btrfs_root *root, bool is_zoned)
 {
 	struct btrfs_fs_devices *fs_devices;
 	struct btrfs_device *device;
 	int number_of_devices = 0;
+	struct string_table *tab;
+	int row, col;
 
 	fs_devices = root->fs_info->fs_devices;
 
@@ -496,21 +504,37 @@ static void list_all_devices(struct btrfs_root *root)
 
 	printf("Number of devices:  %d\n", number_of_devices);
 	printf("Devices:\n");
-	printf("   ID        SIZE  PATH\n");
-	list_for_each_entry(device, &fs_devices->devices, dev_list) {
-		printf("  %3llu  %10s  %s\n",
-			device->devid,
-			pretty_size(device->total_bytes),
-			device->name);
-	}
+	if (is_zoned)
+		tab = table_create(4, number_of_devices + 1);
+	else
+		tab = table_create(3, number_of_devices + 1);
+	tab->spacing = STRING_TABLE_SPACING_2;
+	col = 0;
+	table_printf(tab, col++, 0, ">   ID");
+	table_printf(tab, col++, 0, ">      SIZE");
+	if (is_zoned)
+		table_printf(tab, col++, 0, ">ZONES");
+	table_printf(tab, col++, 0, "<PATH");
 
+	row = 1;
+	list_for_each_entry(device, &fs_devices->devices, dev_list) {
+		col = 0;
+		table_printf(tab, col++, row, ">%llu", device->devid);
+		table_printf(tab, col++, row, ">%s", pretty_size(device->total_bytes));
+		if (is_zoned)
+			table_printf(tab, col++, row, ">%u", device->zone_info->nr_zones);
+		table_printf(tab, col++, row, "<%s", device->name);
+		row++;
+	}
+	table_dump(tab);
 	printf("\n");
+	table_free(tab);
 }
 
-static int is_temp_block_group(struct extent_buffer *node,
-			       struct btrfs_block_group_item *bgi,
-			       u64 data_profile, u64 meta_profile,
-			       u64 sys_profile)
+static bool is_temp_block_group(struct extent_buffer *node,
+				struct btrfs_block_group_item *bgi,
+				u64 data_profile, u64 meta_profile,
+				u64 sys_profile)
 {
 	u64 flag = btrfs_block_group_flags(node, bgi);
 	u64 flag_type = flag & BTRFS_BLOCK_GROUP_TYPE_MASK;
@@ -537,26 +561,26 @@ static int is_temp_block_group(struct extent_buffer *node,
 	 * So only use condition 1) and 2) to judge them.
 	 */
 	if (used != 0)
-		return 0;
+		return false;
 	switch (flag_type) {
 	case BTRFS_BLOCK_GROUP_DATA:
 	case BTRFS_BLOCK_GROUP_DATA | BTRFS_BLOCK_GROUP_METADATA:
 		data_profile &= BTRFS_BLOCK_GROUP_PROFILE_MASK;
 		if (flag_profile != data_profile)
-			return 1;
+			return true;
 		break;
 	case BTRFS_BLOCK_GROUP_METADATA:
 		meta_profile &= BTRFS_BLOCK_GROUP_PROFILE_MASK;
 		if (flag_profile != meta_profile)
-			return 1;
+			return true;
 		break;
 	case BTRFS_BLOCK_GROUP_SYSTEM:
 		sys_profile &= BTRFS_BLOCK_GROUP_PROFILE_MASK;
 		if (flag_profile != sys_profile)
-			return 1;
+			return true;
 		break;
 	}
-	return 0;
+	return false;
 }
 
 /* Note: if current is a block group, it will skip it anyway */
@@ -590,10 +614,9 @@ static int cleanup_temp_chunks(struct btrfs_fs_info *fs_info,
 	struct btrfs_root *root = btrfs_block_group_root(fs_info);
 	struct btrfs_key key;
 	struct btrfs_key found_key;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	int ret = 0;
 
-	btrfs_init_path(&path);
 	trans = btrfs_start_transaction(root, 1);
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
@@ -707,7 +730,7 @@ static int create_data_reloc_tree(struct btrfs_trans_handle *trans)
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_inode_item *inode;
 	struct btrfs_root *root;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_key key = {
 		.objectid = BTRFS_DATA_RELOC_TREE_OBJECTID,
 		.type = BTRFS_ROOT_ITEM_KEY,
@@ -749,7 +772,6 @@ static int create_data_reloc_tree(struct btrfs_trans_handle *trans)
 	key.objectid = ino;
 	key.type = BTRFS_INODE_ITEM_KEY;
 	key.offset = 0;
-	btrfs_init_path(&path);
 
 	ret = btrfs_search_slot(trans, root, &key, &path, 0, 1);
 	if (ret > 0) {
@@ -769,6 +791,63 @@ static int create_data_reloc_tree(struct btrfs_trans_handle *trans)
 	return 0;
 out:
 	btrfs_abort_transaction(trans, ret);
+	return ret;
+}
+
+static int btrfs_uuid_tree_add(struct btrfs_trans_handle *trans, u8 *uuid,
+			       u8 type, u64 subvol_id_cpu)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_root *uuid_root = fs_info->uuid_root;
+	int ret;
+	struct btrfs_path *path = NULL;
+	struct btrfs_key key;
+	struct extent_buffer *eb;
+	int slot;
+	unsigned long offset;
+	__le64 subvol_id_le;
+
+	key.type = type;
+	btrfs_uuid_to_key(uuid, &key);
+
+	path = btrfs_alloc_path();
+	if (!path) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = btrfs_insert_empty_item(trans, uuid_root, path, &key, sizeof(subvol_id_le));
+	if (ret < 0 && ret != -EEXIST) {
+		warning(
+		"inserting uuid item failed (0x%016llx, 0x%016llx) type %u: %d",
+			key.objectid, key.offset, type, ret);
+		goto out;
+	}
+
+	if (ret >= 0) {
+		/* Add an item for the type for the first time. */
+		eb = path->nodes[0];
+		slot = path->slots[0];
+		offset = btrfs_item_ptr_offset(eb, slot);
+	} else {
+		/*
+		 * ret == -EEXIST case, an item with that type already exists.
+		 * Extend the item and store the new subvol_id at the end.
+		 */
+		btrfs_extend_item(path, sizeof(subvol_id_le));
+		eb = path->nodes[0];
+		slot = path->slots[0];
+		offset = btrfs_item_ptr_offset(eb, slot);
+		offset += btrfs_item_size(eb, slot) - sizeof(subvol_id_le);
+	}
+
+	ret = 0;
+	subvol_id_le = cpu_to_le64(subvol_id_cpu);
+	write_extent_buffer(eb, &subvol_id_le, offset, sizeof(subvol_id_le));
+	btrfs_mark_buffer_dirty(eb);
+
+out:
+	btrfs_free_path(path);
 	return ret;
 }
 
@@ -852,7 +931,7 @@ static int insert_qgroup_items(struct btrfs_trans_handle *trans,
 			       struct btrfs_fs_info *fs_info,
 			       u64 qgroupid)
 {
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_root *quota_root = fs_info->quota_root;
 	struct btrfs_key key;
 	int ret;
@@ -866,7 +945,6 @@ static int insert_qgroup_items(struct btrfs_trans_handle *trans,
 	key.type = BTRFS_QGROUP_INFO_KEY;
 	key.offset = qgroupid;
 
-	btrfs_init_path(&path);
 	ret = btrfs_insert_empty_item(trans, quota_root, &path, &key,
 				      sizeof(struct btrfs_qgroup_info_item));
 	btrfs_release_path(&path);
@@ -882,15 +960,62 @@ static int insert_qgroup_items(struct btrfs_trans_handle *trans,
 	return ret;
 }
 
+/*
+ * Workaround for squota so the enable_gen can be properly used.
+ */
+static int touch_root_subvol(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_trans_handle *trans;
+	struct btrfs_key key = {
+		.objectid = BTRFS_FIRST_FREE_OBJECTID,
+		.type = BTRFS_INODE_ITEM_KEY,
+		.offset = 0,
+	};
+	struct extent_buffer *leaf;
+	int slot;
+	struct btrfs_path path = { 0 };
+	int ret;
+
+	trans = btrfs_start_transaction(fs_info->fs_root, 1);
+	if (IS_ERR(trans)) {
+		ret = PTR_ERR(trans);
+		errno = -ret;
+		error_msg(ERROR_MSG_START_TRANS, "%m");
+		return ret;
+	}
+	ret = btrfs_search_slot(trans, fs_info->fs_root, &key, &path, 0, 1);
+	if (ret)
+		goto fail;
+	leaf = path.nodes[0];
+	slot = path.slots[0];
+	btrfs_item_key_to_cpu(leaf, &key, slot);
+	btrfs_mark_buffer_dirty(leaf);
+	ret = btrfs_commit_transaction(trans, fs_info->fs_root);
+	if (ret < 0) {
+		errno = -ret;
+		error_msg(ERROR_MSG_COMMIT_TRANS, "%m");
+		return ret;
+	}
+	btrfs_release_path(&path);
+	return 0;
+fail:
+	btrfs_abort_transaction(trans, ret);
+	btrfs_release_path(&path);
+	return ret;
+}
+
 static int setup_quota_root(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_trans_handle *trans;
 	struct btrfs_qgroup_status_item *qsi;
 	struct btrfs_root *quota_root;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_key key;
 	int qgroup_repaired = 0;
+	bool simple = btrfs_fs_incompat(fs_info, SIMPLE_QUOTA);
+	int flags;
 	int ret;
+
 
 	/* One to modify tree root, one for quota root */
 	trans = btrfs_start_transaction(fs_info->tree_root, 2);
@@ -911,7 +1036,6 @@ static int setup_quota_root(struct btrfs_fs_info *fs_info)
 	key.type = BTRFS_QGROUP_STATUS_KEY;
 	key.offset = 0;
 
-	btrfs_init_path(&path);
 	ret = btrfs_insert_empty_item(trans, quota_root, &path, &key,
 				      sizeof(*qsi));
 	if (ret < 0) {
@@ -921,13 +1045,19 @@ static int setup_quota_root(struct btrfs_fs_info *fs_info)
 
 	qsi = btrfs_item_ptr(path.nodes[0], path.slots[0],
 			     struct btrfs_qgroup_status_item);
-	btrfs_set_qgroup_status_generation(path.nodes[0], qsi, 0);
+	btrfs_set_qgroup_status_generation(path.nodes[0], qsi, trans->transid);
 	btrfs_set_qgroup_status_rescan(path.nodes[0], qsi, 0);
+	flags = BTRFS_QGROUP_STATUS_FLAG_ON;
+	if (simple) {
+		btrfs_set_qgroup_status_enable_gen(path.nodes[0], qsi, trans->transid);
+		flags |= BTRFS_QGROUP_STATUS_FLAG_SIMPLE_MODE;
+	}
+	else {
+		flags |= BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT;
+	}
 
-	/* Mark current status info inconsistent, and fix it later */
-	btrfs_set_qgroup_status_flags(path.nodes[0], qsi,
-			BTRFS_QGROUP_STATUS_FLAG_ON |
-			BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT);
+	btrfs_set_qgroup_status_version(path.nodes[0], qsi, 1);
+	btrfs_set_qgroup_status_flags(path.nodes[0], qsi, flags);
 	btrfs_release_path(&path);
 
 	/* Currently mkfs will only create one subvolume */
@@ -942,6 +1072,15 @@ static int setup_quota_root(struct btrfs_fs_info *fs_info)
 		errno = -ret;
 		error_msg(ERROR_MSG_COMMIT_TRANS, "%m");
 		return ret;
+	}
+
+	/* Hack to count the default subvol metadata by dirtying it */
+	if (simple) {
+		ret = touch_root_subvol(fs_info);
+		if (ret) {
+			error("failed to touch root dir for simple quota accounting %d (%m)", ret);
+			goto fail;
+		}
 	}
 
 	/*
@@ -960,6 +1099,36 @@ static int setup_quota_root(struct btrfs_fs_info *fs_info)
 fail:
 	btrfs_abort_transaction(trans, ret);
 	return ret;
+}
+
+static int setup_raid_stripe_tree_root(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_trans_handle *trans;
+	struct btrfs_root *stripe_root;
+	struct btrfs_key key = {
+		.objectid = BTRFS_RAID_STRIPE_TREE_OBJECTID,
+		.type = BTRFS_ROOT_ITEM_KEY,
+	};
+	int ret;
+
+	trans = btrfs_start_transaction(fs_info->tree_root, 0);
+	if (IS_ERR(trans))
+		return PTR_ERR(trans);
+
+	stripe_root = btrfs_create_tree(trans, fs_info, &key);
+	if (IS_ERR(stripe_root))  {
+		ret = PTR_ERR(stripe_root);
+		btrfs_abort_transaction(trans, ret);
+		return ret;
+	}
+	fs_info->stripe_root = stripe_root;
+	add_root_to_dirty_list(stripe_root);
+
+	ret = btrfs_commit_transaction(trans, fs_info->tree_root);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 /* Thread callback for device preparation */
@@ -990,7 +1159,7 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 	struct btrfs_root *root;
 	struct btrfs_fs_info *fs_info;
 	struct btrfs_trans_handle *trans;
-	struct open_ctree_flags ocf = { 0 };
+	struct open_ctree_args oca = { 0 };
 	int ret = 0;
 	int close_ret;
 	int i;
@@ -1011,6 +1180,7 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 	struct btrfs_mkfs_features features = btrfs_mkfs_default_features;
 	enum btrfs_csum_type csum_type = BTRFS_CSUM_TYPE_CRC32;
 	char fs_uuid[BTRFS_UUID_UNPARSED_SIZE] = { 0 };
+	char dev_uuid[BTRFS_UUID_UNPARSED_SIZE] = { 0 };
 	u32 nodesize = 0;
 	bool nodesize_forced = false;
 	u32 sectorsize = 0;
@@ -1037,6 +1207,7 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 			GETOPT_VAL_SHRINK = GETOPT_VAL_FIRST,
 			GETOPT_VAL_CHECKSUM,
 			GETOPT_VAL_GLOBAL_ROOTS,
+			GETOPT_VAL_DEVICE_UUID,
 		};
 		static const struct option long_options[] = {
 			{ "byte-count", required_argument, NULL, 'b' },
@@ -1058,10 +1229,13 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 			{ "features", required_argument, NULL, 'O' },
 			{ "runtime-features", required_argument, NULL, 'R' },
 			{ "uuid", required_argument, NULL, 'U' },
+			{ "device-uuid", required_argument, NULL,
+				GETOPT_VAL_DEVICE_UUID },
 			{ "quiet", 0, NULL, 'q' },
 			{ "verbose", 0, NULL, 'v' },
 			{ "shrink", no_argument, NULL, GETOPT_VAL_SHRINK },
 #if EXPERIMENTAL
+			{ "param", required_argument, NULL, GETOPT_VAL_PARAM },
 			{ "num-global-roots", required_argument, NULL, GETOPT_VAL_GLOBAL_ROOTS },
 #endif
 			{ "help", no_argument, NULL, GETOPT_VAL_HELP },
@@ -1182,6 +1356,9 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 			case 'q':
 				bconf_be_quiet();
 				break;
+			case GETOPT_VAL_DEVICE_UUID:
+				strncpy(dev_uuid, optarg, BTRFS_UUID_UNPARSED_SIZE - 1);
+				break;
 			case GETOPT_VAL_SHRINK:
 				shrink_rootdir = true;
 				break;
@@ -1191,6 +1368,9 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 			case GETOPT_VAL_GLOBAL_ROOTS:
 				btrfs_warn_experimental("Feature: num-global-roots is part of exten-tree-v2");
 				nr_global_roots = (int)arg_strtou64(optarg);
+				break;
+			case GETOPT_VAL_PARAM:
+				bconf_save_param(optarg);
 				break;
 			case GETOPT_VAL_HELP:
 			default:
@@ -1235,8 +1415,24 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 			error("could not parse UUID: %s", fs_uuid);
 			goto error;
 		}
-		if (!test_uuid_unique(fs_uuid)) {
+		/* We allow non-unique fsid for single device btrfs filesystem. */
+		if (device_count != 1 && !test_uuid_unique(fs_uuid)) {
 			error("non-unique UUID: %s", fs_uuid);
+			goto error;
+		}
+	}
+
+	if (*dev_uuid) {
+		uuid_t dummy_uuid;
+
+		if (uuid_parse(dev_uuid, dummy_uuid) != 0) {
+			error("could not parse device UUID: %s", dev_uuid);
+			goto error;
+		}
+		/* We allow non-unique device uuid for single device filesystem. */
+		if (device_count != 1 && !test_uuid_unique(dev_uuid)) {
+			error("the option --device-uuid %s can be used only for a single device filesystem",
+			      dev_uuid);
 			goto error;
 		}
 	}
@@ -1416,8 +1612,16 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 			block_count = device_get_partition_size_fd_stat(fd, &statbuf);
 		source_dir_size = btrfs_mkfs_size_dir(source_dir, sectorsize,
 				min_dev_size, metadata_profile, data_profile);
-		if (block_count < source_dir_size)
-			block_count = source_dir_size;
+		if (block_count < source_dir_size) {
+			if (S_ISREG(statbuf.st_mode)) {
+				block_count = source_dir_size;
+			} else {
+				warning(
+"the target device %llu (%s) is smaller than the calculated source directory size %llu (%s), mkfs may fail",
+					block_count, pretty_size(block_count),
+					source_dir_size, pretty_size(source_dir_size));
+			}
+		}
 		ret = zero_output_file(fd, block_count);
 		if (ret) {
 			error("unable to zero the output file");
@@ -1472,10 +1676,34 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 	if (ret)
 		goto error;
 
-	if (opt_zoned && (!zoned_profile_supported(BTRFS_BLOCK_GROUP_METADATA | metadata_profile) ||
-		      !zoned_profile_supported(BTRFS_BLOCK_GROUP_DATA | data_profile))) {
-		error("zoned mode does not yet support RAID/DUP profiles, please specify '-d single -m single' manually");
-		goto error;
+	if (opt_zoned && device_count) {
+		switch (data_profile & BTRFS_BLOCK_GROUP_PROFILE_MASK) {
+		case BTRFS_BLOCK_GROUP_DUP:
+		case BTRFS_BLOCK_GROUP_RAID1:
+		case BTRFS_BLOCK_GROUP_RAID1C3:
+		case BTRFS_BLOCK_GROUP_RAID1C4:
+		case BTRFS_BLOCK_GROUP_RAID0:
+		case BTRFS_BLOCK_GROUP_RAID10:
+			features.incompat_flags |= BTRFS_FEATURE_INCOMPAT_RAID_STRIPE_TREE;
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (opt_zoned) {
+		u64 metadata = BTRFS_BLOCK_GROUP_METADATA | metadata_profile;
+		u64 data = BTRFS_BLOCK_GROUP_DATA | data_profile;
+		bool rst = false;
+
+		if (features.incompat_flags & BTRFS_FEATURE_INCOMPAT_RAID_STRIPE_TREE)
+			rst = true;
+
+		if (!zoned_profile_supported(metadata, rst) ||
+		    !zoned_profile_supported(data, rst)) {
+			error("zoned mode does not yet support the selected RAID profiles");
+			goto error;
+		}
 	}
 
 	t_prepare = calloc(device_count, sizeof(*t_prepare));
@@ -1550,6 +1778,7 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 
 	mkfs_cfg.label = label;
 	memcpy(mkfs_cfg.fs_uuid, fs_uuid, sizeof(mkfs_cfg.fs_uuid));
+	memcpy(mkfs_cfg.dev_uuid, dev_uuid, sizeof(mkfs_cfg.dev_uuid));
 	mkfs_cfg.num_bytes = dev_block_count;
 	mkfs_cfg.nodesize = nodesize;
 	mkfs_cfg.sectorsize = sectorsize;
@@ -1569,9 +1798,9 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 		goto error;
 	}
 
-	ocf.filename = file;
-	ocf.flags = OPEN_CTREE_WRITES | OPEN_CTREE_TEMPORARY_SUPER;
-	fs_info = open_ctree_fs_info(&ocf);
+	oca.filename = file;
+	oca.flags = OPEN_CTREE_WRITES | OPEN_CTREE_TEMPORARY_SUPER;
+	fs_info = open_ctree_fs_info(&oca);
 	if (!fs_info) {
 		error("open ctree failed");
 		goto error;
@@ -1583,6 +1812,14 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 	if (ret) {
 		error("failed to create default block groups: %d", ret);
 		goto error;
+	}
+
+	if (features.incompat_flags & BTRFS_FEATURE_INCOMPAT_RAID_STRIPE_TREE) {
+		ret = setup_raid_stripe_tree_root(fs_info);
+		if (ret < 0) {
+			error("failed to initialize raid-stripe-tree: %d (%m)", ret);
+			goto out;
+		}
 	}
 
 	trans = btrfs_start_transaction(root, 1);
@@ -1661,6 +1898,9 @@ int BOX_MAIN(mkfs)(int argc, char **argv)
 			printf("adding device %s id %llu\n", file, device->devid);
 		}
 	}
+
+	if (opt_zoned)
+		btrfs_get_dev_zone_info_all_devices(fs_info);
 
 raid_groups:
 	ret = create_raid_groups(trans, root, data_profile,
@@ -1743,7 +1983,8 @@ raid_groups:
 		}
 	}
 
-	if (features.runtime_flags & BTRFS_FEATURE_RUNTIME_QUOTA) {
+	if (features.runtime_flags & BTRFS_FEATURE_RUNTIME_QUOTA ||
+	    features.incompat_flags & BTRFS_FEATURE_INCOMPAT_SIMPLE_QUOTA) {
 		ret = setup_quota_root(fs_info);
 		if (ret < 0) {
 			error("failed to initialize quota: %d (%m)", ret);
@@ -1756,6 +1997,8 @@ raid_groups:
 		update_chunk_allocation(fs_info, &allocation);
 		printf("Label:              %s\n", label);
 		printf("UUID:               %s\n", mkfs_cfg.fs_uuid);
+		if (dev_uuid[0] != 0)
+			printf("Device UUID:        %s\n", mkfs_cfg.dev_uuid);
 		printf("Node size:          %u\n", nodesize);
 		printf("Sector size:        %u\n", sectorsize);
 		printf("Filesystem size:    %s\n",
@@ -1792,7 +2035,7 @@ raid_groups:
 		printf("Checksum:           %s\n",
 		       btrfs_super_csum_name(mkfs_cfg.csum_type));
 
-		list_all_devices(root);
+		list_all_devices(root, opt_zoned);
 
 		if (mkfs_cfg.csum_type == BTRFS_CSUM_TYPE_SHA256) {
 			printf(

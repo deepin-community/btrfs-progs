@@ -21,11 +21,15 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <errno.h>
+#include <unistd.h>
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/volumes.h"
 #include "kernel-shared/extent_io.h"
-#include "common/utils.h"
+#include "kernel-shared/tree-checker.h"
+#include "common/box.h"
 #include "common/extent-cache.h"
 #include "common/help.h"
 #include "common/messages.h"
@@ -199,7 +203,9 @@ int btrfs_find_root_search(struct btrfs_fs_info *fs_info,
 		for (offset = chunk_offset;
 		     offset < chunk_offset + chunk_size;
 		     offset += nodesize) {
-			eb = read_tree_block(fs_info, offset, 0, 0, 0, NULL);
+			struct btrfs_tree_parent_check check = { 0 };
+
+			eb = read_tree_block(fs_info, offset, &check);
 			if (!eb || IS_ERR(eb))
 				continue;
 			ret = add_eb_to_result(eb, result, nodesize, filter,
@@ -329,13 +335,13 @@ static const struct cmd_struct btrfs_find_root_cmd = {
 	"btrfs-find-root", NULL, btrfs_find_root_usage, NULL, 0,
 };
 
-int main(int argc, char **argv)
+int BOX_MAIN(find_root)(int argc, char **argv)
 {
 	struct btrfs_fs_info *fs_info;
 	struct btrfs_find_root_filter filter = {0};
 	struct cache_tree result;
 	struct cache_extent *found;
-	struct open_ctree_flags ocf = { 0 };
+	struct open_ctree_args oca = { 0 };
 	int ret;
 
 	/* Default to search root tree */
@@ -378,9 +384,9 @@ int main(int argc, char **argv)
 	if (check_argc_min(argc - optind, 1))
 		return 1;
 
-	ocf.filename = argv[optind];
-	ocf.flags = OPEN_CTREE_CHUNK_ROOT_ONLY | OPEN_CTREE_IGNORE_CHUNK_TREE_ERROR;
-	fs_info = open_ctree_fs_info(&ocf);
+	oca.filename = argv[optind];
+	oca.flags = OPEN_CTREE_CHUNK_ROOT_ONLY | OPEN_CTREE_IGNORE_CHUNK_TREE_ERROR;
+	fs_info = open_ctree_fs_info(&oca);
 	if (!fs_info) {
 		error("open ctree failed");
 		return 1;

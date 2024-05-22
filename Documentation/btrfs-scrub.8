@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-SCRUB" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-SCRUB" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-scrub \- scrub btrfs filesystem, verify block checksums
 .SH SYNOPSIS
@@ -46,26 +46,77 @@ Scrub is not a filesystem checker (fsck) and does not verify nor repair
 structural damage in the filesystem. It really only checks checksums of data
 and tree blocks, it doesn\(aqt ensure the content of tree blocks is valid and
 consistent. There\(aqs some validation performed when metadata blocks are read
-from disk but it\(aqs not extensive and cannot substitute full \fBbtrfs check\fP
-run.
+from disk (\fI\%Tree checker\fP) but it\(aqs not extensive and cannot substitute
+full \fI\%btrfs\-check(8)\fP run.
 .UNINDENT
 .UNINDENT
 .sp
 The user is supposed to run it manually or via a periodic system service. The
-recommended period is a month but could be less. The estimated device bandwidth
-utilization is about 80% on an idle filesystem. The IO priority class is by
-default \fIidle\fP so background scrub should not significantly interfere with
-normal filesystem operation. The IO scheduler set for the device(s) might not
-support the priority classes though.
+recommended period is a month but it could be less. The estimated device bandwidth
+utilization is about 80% on an idle filesystem.
 .sp
-The scrubbing status is recorded in \fI/var/lib/btrfs/\fP in textual files named
+The scrubbing status is recorded in \fB/var/lib/btrfs/\fP in textual files named
 \fIscrub.status.UUID\fP for a filesystem identified by the given UUID. (Progress
 state is communicated through a named pipe in file \fIscrub.progress.UUID\fP in the
 same directory.) The status file is updated every 5 seconds. A resumed scrub
 will continue from the last saved position.
 .sp
 Scrub can be started only on a mounted filesystem, though it\(aqs possible to
-scrub only a selected device. See \fBbtrfs scrub start\fP for more.
+scrub only a selected device. See \fI\%btrfs scrub start\fP for more.
+.SS Bandwidth and IO limiting
+.sp
+\fBNOTE:\fP
+.INDENT 0.0
+.INDENT 3.5
+The \fBionice(1)\fP may not be generally supported by all IO schedulers and
+the options to \fBbtrfs scrub start\fP may not work as expected.
+.UNINDENT
+.UNINDENT
+.sp
+In the past when the \fI\%CFQ IO scheduler\fP was generally used
+the \fBionice(1)\fP syscalls set the priority to \fIidle\fP so the IO would not
+interfere with regular IO. Since the kernel 5.0 the CFQ is not available.
+.sp
+The IO scheduler known to support that is \fI\%BFQ\fP, but first read the
+documentation before using it!
+.sp
+For other commonly used schedulers like \fI\%mq\-deadline\fP it\(aqs recommended to use
+\fIcgroup2 IO controller\fP which could be managed by e.g. \fIsystemd\fP
+(documented in \fBsystemd.resource\-control\fP). However, starting scrub like that
+is not yet completely straightforward. The IO controller must know the physical
+device of the filesystem and create a slice so all processes started from that
+belong to the same accounting group.
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+$ systemd\-run \-p \(dqIOBandwidthReadMax=/dev/sdx 10M\(dq btrfs scrub start \-B /
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Since linux 5.14 it\(aqs possible to set the per\-device bandwidth limits in a
+BTRFS\-specific way using files \fB/sys/fs/btrfs/FSID/devinfo/DEVID/scrub_speed_max\fP\&.
+This setting is not persistent, lasts until the filesystem is unmounted.
+Currently set limits can be displayed by command \fI\%btrfs scrub
+limit\fP\&.
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+$ echo 100m > /sys/fs/btrfs/9b5fd16e\-1b64\-4f9b\-904a\-74e74c0bbadc/devinfo/1/scrub_speed_max
+$ btrfs scrub limit /
+UUID: 9b5fd16e\-1b64\-4f9b\-904a\-74e74c0bbadc
+Id      Limit      Path
+\-\-  \-\-\-\-\-\-\-\-\-  \-\-\-\-\-\-\-\-
+ 1  100.00MiB  /dev/sdx
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .SH SUBCOMMAND
 .INDENT 0.0
 .TP
@@ -77,6 +128,52 @@ If a \fIdevice\fP is specified, the corresponding filesystem is found and
 \fBbtrfs scrub cancel\fP behaves as if it was called on that filesystem.
 The progress is saved in the status file so \fBbtrfs scrub resume\fP can
 continue from the last position.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B limit [options] <path>
+Show or set scrub limits on devices of the given filesystem.
+.sp
+\fBOptions\fP
+.INDENT 7.0
+.TP
+.B \-d|\-\-devid DEVID
+select the device by DEVID to apply the limit
+.TP
+.B \-l|\-\-limit SIZE
+set the limit of the device to SIZE (size units with suffix),
+or 0 to reset to \fIunlimited\fP
+.TP
+.B \-a|\-\-all
+apply the limit to all devices
+.UNINDENT
+.INDENT 7.0
+.TP
+.B  \-\-raw
+print all numbers raw values in bytes without the \fIB\fP suffix
+.TP
+.B  \-\-human\-readable
+print human friendly numbers, base 1024, this is the default
+.TP
+.B  \-\-iec
+select the 1024 base for the following options, according to
+the IEC standard
+.TP
+.B  \-\-si
+select the 1000 base for the following options, according to the SI standard
+.TP
+.B  \-\-kbytes
+show sizes in KiB, or kB with \-\-si
+.TP
+.B  \-\-mbytes
+show sizes in MiB, or MB with \-\-si
+.TP
+.B  \-\-gbytes
+show sizes in GiB, or GB with \-\-si
+.TP
+.B  \-\-tbytes
+show sizes in TiB, or TB with \-\-si
+.UNINDENT
 .TP
 .B resume [\-BdqrR] <path>|<device>
 Resume a cancelled or interrupted scrub on the filesystem identified by
@@ -88,6 +185,8 @@ This does not start a new scrub if the last scrub finished successfully.
 \fBOptions\fP
 .sp
 see \fBscrub start\fP\&.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B start [\-BdrRf] <path>|<device>
 Start a scrub on all devices of the mounted filesystem identified by
@@ -127,10 +226,11 @@ necessary
 .INDENT 7.0
 .TP
 .BI \-c \ <ioprio_class>
-set IO priority class (see \fBionice(1)\fP manpage) if the IO
+set IO priority class (see \fBionice(1)\fP manual page) if the IO
 scheduler configured for the device supports ionice. This is
-not supported byg BFQ or Kyber but is \fInot\fP supported by
-mq\-deadline.
+only supported by BFQ or Kyber but is \fInot\fP supported by
+mq\-deadline. Please read the section about
+\fI\%IO limiting\fP\&.
 .TP
 .BI \-n \ <ioprio_classdata>
 set IO priority classdata (see \fBionice(1)\fP manpage)
@@ -140,8 +240,6 @@ set IO priority classdata (see \fBionice(1)\fP manpage)
 .UNINDENT
 .TP
 .B status [options] <path>|<device>
-.INDENT 7.0
-.INDENT 3.5
 Show status of a running scrub for the filesystem identified by \fIpath\fP
 or for the specified \fIdevice\fP\&.
 .sp
@@ -149,7 +247,7 @@ If no scrub is running, show statistics of the last finished or
 cancelled scrub for that filesystem or device.
 .sp
 \fBOptions\fP
-.INDENT 0.0
+.INDENT 7.0
 .TP
 .B  \-d
 print separate statistics for each device of the filesystem
@@ -185,7 +283,7 @@ show sizes in TiB, or TB with \-\-si
 .UNINDENT
 .sp
 A status on a filesystem without any error looks like the following:
-.INDENT 0.0
+.INDENT 7.0
 .INDENT 3.5
 .sp
 .nf
@@ -208,7 +306,7 @@ Error summary:    no errors found
 .UNINDENT
 .sp
 With some errors found:
-.INDENT 0.0
+.INDENT 7.0
 .INDENT 3.5
 .sp
 .nf
@@ -219,8 +317,6 @@ Error summary:    csum=72
   Unverified:     0
 .ft P
 .fi
-.UNINDENT
-.UNINDENT
 .UNINDENT
 .UNINDENT
 .INDENT 7.0
@@ -243,6 +339,36 @@ immediately, the next commit will overwrite superblock
 \fIverify\fP \-\- metadata block header errors
 .IP \(bu 2
 \fIread\fP \-\- blocks can\(aqt be read due to IO errors
+.UNINDENT
+.UNINDENT
+.sp
+It\(aqs possible to set a per\-device limit via file
+\fBsysfs/fs/btrfs/FSID/devinfo/scrub_speed_max\fP\&. In that case
+the limit is printed on the \fIRate:\fP line if option \fI\-d\fP is specified,
+or without it on a single\-device filesystem.  Read more about tat in
+section about \fI\%scrub IO limiting\fP\&.
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+Rate:             989.0MiB/s (limit 1.0G/s)
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+On a multi\-device filesystem with at least one device limit the
+overall stats cannot print the limit without \fI\-d\fP so there\(aqs a not that
+some limits are set:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+Rate:             36.37MiB/s (some device limits set)
+.ft P
+.fi
 .UNINDENT
 .UNINDENT
 .UNINDENT

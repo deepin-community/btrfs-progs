@@ -17,6 +17,9 @@
 #include "kerncompat.h"
 #include <errno.h>
 #include <stdio.h>
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/transaction.h"
@@ -25,7 +28,7 @@
 #include "tune/tune.h"
 
 /* After this many block groups we need to commit transaction. */
-#define BLOCK_GROUP_BATCH	64
+#define BLOCK_GROUP_BATCH	16
 
 int convert_to_bg_tree(struct btrfs_fs_info *fs_info)
 {
@@ -68,7 +71,8 @@ int convert_to_bg_tree(struct btrfs_fs_info *fs_info)
 		error_msg(ERROR_MSG_COMMIT_TRANS, "new bg root: %d", ret);
 		goto error;
 	}
-	trans = btrfs_start_transaction(fs_info->tree_root, 2);
+	trans = btrfs_start_transaction(fs_info->tree_root,
+					2 * BLOCK_GROUP_BATCH);
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
 		errno = -ret;
@@ -116,7 +120,8 @@ iterate_bgs:
 				error_msg(ERROR_MSG_COMMIT_TRANS, "%m");
 				return ret;
 			}
-			trans = btrfs_start_transaction(fs_info->tree_root, 2);
+			trans = btrfs_start_transaction(fs_info->tree_root,
+							2 * BLOCK_GROUP_BATCH);
 			if (IS_ERR(trans)) {
 				ret = PTR_ERR(trans);
 				errno = -ret;
@@ -178,7 +183,8 @@ int convert_to_extent_tree(struct btrfs_fs_info *fs_info)
 		error_msg(ERROR_MSG_COMMIT_TRANS, "new extent tree root: %m");
 		goto error;
 	}
-	trans = btrfs_start_transaction(fs_info->tree_root, 2);
+	trans = btrfs_start_transaction(fs_info->tree_root,
+					2 * BLOCK_GROUP_BATCH);
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
 		errno = -ret;
@@ -224,7 +230,8 @@ iterate_bgs:
 				error_msg(ERROR_MSG_COMMIT_TRANS, "%m");
 				return ret;
 			}
-			trans = btrfs_start_transaction(fs_info->tree_root, 2);
+			trans = btrfs_start_transaction(fs_info->tree_root,
+							2 * BLOCK_GROUP_BATCH);
 			if (IS_ERR(trans)) {
 				ret = PTR_ERR(trans);
 				errno = -ret;

@@ -22,12 +22,17 @@
  * do directly operation on extent buffer, which may cause extra searching,
  * but should not be a huge problem since progs is less performance sensitive.
  */
-#include <sys/stat.h>
 
+#include "kerncompat.h"
+#include <sys/stat.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/transaction.h"
 #include "kernel-shared/disk-io.h"
-#include "time.h"
 #include "common/messages.h"
 #include "common/internal.h"
 
@@ -585,7 +590,7 @@ struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_root *tree_root = fs_info->tree_root;
 	struct btrfs_root *new_root = NULL;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_inode_item *inode_item;
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
@@ -600,7 +605,6 @@ struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 	if (len == 0 || len > BTRFS_NAME_LEN)
 		return NULL;
 
-	btrfs_init_path(&path);
 	key.objectid = dirid;
 	key.type = BTRFS_DIR_INDEX_KEY;
 	key.offset = (u64)-1;
@@ -705,7 +709,6 @@ struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
 		new_root = NULL;
 	}
 fail:
-	btrfs_init_path(&path);
 	return new_root;
 }
 
@@ -737,7 +740,6 @@ int btrfs_find_free_objectid(struct btrfs_trans_handle *trans,
 	search_key.offset = 0;
 	search_key.type = 0;
 
-	btrfs_init_path(path);
 	start_found = 0;
 	ret = btrfs_search_slot(trans, root, &search_key, path, 0, 0);
 	if (ret < 0)

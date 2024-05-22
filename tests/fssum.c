@@ -16,6 +16,13 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
+#define _LARGEFILE64_SOURCE
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "kerncompat.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,7 +89,7 @@ char line[65536];
 
 int flags[NUM_FLAGS] = {1, 1, 1, 1, 1, 0, 1, 1, 0, 0};
 
-char *
+static char *
 getln(char *buf, int size, FILE *fp)
 {
 	char *p;
@@ -99,7 +106,7 @@ getln(char *buf, int size, FILE *fp)
 	return p;
 }
 
-void
+static void
 parse_flag(int c)
 {
 	int i;
@@ -119,14 +126,14 @@ parse_flag(int c)
 	exit(-1);
 }
 
-void
+static void
 parse_flags(char *p)
 {
 	while (*p)
 		parse_flag(*p++);
 }
 
-void
+static void
 usage(void)
 {
 	fprintf(stderr, "usage: fssum <options> <path>\n");
@@ -159,7 +166,7 @@ usage(void)
 
 static char buf[65536];
 
-void *
+static void *
 alloc(size_t sz)
 {
 	void *p = malloc(sz);
@@ -172,44 +179,44 @@ alloc(size_t sz)
 	return p;
 }
 
-void
+static void
 sum_init(sum_t *cs)
 {
 	SHA256Reset(&cs->sha);
 }
 
-void
+static void
 sum_fini(sum_t *cs)
 {
 	SHA256Result(&cs->sha, cs->out);
 }
 
-void
-sum_add(sum_t *cs, void *buf, int size)
+static void
+sum_add(sum_t *cs, void *data, int size)
 {
-	SHA256Input(&cs->sha, buf, size);
+	SHA256Input(&cs->sha, data, size);
 }
 
-void
+static void
 sum_add_sum(sum_t *dst, sum_t *src)
 {
 	sum_add(dst, src->out, sizeof(src->out));
 }
 
-void
+static void
 sum_add_u64(sum_t *dst, uint64_t val)
 {
 	uint64_t v = cpu_to_le64(val);
 	sum_add(dst, &v, sizeof(v));
 }
 
-void
+static void
 sum_add_time(sum_t *dst, time_t t)
 {
 	sum_add_u64(dst, t);
 }
 
-char *
+static char *
 sum_to_string(sum_t *dst)
 {
 	int i;
@@ -221,7 +228,7 @@ sum_to_string(sum_t *dst)
 	return s;
 }
 
-int
+static int
 namecmp(const void *aa, const void *bb)
 {
 	char * const *a = aa;
@@ -230,12 +237,12 @@ namecmp(const void *aa, const void *bb)
 	return strcmp(*a, *b);
 }
 
-int
+static int
 sum_xattrs(int fd, sum_t *dst)
 {
 	ssize_t buflen;
 	ssize_t len;
-	char *buf;
+	char *buffer;
 	char *p;
 	char **names = NULL;
 	int num_xattrs = 0;
@@ -249,11 +256,11 @@ sum_xattrs(int fd, sum_t *dst)
 	if (buflen == 0)
 		return 0;
 
-	buf = malloc(buflen);
-	if (!buf)
+	buffer = malloc(buflen);
+	if (!buffer)
 		return -ENOMEM;
 
-	buflen = flistxattr(fd, buf, buflen);
+	buflen = flistxattr(fd, buffer, buflen);
 	if (buflen < 0) {
 		ret = -errno;
 		goto out;
@@ -265,7 +272,7 @@ sum_xattrs(int fd, sum_t *dst)
 	 * on different filesystems.
 	 */
 
-	p = buf;
+	p = buffer;
 	len = buflen;
 	while (len > 0) {
 		int keylen;
@@ -282,7 +289,7 @@ sum_xattrs(int fd, sum_t *dst)
 		goto out;
 	}
 
-	p = buf;
+	p = buffer;
 	for (i = 0; i < num_xattrs; i++) {
 		names[i] = p;
 		p += strlen(p) + 1; /* +1 for NULL terminator */
@@ -315,13 +322,13 @@ sum_xattrs(int fd, sum_t *dst)
 		free(p);
 	}
 out:
-	free(buf);
+	free(buffer);
 	free(names);
 
 	return ret;
 }
 
-int
+static int
 sum_file_data_permissive(int fd, sum_t *dst)
 {
 	int ret;
@@ -337,7 +344,7 @@ sum_file_data_permissive(int fd, sum_t *dst)
 	return 0;
 }
 
-int
+static int
 sum_file_data_strict(int fd, sum_t *dst)
 {
 	int ret;
@@ -365,7 +372,7 @@ sum_file_data_strict(int fd, sum_t *dst)
 	}
 }
 
-char *
+static char *
 escape(char *in)
 {
 	char *out = alloc(strlen(in) * 3 + 1);
@@ -385,19 +392,19 @@ escape(char *in)
 	return out;
 }
 
-void
+static void
 excess_file(const char *fn)
 {
 	printf("only in local fs: %s\n", fn);
 }
 
-void
+static void
 missing_file(const char *fn)
 {
 	printf("only in remote fs: %s\n", fn);
 }
 
-int
+static int
 pathcmp(const char *a, const char *b)
 {
 	int len_a = strlen(a);
@@ -415,7 +422,7 @@ pathcmp(const char *a, const char *b)
 	return strcmp(a, b);
 }
 
-void
+static void
 check_match(char *fn, char *local_m, char *remote_m,
 	    char *local_c, char *remote_c)
 {
@@ -434,7 +441,7 @@ check_match(char *fn, char *local_m, char *remote_m,
 char *prev_fn;
 char *prev_m;
 char *prev_c;
-void
+static void
 check_manifest(char *fn, char *m, char *c, int last_call)
 {
 	char *rem_m;
@@ -505,7 +512,7 @@ malformed:
 		excess_file(fn);
 }
 
-void
+static void
 sum(int dirfd, int level, sum_t *dircs, char *path_prefix, char *path_in)
 {
 	DIR *d;

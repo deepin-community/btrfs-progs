@@ -37,5 +37,7 @@ other factors affecting the memory cells. The device itself could internally
 relocate the data, however this leads to unexpected performance drop. Running
 trim periodically could prevent that too.
 
-When a filesystem is created by :doc:`mkfs.btrfs(8)<mkfs.btrfs>` and is capable
-of trim, then it's by default performed on all devices.
+When a filesystem is created by :doc:`mkfs.btrfs` and is capable
+of trim, then it's by default performed on all devices. Since kernel 6.2 the
+*discard=async* mount option is automatically enabled on devices that support
+that.

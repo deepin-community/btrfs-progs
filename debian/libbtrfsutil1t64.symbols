@@ -1,4 +1,4 @@
-libbtrfsutil.so.1 libbtrfsutil1 #MINVER#
+libbtrfsutil.so.1 libbtrfsutil1t64 #MINVER#
 * Build-Depends-Package: libbtrfsutil-dev
  LIBBTRFSUTIL_1.1@LIBBTRFSUTIL_1.1 5.6
  LIBBTRFSUTIL_1.2@LIBBTRFSUTIL_1.2 5.6

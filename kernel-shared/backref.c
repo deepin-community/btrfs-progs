@@ -17,12 +17,21 @@
  */
 
 #include "kerncompat.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#include <errno.h>
+#include "kernel-lib/list.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/extent_io.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/backref.h"
 #include "kernel-shared/ulist.h"
-#include "kernel-shared/transaction.h"
 #include "kernel-shared/messages.h"
+#include "kernel-shared/tree-checker.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "common/internal.h"
 
 #define pr_debug(...) do { } while (0)
@@ -454,6 +463,7 @@ static int __add_missing_keys(struct btrfs_fs_info *fs_info,
 
 	while (!list_empty(&prefstate->pending_missing_keys)) {
 		struct __prelim_ref *ref;
+		struct btrfs_tree_parent_check check;
 
 		ref = list_first_pref(&prefstate->pending_missing_keys);
 
@@ -461,8 +471,13 @@ static int __add_missing_keys(struct btrfs_fs_info *fs_info,
 		ASSERT(!ref->parent);
 		ASSERT(!ref->key_for_search.type);
 		BUG_ON(!ref->wanted_disk_byte);
-		eb = read_tree_block(fs_info, ref->wanted_disk_byte,
-				     ref->root_id, 0, ref->level - 1, NULL);
+
+		check.owner_root = ref->root_id;
+		check.transid = 0;
+		check.has_first_key = false;
+		check.level = ref->level - 1;
+
+		eb = read_tree_block(fs_info, ref->wanted_disk_byte, &check);
 		if (!extent_buffer_uptodate(eb)) {
 			free_extent_buffer(eb);
 			return -EIO;
@@ -823,9 +838,11 @@ static int find_parent_nodes(struct btrfs_trans_handle *trans,
 			if (extent_item_pos && !ref->inode_list &&
 			    ref->level == 0) {
 				struct extent_buffer *eb;
+				struct btrfs_tree_parent_check check = {
+					.level = ref->level,
+				};
 
-				eb = read_tree_block(fs_info, ref->parent, 0,
-						     0, ref->level, NULL);
+				eb = read_tree_block(fs_info, ref->parent, &check);
 				if (!extent_buffer_uptodate(eb)) {
 					free_extent_buffer(eb);
 					ret = -EIO;

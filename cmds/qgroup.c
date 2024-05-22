@@ -16,6 +16,7 @@
  * Boston, MA 021110-1307, USA.
  */
 
+#include "kerncompat.h"
 #include <sys/ioctl.h>
 #include <getopt.h>
 #include <errno.h>
@@ -25,10 +26,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <unistd.h>
 #include "libbtrfsutil/btrfsutil.h"
 #include "kernel-lib/list.h"
 #include "kernel-lib/rbtree.h"
 #include "kernel-lib/rbtree_types.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
 #include "common/open-utils.h"
@@ -40,6 +44,9 @@
 #include "common/messages.h"
 #include "cmds/commands.h"
 #include "cmds/qgroup.h"
+
+enum btrfs_qgroup_comp_enum;
+enum btrfs_qgroup_filter_enum;
 
 #define BTRFS_QGROUP_NFILTERS_INCREASE (2 * BTRFS_QGROUP_FILTER_MAX)
 #define BTRFS_QGROUP_NCOMPS_INCREASE (2 * BTRFS_QGROUP_COMP_MAX)
@@ -478,6 +485,14 @@ static int comp_entry_with_path(struct btrfs_qgroup *entry1,
 
 	if (ret)
 		goto out;
+
+	if (!p1) {
+		ret = p2 ? 1 : 0;
+		goto out;
+	} else if (!p2) {
+		ret = -1;
+		goto out;
+	}
 
 	while (*p1 && *p2) {
 		if (*p1 != *p2)
@@ -1626,7 +1641,7 @@ static int qgroup_inherit_realloc(struct btrfs_qgroup_inherit **inherit, int n,
 			 (*inherit)->num_excl_copies;
 	}
 
-	out = calloc(sizeof(*out) + sizeof(out->qgroups[0]) * (nitems + n), 1);
+	out = calloc(1, sizeof(*out) + sizeof(out->qgroups[0]) * (nitems + n));
 	if (out == NULL) {
 		error_msg(ERROR_MSG_MEMORY, NULL);
 		return -ENOMEM;

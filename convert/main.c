@@ -82,6 +82,7 @@
 
 #include "kerncompat.h"
 #include <sys/stat.h>
+#include <linux/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -94,6 +95,8 @@
 #include <string.h>
 #include <uuid/uuid.h>
 #include "kernel-lib/sizes.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/extent_io.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
@@ -115,9 +118,10 @@
 #include "common/device-scan.h"
 #include "common/box.h"
 #include "common/open-utils.h"
+#include "common/extent-tree-utils.h"
+#include "common/clear-cache.h"
 #include "cmds/commands.h"
 #include "check/repair.h"
-#include "check/clear-cache.h"
 #include "mkfs/common.h"
 #include "convert/common.h"
 #include "convert/source-fs.h"
@@ -796,7 +800,7 @@ static int create_image(struct btrfs_root *root,
 {
 	struct btrfs_inode_item buf;
 	struct btrfs_trans_handle *trans;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_key key;
 	struct cache_extent *cache;
 	struct cache_tree used_tmp;
@@ -813,7 +817,6 @@ static int create_image(struct btrfs_root *root,
 		return PTR_ERR(trans);
 
 	cache_tree_init(&used_tmp);
-	btrfs_init_path(&path);
 
 	ret = btrfs_find_free_objectid(trans, root, BTRFS_FIRST_FREE_OBJECTID,
 				       &ino);
@@ -1475,7 +1478,7 @@ static int check_convert_image(struct btrfs_root *image_root, u64 ino,
 			       u64 total_size, char *reserved_ranges[])
 {
 	struct btrfs_key key;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_fs_info *fs_info = image_root->fs_info;
 	u64 checked_bytes = 0;
 	int ret;
@@ -1484,7 +1487,6 @@ static int check_convert_image(struct btrfs_root *image_root, u64 ino,
 	key.offset = 0;
 	key.type = BTRFS_EXTENT_DATA_KEY;
 
-	btrfs_init_path(&path);
 	ret = btrfs_search_slot(NULL, image_root, &key, &path, 0, 0);
 	/*
 	 * It's possible that some fs doesn't store any (including sb)
@@ -1640,7 +1642,7 @@ static int do_rollback(const char *devname)
 	struct btrfs_root *image_root;
 	struct btrfs_fs_info *fs_info;
 	struct btrfs_key key;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_dir_item *dir;
 	struct btrfs_inode_item *inode_item;
 	struct btrfs_root_ref *root_ref_item;
@@ -1700,7 +1702,6 @@ static int do_rollback(const char *devname)
 	key.objectid = CONV_IMAGE_SUBVOL_OBJECTID;
 	key.type = BTRFS_ROOT_BACKREF_KEY;
 	key.offset = BTRFS_FS_TREE_OBJECTID;
-	btrfs_init_path(&path);
 	ret = btrfs_search_slot(NULL, fs_info->tree_root, &key, &path, 0, 0);
 	if (ret > 0) {
 		error("unable to find source fs image subvolume, is it deleted?");

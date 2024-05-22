@@ -17,25 +17,25 @@
  */
 
 #include "kerncompat.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <string.h>
 #include <strings.h>
 #include <uuid/uuid.h>
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/print-tree.h"
-#include "kernel-shared/volumes.h"
 #include "kernel-shared/extent_io.h"
+#include "kernel-shared/tree-checker.h"
 #include "common/defs.h"
 #include "common/extent-cache.h"
 #include "common/messages.h"
-#include "common/utils.h"
 #include "common/help.h"
 #include "common/device-scan.h"
 #include "common/string-utils.h"
@@ -52,16 +52,20 @@ static void print_extents(struct extent_buffer *eb)
 		return;
 
 	if (btrfs_is_leaf(eb)) {
-		btrfs_print_leaf(eb, BTRFS_PRINT_TREE_DEFAULT);
+		btrfs_print_leaf(eb);
 		return;
 	}
 
 	nr = btrfs_header_nritems(eb);
 	for (i = 0; i < nr; i++) {
+		struct btrfs_tree_parent_check check = {
+			.owner_root = btrfs_header_owner(eb),
+			.transid = btrfs_node_ptr_generation(eb, i),
+			.level = btrfs_header_level(eb) - 1,
+		};
+
 		next = read_tree_block(fs_info, btrfs_node_blockptr(eb, i),
-				       btrfs_header_owner(eb),
-				       btrfs_node_ptr_generation(eb, i),
-				       btrfs_header_level(eb) - 1, NULL);
+				       &check);
 		if (!extent_buffer_uptodate(next))
 			continue;
 		if (btrfs_is_leaf(next) && btrfs_header_level(eb) != 1) {
@@ -165,11 +169,19 @@ static u64 treeid_from_string(const char *str, const char **end)
 		{ "QUOTA", BTRFS_QUOTA_TREE_OBJECTID },
 		{ "UUID", BTRFS_UUID_TREE_OBJECTID },
 		{ "FREE_SPACE", BTRFS_FREE_SPACE_TREE_OBJECTID },
+		{ "FREE-SPACE", BTRFS_FREE_SPACE_TREE_OBJECTID },
 		{ "TREE_LOG_FIXUP", BTRFS_TREE_LOG_FIXUP_OBJECTID },
+		{ "TREE-LOG-FIXUP", BTRFS_TREE_LOG_FIXUP_OBJECTID },
 		{ "TREE_LOG", BTRFS_TREE_LOG_OBJECTID },
+		{ "TREE-LOG", BTRFS_TREE_LOG_OBJECTID },
 		{ "TREE_RELOC", BTRFS_TREE_RELOC_OBJECTID },
+		{ "TREE-RELOC", BTRFS_TREE_RELOC_OBJECTID },
 		{ "DATA_RELOC", BTRFS_DATA_RELOC_TREE_OBJECTID },
-		{ "BLOCK_GROUP_TREE", BTRFS_BLOCK_GROUP_TREE_OBJECTID },
+		{ "DATA-RELOC", BTRFS_DATA_RELOC_TREE_OBJECTID },
+		{ "BLOCK_GROUP", BTRFS_BLOCK_GROUP_TREE_OBJECTID },
+		{ "BLOCK-GROUP", BTRFS_BLOCK_GROUP_TREE_OBJECTID },
+		{ "RAID_STRIPE", BTRFS_RAID_STRIPE_TREE_OBJECTID },
+		{ "RAID-STRIPE", BTRFS_RAID_STRIPE_TREE_OBJECTID },
 	};
 
 	if (strncasecmp("BTRFS_", str, strlen("BTRFS_")) == 0)
@@ -269,6 +281,7 @@ static int dump_print_tree_blocks(struct btrfs_fs_info *fs_info,
 {
 	struct cache_extent *ce;
 	struct extent_buffer *eb;
+	struct btrfs_tree_parent_check check = { 0 };
 	u64 bytenr;
 	int ret = 0;
 
@@ -289,7 +302,7 @@ static int dump_print_tree_blocks(struct btrfs_fs_info *fs_info,
 			goto next;
 		}
 
-		eb = read_tree_block(fs_info, bytenr, 0, 0, 0, NULL);
+		eb = read_tree_block(fs_info, bytenr, &check);
 		if (!extent_buffer_uptodate(eb)) {
 			error("failed to read tree block %llu", bytenr);
 			ret = -EIO;
@@ -310,14 +323,14 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 {
 	struct btrfs_root *root;
 	struct btrfs_fs_info *info;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	struct btrfs_key key;
 	struct btrfs_root_item ri;
 	struct extent_buffer *leaf;
 	struct btrfs_disk_key disk_key;
 	struct btrfs_key found_key;
 	struct cache_tree block_root;	/* for multiple --block parameters */
-	struct open_ctree_flags ocf = { 0 };
+	struct open_ctree_args oca = { 0 };
 	char uuidbuf[BTRFS_UUID_UNPARSED_SIZE];
 	int ret = 0;
 	int slot;
@@ -327,8 +340,6 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 	bool roots_only = false;
 	bool root_backups = false;
 	int traverse = BTRFS_PRINT_TREE_DEFAULT;
-	int dev_optind;
-	unsigned open_ctree_flags;
 	u64 block_bytenr;
 	struct btrfs_root *tree_root_scan;
 	u64 tree_id = 0;
@@ -346,8 +357,8 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 	 * And we want to avoid tree-checker, which can rejects the target tree
 	 * block completely, while we may be debugging the problem.
 	 */
-	open_ctree_flags = OPEN_CTREE_PARTIAL | OPEN_CTREE_NO_BLOCK_GROUPS |
-			   OPEN_CTREE_SKIP_LEAF_ITEM_CHECKS;
+	oca.flags = OPEN_CTREE_PARTIAL | OPEN_CTREE_NO_BLOCK_GROUPS |
+		    OPEN_CTREE_SKIP_LEAF_ITEM_CHECKS;
 	cache_tree_init(&block_root);
 	optind = 0;
 	while (1) {
@@ -400,7 +411,7 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 			 * If only showing one block, no need to fill roots
 			 * other than chunk root
 			 */
-			open_ctree_flags |= __OPEN_CTREE_RETURN_CHUNK_ROOT;
+			oca.flags |= __OPEN_CTREE_RETURN_CHUNK_ROOT;
 			block_bytenr = arg_strtou64(optarg);
 			ret = dump_add_tree_block(&block_root, block_bytenr);
 			if (ret < 0)
@@ -437,10 +448,10 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 			traverse = BTRFS_PRINT_TREE_BFS;
 			break;
 		case GETOPT_VAL_NOSCAN:
-			open_ctree_flags |= OPEN_CTREE_NO_DEVICES;
+			oca.flags |= OPEN_CTREE_NO_DEVICES;
 			break;
 		case GETOPT_VAL_HIDE_NAMES:
-			open_ctree_flags |= OPEN_CTREE_HIDE_NAMES;
+			oca.flags |= OPEN_CTREE_HIDE_NAMES;
 			break;
 		case GETOPT_VAL_CSUM_HEADERS:
 			csum_mode |= BTRFS_PRINT_TREE_CSUM_HEADERS;
@@ -456,45 +467,14 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 	if (check_argc_min(argc - optind, 1))
 		return 1;
 
-	dev_optind = optind;
-	while (dev_optind < argc) {
-		int fd;
-		struct btrfs_fs_devices *fs_devices;
-		u64 num_devices;
-
-		ret = check_arg_type(argv[optind]);
-		if (ret != BTRFS_ARG_BLKDEV && ret != BTRFS_ARG_REG) {
-			if (ret < 0) {
-				errno = -ret;
-				error("invalid argument %s: %m", argv[dev_optind]);
-			} else {
-				error("not a block device or regular file: %s",
-				       argv[dev_optind]);
-			}
-		}
-		fd = open(argv[dev_optind], O_RDONLY);
-		if (fd < 0) {
-			error("cannot open %s: %m", argv[dev_optind]);
-			return -EINVAL;
-		}
-		ret = btrfs_scan_one_device(fd, argv[dev_optind], &fs_devices,
-					    &num_devices,
-					    BTRFS_SUPER_INFO_OFFSET,
-					    SBREAD_DEFAULT);
-		close(fd);
-		if (ret < 0) {
-			errno = -ret;
-			error("device scan %s: %m", argv[dev_optind]);
-			return ret;
-		}
-		dev_optind++;
-	}
+	ret = btrfs_scan_argv_devices(optind, argc, argv);
+	if (ret)
+		return ret;
 
 	pr_verbose(LOG_DEFAULT, "%s\n", PACKAGE_STRING);
 
-	ocf.filename = argv[optind];
-	ocf.flags = open_ctree_flags;
-	info = open_ctree_fs_info(&ocf);
+	oca.filename = argv[optind];
+	info = open_ctree_fs_info(&oca);
 	if (!info) {
 		error("unable to open %s", argv[optind]);
 		goto out;
@@ -549,7 +529,6 @@ static int cmd_inspect_dump_tree(const struct cmd_struct *cmd,
 	}
 	tree_root_scan = info->tree_root;
 
-	btrfs_init_path(&path);
 again:
 	if (!extent_buffer_uptodate(tree_root_scan->node))
 		goto no_node;
@@ -626,12 +605,14 @@ again:
 		if (found_key.type == BTRFS_ROOT_ITEM_KEY) {
 			unsigned long offset;
 			struct extent_buffer *buf;
+			struct btrfs_tree_parent_check check = {
+				.owner_root = key.objectid,
+			};
 			bool skip = (extent_only || device_only || uuid_tree_only);
 
 			offset = btrfs_item_ptr_offset(leaf, slot);
 			read_extent_buffer(leaf, &ri, offset, sizeof(ri));
-			buf = read_tree_block(info, btrfs_root_bytenr(&ri),
-					      key.objectid, 0, 0, NULL);
+			buf = read_tree_block(info, btrfs_root_bytenr(&ri), &check);
 			if (!extent_buffer_uptodate(buf))
 				goto next;
 			if (tree_id && found_key.objectid != tree_id) {
@@ -728,6 +709,10 @@ again:
 			case BTRFS_BLOCK_GROUP_TREE_OBJECTID:
 				if (!skip)
 					pr_verbose(LOG_DEFAULT, "block group");
+				break;
+			case BTRFS_RAID_STRIPE_TREE_OBJECTID:
+				if (!skip)
+					printf("raid stripe");
 				break;
 			default:
 				if (!skip) {

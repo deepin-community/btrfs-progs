@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-PROPERTY" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-PROPERTY" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-property \- get/set/list properties for given filesystem object
 .SH SYNOPSIS
@@ -114,6 +114,8 @@ empty \fIname\fP will read all of them
 .TP
 .B list [\-t <type>] <object>
 List available properties with their descriptions for the given object.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B set [\-f] [\-t <type>] <object> <name> <value>
 Set \fIvalue\fP of property \fIname\fP on a given btrfs object.

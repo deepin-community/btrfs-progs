@@ -36,7 +36,7 @@
 #include "kernel-lib/list.h"
 #include "kernel-lib/sizes.h"
 #include "kernel-lib/list_sort.h"
-#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-lib/overflow.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/compression.h"
 #include "kernel-shared/volumes.h"
@@ -53,7 +53,6 @@
 #include "common/device-utils.h"
 #include "common/open-utils.h"
 #include "common/parse-utils.h"
-#include "common/string-utils.h"
 #include "common/filesystem-utils.h"
 #include "common/format-output.h"
 #include "cmds/commands.h"
@@ -485,7 +484,7 @@ static void free_fs_devices(struct btrfs_fs_devices *fs_devices)
 		cur_seed = next_seed;
 	}
 
-	list_del(&fs_devices->list);
+	list_del(&fs_devices->fs_list);
 	free(fs_devices);
 }
 
@@ -555,7 +554,7 @@ static int find_and_copy_seed(struct btrfs_fs_devices *seed,
 			      struct list_head *fs_uuids) {
 	struct btrfs_fs_devices *cur_fs;
 
-	list_for_each_entry(cur_fs, fs_uuids, list)
+	list_for_each_entry(cur_fs, fs_uuids, fs_list)
 		if (!memcmp(seed->fsid, cur_fs->fsid, BTRFS_FSID_SIZE))
 			return copy_fs_devices(copy, cur_fs);
 
@@ -591,7 +590,7 @@ static int search_umounted_fs_uuids(struct list_head *all_uuids,
 	 * The fs_uuids list is global, and open_ctree_* will
 	 * modify it, make a private copy here
 	 */
-	list_for_each_entry(cur_fs, fs_uuids, list) {
+	list_for_each_entry(cur_fs, fs_uuids, fs_list) {
 		/* don't bother handle all fs, if search target specified */
 		if (search) {
 			if (uuid_search(cur_fs, search) == 0)
@@ -616,7 +615,7 @@ static int search_umounted_fs_uuids(struct list_head *all_uuids,
 			goto out;
 		}
 
-		list_add(&fs_copy->list, all_uuids);
+		list_add(&fs_copy->fs_list, all_uuids);
 	}
 
 out:
@@ -635,8 +634,8 @@ static int map_seed_devices(struct list_head *all_uuids)
 
 	fs_uuids = btrfs_scanned_uuids();
 
-	list_for_each_entry(cur_fs, all_uuids, list) {
-		struct open_ctree_flags ocf = { 0 };
+	list_for_each_entry(cur_fs, all_uuids, fs_list) {
+		struct open_ctree_args oca = { 0 };
 
 		device = list_first_entry(&cur_fs->devices,
 						struct btrfs_device, dev_list);
@@ -650,9 +649,9 @@ static int map_seed_devices(struct list_head *all_uuids)
 		/*
 		 * open_ctree_* detects seed/sprout mapping
 		 */
-		ocf.filename = device->name;
-		ocf.flags = OPEN_CTREE_PARTIAL;
-		fs_info = open_ctree_fs_info(&ocf);
+		oca.filename = device->name;
+		oca.flags = OPEN_CTREE_PARTIAL;
+		fs_info = open_ctree_fs_info(&oca);
 		if (!fs_info)
 			continue;
 
@@ -837,7 +836,7 @@ devs_only:
 		goto out;
 	}
 
-	list_for_each_entry(fs_devices, &all_uuids, list)
+	list_for_each_entry(fs_devices, &all_uuids, fs_list)
 		print_one_uuid(fs_devices, unit_mode);
 
 	if (search && !found) {
@@ -846,7 +845,7 @@ devs_only:
 	}
 	while (!list_empty(&all_uuids)) {
 		fs_devices = list_entry(all_uuids.next,
-					struct btrfs_fs_devices, list);
+					struct btrfs_fs_devices, fs_list);
 		free_fs_devices(fs_devices);
 	}
 out:
@@ -905,6 +904,7 @@ static const char * const cmd_filesystem_defrag_usage[] = {
 	OPTLINE("-s start", "defragment only from byte onward"),
 	OPTLINE("-l len", "defragment only up to len bytes"),
 	OPTLINE("-t size", "target extent size hint (default: 32M)"),
+	OPTLINE("--step SIZE", "process the range in given steps, flush after each one"),
 	OPTLINE("-v", "deprecated, alias for global -v option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_VERBOSE,
@@ -918,6 +918,48 @@ static const char * const cmd_filesystem_defrag_usage[] = {
 
 static struct btrfs_ioctl_defrag_range_args defrag_global_range;
 static int defrag_global_errors;
+static u64 defrag_global_step;
+
+static int defrag_range_in_steps(int fd, const struct stat *st) {
+	int ret = 0;
+	u64 end;
+	struct btrfs_ioctl_defrag_range_args range;
+
+	if (defrag_global_step == 0)
+		return ioctl(fd, BTRFS_IOC_DEFRAG_RANGE, &defrag_global_range);
+
+	/*
+	 * If start is set but length is not within or beyond the u64 range,
+	 * assume it's the rest of the range.
+	 */
+	if (check_add_overflow(defrag_global_range.start, defrag_global_range.len, &end))
+	    end = (u64)-1;
+
+	range = defrag_global_range;
+	range.flags |= BTRFS_DEFRAG_RANGE_START_IO;
+	while (range.start < end) {
+		u64 start;
+
+		range.len = defrag_global_step;
+		pr_verbose(LOG_VERBOSE, "defrag range step: start=%llu len=%llu step=%llu\n",
+			   range.start, range.len, defrag_global_step);
+		ret = ioctl(fd, BTRFS_IOC_DEFRAG_RANGE, &range);
+		if (ret < 0)
+			return ret;
+		if (check_add_overflow(range.start, defrag_global_step, &start))
+			break;
+		range.start = start;
+		/*
+		 * Avoid -EINVAL when starting the next ioctl, this can still
+		 * happen if the file size changes since the time of stat().
+		 */
+		if (start >= (u64)st->st_size)
+			break;
+	}
+
+	return ret;
+}
+
 static int defrag_callback(const char *fpath, const struct stat *sb,
 		int typeflag, struct FTW *ftwbuf)
 {
@@ -930,7 +972,7 @@ static int defrag_callback(const char *fpath, const struct stat *sb,
 		if (fd < 0) {
 			goto error;
 		}
-		ret = ioctl(fd, BTRFS_IOC_DEFRAG_RANGE, &defrag_global_range);
+		ret = defrag_range_in_steps(fd, sb);
 		close(fd);
 		if (ret && errno == ENOTTY) {
 			error(
@@ -996,7 +1038,14 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 	defrag_global_errors = 0;
 	optind = 0;
 	while(1) {
-		int c = getopt(argc, argv, "vrc::fs:l:t:");
+		enum { GETOPT_VAL_STEP = GETOPT_VAL_FIRST };
+		static const struct option long_options[] = {
+			{ "step", required_argument, NULL, GETOPT_VAL_STEP },
+			{ NULL, 0, NULL, 0 }
+		};
+		int c;
+
+		c = getopt_long(argc, argv, "vrc::fs:l:t:", long_options, NULL);
 		if (c < 0)
 			break;
 
@@ -1032,6 +1081,14 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 			break;
 		case 'r':
 			recursive = true;
+			break;
+		case GETOPT_VAL_STEP:
+			defrag_global_step = parse_size_from_string(optarg);
+			if (defrag_global_step < SZ_256K) {
+				warning("step %llu too small, adjusting to 256KiB\n",
+					   defrag_global_step);
+				defrag_global_step = SZ_256K;
+			}
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -1114,8 +1171,7 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 			ret = 0;
 		} else {
 			pr_verbose(LOG_INFO, "%s\n", argv[i]);
-			ret = ioctl(fd, BTRFS_IOC_DEFRAG_RANGE,
-					&defrag_global_range);
+			ret = defrag_range_in_steps(fd, &st);
 			defrag_err = errno;
 			if (ret && defrag_err == ENOTTY) {
 				error(
@@ -1154,19 +1210,21 @@ static const char * const cmd_filesystem_resize_usage[] = {
 	NULL
 };
 
-static int check_resize_args(const char *amount, const char *path) {
+static int check_resize_args(const char *amount, const char *path, u64 *devid_ret) {
 	struct btrfs_ioctl_fs_info_args fi_args;
 	struct btrfs_ioctl_dev_info_args *di_args = NULL;
 	int ret, i, dev_idx = -1;
 	u64 devid = 1;
+	u64 mindev = (u64)-1;
+	int mindev_idx = 0;
 	const char *res_str = NULL;
 	char *devstr = NULL, *sizestr = NULL;
 	u64 new_size = 0, old_size = 0, diff = 0;
 	int mod = 0;
 	char amount_dup[BTRFS_VOL_NAME_MAX];
 
+	*devid_ret = (u64)-1;
 	ret = get_fs_info(path, &fi_args, &di_args);
-
 	if (ret) {
 		error("unable to retrieve fs info");
 		return 1;
@@ -1182,6 +1240,14 @@ static int check_resize_args(const char *amount, const char *path) {
 	if (strlen(amount) != ret) {
 		error("newsize argument is too long");
 		ret = 1;
+		goto out;
+	}
+	ret = 0;
+
+	/* Cancel does not need to determine the device number. */
+	if (strcmp(amount, "cancel") == 0) {
+		/* Different format, print and exit */
+		pr_verbose(LOG_DEFAULT, "Request to cancel resize\n");
 		goto out;
 	}
 
@@ -1204,24 +1270,40 @@ static int check_resize_args(const char *amount, const char *path) {
 
 	dev_idx = -1;
 	for(i = 0; i < fi_args.num_devices; i++) {
+		if (di_args[i].devid < mindev) {
+			mindev = di_args[i].devid;
+			mindev_idx = i;
+		}
 		if (di_args[i].devid == devid) {
 			dev_idx = i;
 			break;
 		}
 	}
 
-	if (dev_idx < 0) {
+	if (devstr && dev_idx < 0) {
+		/* Devid specified but not found. */
 		error("cannot find devid: %lld", devid);
 		ret = 1;
 		goto out;
+	} else if (!devstr && devid == 1 && dev_idx < 0) {
+		/*
+		 * No device specified, assuming implicit 1 but it doess not
+		 * exist. Use minimum device as fallback.
+		 */
+		warning("no devid specified means devid 1 which does not exist, using\n"
+			"\t lowest devid %llu as a fallback", mindev);
+		*devid_ret = mindev;
+		devid = mindev;
+		dev_idx = mindev_idx;
+	} else {
+		/*
+		 * Use the initial value 1 or the parsed number but don't
+		 * return it by devid_ret as the resize string works as-is.
+		 */
 	}
 
 	if (strcmp(sizestr, "max") == 0) {
 		res_str = "max";
-	} else if (strcmp(sizestr, "cancel") == 0) {
-		/* Different format, print and exit */
-		pr_verbose(LOG_DEFAULT, "Request to cancel resize\n");
-		goto out;
 	} else {
 		if (sizestr[0] == '-') {
 			mod = -1;
@@ -1270,7 +1352,7 @@ static int check_resize_args(const char *amount, const char *path) {
 
 out:
 	free(di_args);
-	return 0;
+	return ret;
 }
 
 static int cmd_filesystem_resize(const struct cmd_struct *cmd,
@@ -1280,6 +1362,7 @@ static int cmd_filesystem_resize(const struct cmd_struct *cmd,
 	int	fd, res, len, e;
 	char	*amount, *path;
 	DIR	*dirstream = NULL;
+	u64 devid;
 	int ret;
 	bool enqueue = false;
 	bool cancel = false;
@@ -1344,14 +1427,21 @@ static int cmd_filesystem_resize(const struct cmd_struct *cmd,
 		}
 	}
 
-	ret = check_resize_args(amount, path);
+	ret = check_resize_args(amount, path, &devid);
 	if (ret != 0) {
 		close_file_or_dir(fd, dirstream);
 		return 1;
 	}
 
 	memset(&args, 0, sizeof(args));
-	strncpy_null(args.name, amount);
+	if (devid == (u64)-1) {
+		/* Ok to copy the string verbatim. */
+		strncpy_null(args.name, amount);
+	} else {
+		/* The implicit devid 1 needs to be adjusted. */
+		snprintf(args.name, sizeof(args.name) - 1, "%llu:%s", devid, amount);
+	}
+	pr_verbose(LOG_VERBOSE, "adjust resize argument to: %s\n", args.name);
 	res = ioctl(fd, BTRFS_IOC_RESIZE, &args);
 	e = errno;
 	close_file_or_dir(fd, dirstream);

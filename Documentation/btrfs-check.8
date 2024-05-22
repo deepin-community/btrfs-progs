@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-CHECK" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-CHECK" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-check \- check or repair a btrfs filesystem
 .SH SYNOPSIS
@@ -38,7 +38,7 @@ btrfs-check \- check or repair a btrfs filesystem
 The filesystem checker is used to verify structural integrity of a filesystem
 and attempt to repair it if requested.  It is recommended to unmount the
 filesystem prior to running the check, but it is possible to start checking a
-mounted filesystem (see \fI\-\-force\fP).
+mounted filesystem (see \fI\%\-\-force\fP).
 .sp
 By default, \fBbtrfs check\fP will not modify the device but you can reaffirm that
 by the option \fI\-\-readonly\fP\&.
@@ -88,6 +88,27 @@ use the given offset \fIbytenr\fP for the chunk tree root
 .TP
 .B \-E|\-\-subvol\-extents <subvolid>
 show extent state for the given subvolume
+.UNINDENT
+.INDENT 0.0
+.TP
+.BI \-\-mode \ <MODE>
+select mode of operation regarding memory and IO
+.sp
+The \fIMODE\fP can be one of:
+.INDENT 7.0
+.TP
+.B original
+The metadata are read into memory and verified, thus the requirements are high
+on large filesystems and can even lead to out\-of\-memory conditions.  The
+possible workaround is to export the block device over network to a machine
+with enough memory.
+.TP
+.B lowmem
+This mode is supposed to address the high memory consumption at the cost of
+increased IO when it needs to re\-read blocks.  This may increase run time.
+.UNINDENT
+.UNINDENT
+.INDENT 0.0
 .TP
 .B \-p|\-\-progress
 indicate progress at various checking phases
@@ -118,11 +139,14 @@ superblock is damaged.
 completely remove the free space cache of the given version
 .sp
 See also the \fIclear_cache\fP mount option.
+.sp
+\fBWARNING:\fP
+.INDENT 7.0
+.INDENT 3.5
+This option is deprecated, please use \fIbtrfs rescue clear\-space\-cache\fP
+instead, this option would be removed in the future eventually.
 .UNINDENT
-.INDENT 0.0
-.TP
-.B  \-\-clear\-ino\-cache
-remove leftover items pertaining to the deprecated inode map feature
+.UNINDENT
 .UNINDENT
 .SH DANGEROUS OPTIONS
 .INDENT 0.0
@@ -158,31 +182,8 @@ build the extent tree from scratch
 Do not use unless you know what you\(aqre doing.
 .UNINDENT
 .UNINDENT
-.TP
-.BI \-\-mode \ <MODE>
-select mode of operation regarding memory and IO
-.sp
-The \fIMODE\fP can be one of:
-.INDENT 7.0
-.TP
-.B original
-The metadata are read into memory and verified, thus the requirements are high
-on large filesystems and can even lead to out\-of\-memory conditions.  The
-possible workaround is to export the block device over network to a machine
-with enough memory.
-.TP
-.B lowmem
-This mode is supposed to address the high memory consumption at the cost of
-increased IO when it needs to re\-read blocks.  This may increase run time.
 .UNINDENT
-.sp
-\fBNOTE:\fP
-.INDENT 7.0
-.INDENT 3.5
-\fIlowmem\fP mode does not work with \fI\-\-repair\fP yet, and is still considered
-experimental.
-.UNINDENT
-.UNINDENT
+.INDENT 0.0
 .TP
 .B  \-\-force
 allow work on a mounted filesystem and skip mount checks. Note that
@@ -201,6 +202,16 @@ is in a quiescent state which may not be possible to guarantee.
 .sp
 This option also skips the delay and warning in the repair mode (see
 \fI\-\-repair\fP).
+.UNINDENT
+.SH DEPRECATED OR MOVED OPTIONS
+.INDENT 0.0
+.TP
+.B  \-\-clear\-ino\-cache
+(removed: 6.7)
+.sp
+remove leftover items pertaining to the deprecated \fIinode cache\fP feature,
+please use \fI\%btrfs rescue clear\-ino\-cache\fP
+instead
 .UNINDENT
 .SH EXIT STATUS
 .sp

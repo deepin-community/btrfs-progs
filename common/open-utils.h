@@ -19,11 +19,13 @@
 
 #include <stddef.h>
 #include <dirent.h>
+#include <stdbool.h>
 
 struct btrfs_fs_devices;
 
 int check_mounted_where(int fd, const char *file, char *where, int size,
-			struct btrfs_fs_devices **fs_dev_ret, unsigned sbflags);
+			struct btrfs_fs_devices **fs_dev_ret, unsigned sbflags,
+			bool noscan);
 int check_mounted(const char* file);
 int get_btrfs_mount(const char *dev, char *mp, size_t mp_size);
 int open_path_or_dev_mnt(const char *path, DIR **dirstream, int verbose);

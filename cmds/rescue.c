@@ -19,19 +19,22 @@
 #include "kerncompat.h"
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
-#include <getopt.h>
 #include <errno.h>
-#include <stdio.h>
+#include <stdbool.h>
+#include <unistd.h>
 #include "kernel-lib/list.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/volumes.h"
 #include "kernel-shared/transaction.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/extent_io.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "common/messages.h"
 #include "common/utils.h"
 #include "common/help.h"
 #include "common/open-utils.h"
+#include "common/clear-cache.h"
 #include "cmds/commands.h"
 #include "cmds/rescue.h"
 
@@ -233,7 +236,7 @@ static int cmd_rescue_fix_device_size(const struct cmd_struct *cmd,
 				      int argc, char **argv)
 {
 	struct btrfs_fs_info *fs_info;
-	struct open_ctree_flags ocf = { 0 };
+	struct open_ctree_args oca = { 0 };
 	char *devname;
 	int ret;
 
@@ -254,9 +257,9 @@ static int cmd_rescue_fix_device_size(const struct cmd_struct *cmd,
 		goto out;
 	}
 
-	ocf.filename = devname;
-	ocf.flags = OPEN_CTREE_WRITES | OPEN_CTREE_PARTIAL;
-	fs_info = open_ctree_fs_info(&ocf);
+	oca.filename = devname;
+	oca.flags = OPEN_CTREE_WRITES | OPEN_CTREE_PARTIAL;
+	fs_info = open_ctree_fs_info(&oca);
 	if (!fs_info) {
 		error("could not open btrfs");
 		ret = -EIO;
@@ -340,7 +343,7 @@ static int clear_uuid_tree(struct btrfs_fs_info *fs_info)
 	if (ret < 0)
 		goto out;
 	list_del(&uuid_root->dirty_list);
-	ret = btrfs_clear_buffer_dirty(uuid_root->node);
+	ret = btrfs_clear_buffer_dirty(trans, uuid_root->node);
 	if (ret < 0)
 		goto out;
 	ret = btrfs_free_tree_block(trans, btrfs_root_id(uuid_root),
@@ -349,7 +352,7 @@ static int clear_uuid_tree(struct btrfs_fs_info *fs_info)
 		goto out;
 	free_extent_buffer(uuid_root->node);
 	free_extent_buffer(uuid_root->commit_root);
-	kfree(uuid_root);
+	free(uuid_root);
 out:
 	if (ret < 0)
 		btrfs_abort_transaction(trans, ret);
@@ -368,7 +371,7 @@ static int cmd_rescue_clear_uuid_tree(const struct cmd_struct *cmd,
 				      int argc, char **argv)
 {
 	struct btrfs_fs_info *fs_info;
-	struct open_ctree_flags ocf = {};
+	struct open_ctree_args oca = { 0 };
 	char *devname;
 	int ret;
 
@@ -387,9 +390,9 @@ static int cmd_rescue_clear_uuid_tree(const struct cmd_struct *cmd,
 		ret = -EBUSY;
 		goto out;
 	}
-	ocf.filename = devname;
-	ocf.flags = OPEN_CTREE_WRITES | OPEN_CTREE_PARTIAL;
-	fs_info = open_ctree_fs_info(&ocf);
+	oca.filename = devname;
+	oca.flags = OPEN_CTREE_WRITES | OPEN_CTREE_PARTIAL;
+	fs_info = open_ctree_fs_info(&oca);
 	if (!fs_info) {
 		error("could not open btrfs");
 		ret = -EIO;
@@ -403,6 +406,117 @@ out:
 }
 static DEFINE_SIMPLE_COMMAND(rescue_clear_uuid_tree, "clear-uuid-tree");
 
+static const char * const cmd_rescue_clear_ino_cache_usage[] = {
+	"btrfs rescue clear-ino-cache <device>",
+	"remove leftover items pertaining to the deprecated inode cache feature",
+	NULL
+};
+
+static int cmd_rescue_clear_ino_cache(const struct cmd_struct *cmd,
+				      int argc, char **argv)
+{
+	struct open_ctree_args oca = { 0 };
+	struct btrfs_fs_info *fs_info;
+	char *devname;
+	int ret;
+
+	clean_args_no_options(cmd, argc, argv);
+
+	if (check_argc_exact(argc, 2))
+		return 1;
+
+	devname = argv[optind];
+	ret = check_mounted(devname);
+	if (ret < 0) {
+		errno = -ret;
+		error("could not check mount status: %m");
+		goto out;
+	} else if (ret) {
+		error("%s is currently mounted", devname);
+		ret = -EBUSY;
+		goto out;
+	}
+	oca.filename = devname;
+	oca.flags = OPEN_CTREE_WRITES;
+	fs_info = open_ctree_fs_info(&oca);
+	if (!fs_info) {
+		error("could not open btrfs");
+		ret = -EIO;
+		goto out;
+	}
+	ret = clear_ino_cache_items(fs_info);
+	if (ret < 0) {
+		errno = -ret;
+		error("failed to clear ino cache: %m");
+	} else {
+		pr_verbose(LOG_DEFAULT, "Successfully cleared ino cache");
+	}
+out:
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(rescue_clear_ino_cache, "clear-ino-cache");
+
+static const char * const cmd_rescue_clear_space_cache_usage[] = {
+	"btrfs rescue clear-space-cache (v1|v2) <device>",
+	"completely remove the v1 or v2 free space cache",
+	NULL
+};
+
+static int cmd_rescue_clear_space_cache(const struct cmd_struct *cmd,
+					int argc, char **argv)
+{
+	struct open_ctree_args oca = { 0 };
+	struct btrfs_fs_info *fs_info;
+	char *devname;
+	char *version_string;
+	int clear_version;
+	int ret;
+
+	clean_args_no_options(cmd, argc, argv);
+
+	if (check_argc_exact(argc, 3))
+		return 1;
+
+	version_string = argv[optind];
+	devname = argv[optind + 1];
+	oca.filename = devname;
+	oca.flags = OPEN_CTREE_WRITES | OPEN_CTREE_EXCLUSIVE;
+
+	if (strncasecmp(version_string, "v1", strlen("v1")) == 0) {
+		clear_version = 1;
+	} else if (strncasecmp(version_string, "v2", strlen("v2")) == 0) {
+		clear_version = 2;
+		oca.flags |= OPEN_CTREE_INVALIDATE_FST;
+	} else {
+		error("invalid version string, has \"%s\" expect \"v1\" or \"v2\"",
+		      version_string);
+		return 1;
+	}
+	ret = check_mounted(devname);
+	if (ret < 0) {
+		errno = -ret;
+		error("could not check mount status: %m");
+		return 1;
+	}
+	if (ret > 0) {
+		error("%s is currently mounted", devname);
+		return 1;
+	}
+	fs_info = open_ctree_fs_info(&oca);
+	if (!fs_info) {
+		error("cannot open file system");
+		return 1;
+	}
+	ret = do_clear_free_space_cache(fs_info, clear_version);
+	close_ctree(fs_info->tree_root);
+	if (ret < 0) {
+		errno = -ret;
+		error("failed to clear free space cache: %m");
+	}
+	return !!ret;
+}
+static DEFINE_SIMPLE_COMMAND(rescue_clear_space_cache, "clear-space-cache");
+
 static const char rescue_cmd_group_info[] =
 "toolbox for specific rescue operations";
 
@@ -413,6 +527,8 @@ static const struct cmd_group rescue_cmd_group = {
 		&cmd_struct_rescue_zero_log,
 		&cmd_struct_rescue_fix_device_size,
 		&cmd_struct_rescue_create_control_device,
+		&cmd_struct_rescue_clear_ino_cache,
+		&cmd_struct_rescue_clear_space_cache,
 		&cmd_struct_rescue_clear_uuid_tree,
 		NULL
 	}

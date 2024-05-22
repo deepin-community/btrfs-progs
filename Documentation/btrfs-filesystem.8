@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS-FILESYSTEM" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS-FILESYSTEM" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs-filesystem \- command group that primarily does work on the whole filesystems
 .SH SYNOPSIS
@@ -129,6 +129,8 @@ show sizes in TiB, or TB with \-\-si
 .UNINDENT
 .sp
 If conflicting options are passed, the last one takes precedence.
+.UNINDENT
+.INDENT 0.0
 .TP
 .B defragment [options] <file>|<dir> [<file>|<dir>...]
 Defragment file data on a mounted filesystem. Requires kernel 2.6.33 and newer.
@@ -207,6 +209,11 @@ logic. Reasonable values are from tens to hundreds of megabytes.
 .UNINDENT
 .INDENT 7.0
 .TP
+.BI \-\-step \ SIZE
+Perform defragmention in the range in SIZE steps and flush (\fI\-f\fP) after each one.
+The range is default (the whole file) or given by \fI\-s\fP and \fI\-l\fP, split into
+the steps or done in one go if the step is larger. Minimum range size is 256KiB.
+.TP
 .B  \-v
 (deprecated) alias for global \fI\-v\fP option
 .UNINDENT
@@ -258,6 +265,8 @@ show sizes in GiB, or GB with \-\-si.
 .B  \-\-tbytes
 show sizes in TiB, or TB with \-\-si.
 .UNINDENT
+.UNINDENT
+.INDENT 0.0
 .TP
 .B label [<device>|<mountpoint>] [<newlabel>]
 Show or update the label of a filesystem. This works on a mounted filesystem or
@@ -306,6 +315,8 @@ suffix).
 specify UUID to use, or a special value: clear (all zeros), random,
 time (time\-based random)
 .UNINDENT
+.UNINDENT
+.INDENT 0.0
 .TP
 .B resize [options] [<devid>:][+/\-]<size>[kKmMgGtTpPeE]|[<devid>:]max <path>
 Resize a mounted filesystem identified by \fIpath\fP\&. A particular device
@@ -368,8 +379,8 @@ about all the BTRFS filesystems is shown, both mounted and unmounted.
 probe kernel for mounted BTRFS filesystems
 .TP
 .B \-d|\-\-all\-devices
-scan all devices under \fI/dev\fP, otherwise the devices list is extracted from the
-\fI/proc/partitions\fP file. This is a fallback option if there\(aqs no device node
+scan all devices under \fB/dev\fP, otherwise the devices list is extracted from the
+\fB/proc/partitions\fP file. This is a fallback option if there\(aqs no device node
 manager (like udev) available in the system.
 .UNINDENT
 .INDENT 7.0
@@ -463,7 +474,7 @@ the \fImin\fP is the lower bound of the estimate in case multiple
 profiles are present
 .IP \(bu 2
 \fIFree (statfs, df)\fP \-\- the amount of space available for data as
-reported by the \fBstatfs\fP syscall, also returned as \fIAvail\fP in the
+reported by the \fBstatfs/statvfs\fP syscall, also returned as \fIAvail\fP in the
 output of \fBdf\fP\&. The value is calculated in a different way and may
 not match the estimate in some cases (e.g.  multiple profiles).
 .IP \(bu 2
@@ -576,7 +587,7 @@ If conflicting options are passed, the last one takes precedence.
 .sp
 \fB$ btrfs filesystem defrag \-v \-r dir/\fP
 .sp
-Recursively defragment files under \fIdir/\fP, print files as they are processed.
+Recursively defragment files under \fBdir/\fP, print files as they are processed.
 The file names will be printed in batches, similarly the amount of data triggered
 by defragmentation will be proportional to last N printed files. The system dirty
 memory throttling will slow down the defragmentation but there can still be a lot
@@ -584,18 +595,18 @@ of IO load and the system may stall for a moment.
 .sp
 \fB$ btrfs filesystem defrag \-v \-r \-f dir/\fP
 .sp
-Recursively defragment files under \fIdir/\fP, be verbose and wait until all blocks
+Recursively defragment files under \fBdir/\fP, be verbose and wait until all blocks
 are flushed before processing next file. You can note slower progress of the
 output and lower IO load (proportional to currently defragmented file).
 .sp
 \fB$ btrfs filesystem defrag \-v \-r \-f \-clzo dir/\fP
 .sp
-Recursively defragment files under \fIdir/\fP, be verbose, wait until all blocks are
+Recursively defragment files under \fBdir/\fP, be verbose, wait until all blocks are
 flushed and force file compression.
 .sp
 \fB$ btrfs filesystem defrag \-v \-r \-t 64M dir/\fP
 .sp
-Recursively defragment files under \fIdir/\fP, be verbose and try to merge extents
+Recursively defragment files under \fBdir/\fP, be verbose and try to merge extents
 to be about 64MiB. As stated above, the success rate depends on actual free
 space fragmentation and the final result is not guaranteed to meet the target
 even if run repeatedly.

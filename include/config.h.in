@@ -12,6 +12,9 @@
 /* Crypto implementation source name */
 #undef CRYPTOPROVIDER
 
+/* Use Botan */
+#undef CRYPTOPROVIDER_BOTAN
+
 /* Use builtin implementation */
 #undef CRYPTOPROVIDER_BUILTIN
 
@@ -23,6 +26,9 @@
 
 /* Use libsodium */
 #undef CRYPTOPROVIDER_LIBSODIUM
+
+/* Use OpenSSL */
+#undef CRYPTOPROVIDER_OPENSSL
 
 /* Define to 1 if you experimental and unstable features are build */
 #undef EXPERIMENTAL
@@ -126,6 +132,10 @@
 /* Define to 1 if the system has the `__builtin_add_overflow' built-in
    function */
 #undef HAVE___BUILTIN_ADD_OVERFLOW
+
+/* Define to 1 if the system has the `__builtin_cpu_supports__pclmul' built-in
+   function */
+#undef HAVE___BUILTIN_CPU_SUPPORTS__PCLMUL
 
 /* Define to 1 if the system has the `__builtin_mul_overflow' built-in
    function */
