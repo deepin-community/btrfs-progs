@@ -20,6 +20,7 @@
 #include <sys/statfs.h>
 #include <linux/fs.h>
 #include <linux/magic.h>
+#include <stdbool.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +32,8 @@
 #include <unistd.h>
 #include "kernel-lib/list.h"
 #include "kernel-lib/sizes.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
@@ -43,6 +46,7 @@
 #include "common/units.h"
 #include "common/string-utils.h"
 #include "common/string-table.h"
+#include "common/sort-utils.h"
 #include "cmds/commands.h"
 
 static const char * const inspect_cmd_group_usage[] = {
@@ -699,18 +703,19 @@ static const char * const cmd_inspect_list_chunks_usage[] = {
 	"Show chunks (block groups) layout for all devices",
 	"",
 	HELPINFO_UNITS_LONG,
-	OPTLINE("--sort MODE", "sort by the physical or logical chunk start MODE is one of pstart or lstart (default: pstart)"),
+	OPTLINE("--sort MODE", "sort by a column ascending (default: pstart),\n"
+			"MODE can be one of:\n"
+			"pstart - physical offset, grouped by device\n"
+			"lstart - logical offset\n"
+			"usage - by chunk usage (implies --usage)\n"
+			"length_p - by chunk length, secondary by physical offset\n"
+			"length_l - by chunk length, secondary by logical offset"
+	       ),
 	OPTLINE("--usage", "show usage per block group (note: this can be slow)"),
 	OPTLINE("--no-usage", "don't show usage per block group"),
 	OPTLINE("--empty", "show empty space between block groups"),
 	OPTLINE("--no-empty", "do not show empty space between block groups"),
 	NULL
-};
-
-enum {
-	CHUNK_SORT_PSTART,
-	CHUNK_SORT_LSTART,
-	CHUNK_SORT_DEFAULT = CHUNK_SORT_PSTART
 };
 
 struct list_chunks_entry {
@@ -719,9 +724,9 @@ struct list_chunks_entry {
 	u64 lstart;
 	u64 length;
 	u64 flags;
-	u64 age;
+	u64 lnumber;
 	u64 used;
-	u32 pnumber;
+	u32 number;
 };
 
 struct list_chunks_ctx {
@@ -745,7 +750,7 @@ static int cmp_cse_devid_start(const void *va, const void *vb)
 	if (a->start == b->start) {
 		error(
 	"chunks start on same offset in the same device: devid %llu start %llu",
-		    (unsigned long long)a->devid, (unsigned long long)a->start);
+		    a->devid, a->start);
 		return 0;
 	}
 	return 1;
@@ -766,13 +771,63 @@ static int cmp_cse_devid_lstart(const void *va, const void *vb)
 	if (a->lstart == b->lstart) {
 		error(
 "chunks logically start on same offset in the same device: devid %llu start %llu",
-		    (unsigned long long)a->devid, (unsigned long long)a->lstart);
+		    a->devid, a->lstart);
 		return 0;
 	}
 	return 1;
 }
 
-static int print_list_chunks(struct list_chunks_ctx *ctx, unsigned sort_mode,
+/* Compare entries by usage percent, descending. */
+static int cmp_cse_devid_usage(const void *va, const void *vb)
+{
+	const struct list_chunks_entry *a = va;
+	const struct list_chunks_entry *b = vb;
+	const float usage_a = (float)a->used / a->length * 100;
+	const float usage_b = (float)b->used / b->length * 100;
+	const float epsilon = 1e-8;
+
+	if (usage_b - usage_a < epsilon)
+		return 1;
+	if (usage_a - usage_b < epsilon)
+		return -1;
+	return 0;
+}
+
+static int cmp_cse_length_physical(const void *va, const void *vb)
+{
+	const struct list_chunks_entry *a = va;
+	const struct list_chunks_entry *b = vb;
+
+	if (a->length < b->length)
+		return -1;
+	if (a->length > b->length)
+		return 1;
+
+	if (a->start < b->start)
+		return -1;
+	if (a->start > b->start)
+		return 1;
+	return 0;
+}
+
+static int cmp_cse_length_logical(const void *va, const void *vb)
+{
+	const struct list_chunks_entry *a = va;
+	const struct list_chunks_entry *b = vb;
+
+	if (a->length < b->length)
+		return -1;
+	if (a->length > b->length)
+		return 1;
+
+	if (a->lstart < b->lstart)
+		return -1;
+	if (a->lstart > b->lstart)
+		return 1;
+	return 0;
+}
+
+static int print_list_chunks(struct list_chunks_ctx *ctx, const char* sortmode,
 			     unsigned unit_mode, bool with_usage, bool with_empty)
 {
 	u64 devid;
@@ -781,9 +836,50 @@ static int print_list_chunks(struct list_chunks_ctx *ctx, unsigned sort_mode,
 	int i;
 	int chidx;
 	u64 lastend;
-	u64 age;
+	u64 number;
 	u32 gaps;
 	u32 tabidx;
+	static const struct sortdef sortit[] = {
+		{ .name = "pstart", .comp = (sort_cmp_t)cmp_cse_devid_start,
+		  .desc = "sort by physical srart offset, group by device" },
+		{ .name = "lstart", .comp = (sort_cmp_t)cmp_cse_devid_lstart,
+		  .desc = "sort by logical offset" },
+		{ .name = "usage", .comp = (sort_cmp_t)cmp_cse_devid_usage,
+		  .desc = "sort by chunk usage" },
+		{ .name = "length_p", .comp = (sort_cmp_t)cmp_cse_length_physical,
+		  .desc = "sort by lentgh, secondary by physical offset" },
+		{ .name = "length_l", .comp = (sort_cmp_t)cmp_cse_length_logical,
+		  .desc = "sort by lentgh, secondary by logical offset" },
+	};
+	enum {
+		CHUNK_SORT_PSTART,
+		CHUNK_SORT_LSTART,
+		CHUNK_SORT_USAGE,
+		CHUNK_SORT_LENGTH_P,
+		CHUNK_SORT_LENGTH_L,
+		CHUNK_SORT_DEFAULT = CHUNK_SORT_PSTART
+	};
+	unsigned int sort_mode;
+	struct compare comp;
+
+	if (!sortmode) {
+		sort_mode = CHUNK_SORT_DEFAULT;
+		sortmode = "pstart";
+	} else if (strcmp(sortmode, "pstart") == 0) {
+		sort_mode = CHUNK_SORT_PSTART;
+	} else if (strcmp(sortmode, "lstart") == 0) {
+		sort_mode = CHUNK_SORT_LSTART;
+	} else if (strcmp(sortmode, "usage") == 0) {
+		sort_mode = CHUNK_SORT_USAGE;
+		with_usage = true;
+	} else if (strcmp(sortmode, "length_p") == 0) {
+		sort_mode = CHUNK_SORT_LENGTH_P;
+	} else if (strcmp(sortmode, "length_l") == 0) {
+		sort_mode = CHUNK_SORT_LENGTH_L;
+	} else {
+		error("unknown sort mode: %s", sortmode);
+		exit(1);
+	}
 
 	/*
 	 * Chunks are sorted logically as found by the ioctl, we need to sort
@@ -791,25 +887,26 @@ static int print_list_chunks(struct list_chunks_ctx *ctx, unsigned sort_mode,
 	 */
 	qsort(ctx->stats, ctx->length, sizeof(ctx->stats[0]), cmp_cse_devid_start);
 	devid = 0;
-	age = 0;
+	number = 0;
 	gaps = 0;
 	lastend = 0;
 	for (i = 0; i < ctx->length; i++) {
 		e = ctx->stats[i];
 		if (e.devid != devid) {
 			devid = e.devid;
-			age = 0;
+			number = 0;
 		}
-		ctx->stats[i].pnumber = age;
-		age++;
+		ctx->stats[i].number = number;
+		number++;
 		if (with_empty && sort_mode == CHUNK_SORT_PSTART && e.start != lastend)
 			gaps++;
 		lastend = e.start + e.length;
 	}
 
-	if (sort_mode == CHUNK_SORT_LSTART)
-		qsort(ctx->stats, ctx->length, sizeof(ctx->stats[0]),
-				cmp_cse_devid_lstart);
+	compare_init(&comp, sortit);
+	compare_add_sort_key(&comp, sortmode);
+	qsort_r(ctx->stats, ctx->length, sizeof(ctx->stats[0]), (sort_r_cmp_t)compare_cmp_multi,
+		&comp);
 
 	/* Optional usage, two rows for header and separator, gaps */
 	table = table_create(7 + (int)with_usage, 2 + ctx->length + gaps);
@@ -827,12 +924,12 @@ static int print_list_chunks(struct list_chunks_ctx *ctx, unsigned sort_mode,
 			int j;
 
 			devid = e.devid;
-			table_printf(table, 0, tabidx, ">PNumber");
-			table_printf(table, 1, tabidx, ">Type");
+			table_printf(table, 0, tabidx, ">Number");
+			table_printf(table, 1, tabidx, ">Type/profile");
 			table_printf(table, 2, tabidx, ">PStart");
 			table_printf(table, 3, tabidx, ">Length");
 			table_printf(table, 4, tabidx, ">PEnd");
-			table_printf(table, 5, tabidx, ">Age");
+			table_printf(table, 5, tabidx, ">LNumber");
 			table_printf(table, 6, tabidx, ">LStart");
 			if (with_usage) {
 				table_printf(table, 7, tabidx, ">Usage%%");
@@ -866,7 +963,7 @@ static int print_list_chunks(struct list_chunks_ctx *ctx, unsigned sort_mode,
 		table_printf(table, 2, tabidx, ">%s", pretty_size_mode(e.start, unit_mode));
 		table_printf(table, 3, tabidx, ">%s", pretty_size_mode(e.length, unit_mode));
 		table_printf(table, 4, tabidx, ">%s", pretty_size_mode(e.start + e.length, unit_mode));
-		table_printf(table, 5, tabidx, ">%llu", e.age);
+		table_printf(table, 5, tabidx, ">%llu", e.lnumber + 1);
 		table_printf(table, 6, tabidx, ">%s", pretty_size_mode(e.lstart, unit_mode));
 		if (with_usage)
 			table_printf(table, 7, tabidx, ">%6.2f",
@@ -924,15 +1021,14 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 	struct btrfs_ioctl_search_key *sk = &args.key;
 	struct btrfs_ioctl_search_header sh;
 	unsigned long off = 0;
-	u64 *age = NULL;
-	unsigned age_size = 128;
+	u64 *lnumber = NULL;
+	unsigned lnumber_size = 128;
 	int ret;
 	int fd;
 	int i;
-	int e;
 	DIR *dirstream = NULL;
 	unsigned unit_mode;
-	unsigned sort_mode = 0;
+	char *sortmode = NULL;
 	bool with_usage = true;
 	bool with_empty = true;
 	const char *path;
@@ -965,14 +1061,8 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 
 		switch (c) {
 		case GETOPT_VAL_SORT:
-			if (strcmp(optarg, "pstart") == 0) {
-				sort_mode = CHUNK_SORT_PSTART;
-			} else if (strcmp(optarg, "lstart") == 0) {
-				sort_mode = CHUNK_SORT_LSTART;
-			} else {
-				error("unknown sort mode: %s", optarg);
-				exit(1);
-			}
+			free(sortmode);
+			sortmode = strdup(optarg);
 			break;
 		case GETOPT_VAL_USAGE:
 		case GETOPT_VAL_NO_USAGE:
@@ -1013,8 +1103,8 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 	sk->max_type = BTRFS_CHUNK_ITEM_KEY;
 	sk->max_offset = (u64)-1;
 	sk->max_transid = (u64)-1;
-	age = calloc(age_size, sizeof(u64));
-	if (!age) {
+	lnumber = calloc(lnumber_size, sizeof(u64));
+	if (!lnumber) {
 		ret = 1;
 		error_msg(ERROR_MSG_MEMORY, NULL);
 		goto out_nomem;
@@ -1023,9 +1113,8 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 	while (1) {
 		sk->nr_items = 1;
 		ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
-		e = errno;
 		if (ret < 0) {
-			error("cannot perform the search: %s", strerror(e));
+			error("cannot perform the search: %m");
 			return 1;
 		}
 		if (sk->nr_items == 0)
@@ -1055,22 +1144,22 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 				e->lstart = sh.offset;
 				e->length = item->length;
 				e->flags = item->type;
-				e->pnumber = -1;
-				while (devid > age_size) {
+				e->number = -1;
+				while (devid > lnumber_size) {
 					u64 *tmp;
-					unsigned old_size = age_size;
+					unsigned old_size = lnumber_size;
 
-					age_size += 128;
-					tmp = calloc(age_size, sizeof(u64));
+					lnumber_size += 128;
+					tmp = calloc(lnumber_size, sizeof(u64));
 					if (!tmp) {
 						ret = 1;
 						error_msg(ERROR_MSG_MEMORY, NULL);
 						goto out_nomem;
 					}
-					memcpy(tmp, age, sizeof(u64) * old_size);
-					age = tmp;
+					memcpy(tmp, lnumber, sizeof(u64) * old_size);
+					lnumber = tmp;
 				}
-				e->age = age[devid]++;
+				e->lnumber = lnumber[devid]++;
 				if (with_usage) {
 					if (used == (u64)-1)
 						used = fill_usage(fd, sh.offset);
@@ -1103,12 +1192,12 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 			break;
 	}
 
-	ret = print_list_chunks(&ctx, sort_mode, unit_mode, with_usage, with_empty);
+	ret = print_list_chunks(&ctx, sortmode, unit_mode, with_usage, with_empty);
 	close_file_or_dir(fd, dirstream);
 
 out_nomem:
 	free(ctx.stats);
-	free(age);
+	free(lnumber);
 
 	return !!ret;
 }
@@ -1345,7 +1434,7 @@ static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
 				chunk = find_chunk(chunks, num_chunks, logical_offset);
 				if (!chunk) {
 					error("cannot find chunk containing %llu",
-						(unsigned long long)logical_offset);
+						logical_offset);
 					return -ENOENT;
 				}
 			} else {
@@ -1381,7 +1470,7 @@ static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
 		/* Only single profile */
 		if ((chunk->type & BTRFS_BLOCK_GROUP_PROFILE_MASK) != 0) {
 			error("unsupported block group profile: %llu",
-				(unsigned long long)(chunk->type & BTRFS_BLOCK_GROUP_PROFILE_MASK));
+				chunk->type & BTRFS_BLOCK_GROUP_PROFILE_MASK);
 			ret = -EINVAL;
 			goto out;
 		}

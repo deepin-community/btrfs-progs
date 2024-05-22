@@ -23,7 +23,6 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -39,6 +38,8 @@
 #endif
 #include "kernel-lib/overflow.h"
 #include "kernel-lib/list.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/volumes.h"
@@ -257,7 +258,7 @@ int btrfs_register_all_devices(void)
 
 	all_uuids = btrfs_scanned_uuids();
 
-	list_for_each_entry(fs_devices, all_uuids, list) {
+	list_for_each_entry(fs_devices, all_uuids, fs_list) {
 		list_for_each_entry(device, &fs_devices->devices, dev_list) {
 			if (*device->name)
 				err = btrfs_register_one_device(device->name);
@@ -500,3 +501,42 @@ int btrfs_scan_devices(int verbose)
 	return 0;
 }
 
+int btrfs_scan_argv_devices(int dev_optind, int dev_argc, char **dev_argv)
+{
+	int ret;
+
+	while (dev_optind < dev_argc) {
+		int fd;
+		u64 num_devices;
+		struct btrfs_fs_devices *fs_devices;
+
+		ret = check_arg_type(dev_argv[dev_optind]);
+		if (ret != BTRFS_ARG_BLKDEV && ret != BTRFS_ARG_REG) {
+			if (ret < 0) {
+				errno = -ret;
+				error("invalid argument %s: %m", dev_argv[dev_optind]);
+			} else {
+				error("not a block device or regular file: %s",
+				       dev_argv[dev_optind]);
+			}
+		}
+		fd = open(dev_argv[dev_optind], O_RDONLY);
+		if (fd < 0) {
+			error("cannot open %s: %m", dev_argv[dev_optind]);
+			return -errno;
+		}
+		ret = btrfs_scan_one_device(fd, dev_argv[dev_optind], &fs_devices,
+					    &num_devices,
+					    BTRFS_SUPER_INFO_OFFSET,
+					    SBREAD_DEFAULT);
+		close(fd);
+		if (ret < 0) {
+			errno = -ret;
+			error("device scan of %s failed: %m", dev_argv[dev_optind]);
+			return ret;
+		}
+		dev_optind++;
+	}
+
+	return 0;
+}

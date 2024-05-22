@@ -13,7 +13,7 @@ in meeting your performance expectations for your specific workload.
 Combination of features can vary in performance, the table does not
 cover all possibilities.
 
-**The table is based on the latest released linux kernel: 6.3**
+**The table is based on the latest released linux kernel: 6.6**
 
 The columns for each feature reflect the status of the implementation
 in following ways:
@@ -32,7 +32,9 @@ in following ways:
 
 .. role:: statusok
 .. role:: statusmok
-.. role:: statusunst
+.. role:: statusunstable
+.. role:: statusunsupp
+.. role:: statusincompat
 
 .. list-table::
    :header-rows: 1
@@ -41,26 +43,34 @@ in following ways:
      - Stability
      - Performance
      - Notes
-   * - :doc:`discard (synchronous)<Trim>`
+   * - :doc:`Subvolumes, snapshots<Subvolumes>`
      - :statusok:`OK`
+     - OK
      -
-     - mounted with `-o discard` (has performance implications), also see `fstrim`
-   * - :doc:`discard (asynchronous)<Trim>`
-     - :statusok:`OK`
-     -
-     - mounted with `-o discard=async` (improved performance)
-   * - Autodefrag
-     - :statusok:`OK`
-     -
-     -
-   * - :doc:`Defrag<Defragmentation>`
-     - :statusmok:`mostly OK`
-     -
-     - extents get unshared (see below)
    * - :doc:`Compression<Compression>`
      - :statusok:`OK`
      -
      -
+   * - :doc:`Checksumming algorithms<Checksumming>`
+     - :statusok:`OK`
+     - OK
+     -
+   * - :doc:`Defragmentation<Defragmentation>`
+     - :statusmok:`mostly OK`
+     -
+     - extents get unshared (see below)
+   * - :ref:`Autodefrag<mount-option-autodefrag>`
+     - :statusok:`OK`
+     -
+     -
+   * - :doc:`Discard (synchronous)<Trim>`
+     - :statusok:`OK`
+     -
+     - mounted with `-o discard` (has performance implications), also see `fstrim`
+   * - :doc:`Discard (asynchronous)<Trim>`
+     - :statusok:`OK`
+     -
+     - mounted with `-o discard=async` (improved performance)
    * - :doc:`Out-of-band dedupe<Deduplication>`
      - :statusok:`OK`
      - :statusmok:`mostly OK`
@@ -69,10 +79,14 @@ in following ways:
      - :statusok:`OK`
      - :statusmok:`mostly OK`
      - (reflink), heavily referenced extents have a noticeable performance hit (see below)
-   * - :doc:`More checksumming algorithms<Checksumming>`
+   * - :doc:`Filesystem resize<Resize>`
      - :statusok:`OK`
      - OK
-     -
+     - shrink, grow
+   * - :doc:`Device replace<Volume-management>`
+     - :statusmok:`mostly OK`
+     - mostly OK
+     - (see below)
    * - :doc:`Auto-repair<Auto-repair>`
      - :statusok:`OK`
      - OK
@@ -85,18 +99,74 @@ in following ways:
      - :statusmok:`mostly OK`
      - mostly OK
      -
+   * - :ref:`Degraded mount<mount-option-degraded>`
+     - :statusok:`OK`
+     - n/a
+     -
+   * - :doc:`Balance<Balance>`
+     - :statusok:`OK`
+     - OK
+     - balance + qgroups can be slow when there are many snapshots
+   * - :doc:`Send<Send-receive>`
+     - :statusok:`OK`
+     - OK
+     -
+   * - :doc:`Receive<Send-receive>`
+     - :statusok:`OK`
+     - OK
+     -
+   * - Offline UUID change
+     - :statusok:`OK`
+     - OK
+     -
+   * - Metadata UUID change
+     - :statusok:`OK`
+     - OK
+     -
+   * - Temporary UUID
+     - 6.7
+     - 6.7
+     -
+   * - :doc:`Seeding<Seeding-device>`
+     - :statusok:`OK`
+     - OK
+     -
+   * - :doc:`Quotas, qgroups<Qgroups>`
+     - :statusmok:`mostly OK`
+     - mostly OK
+     - qgroups with many snapshots slows down balance
+   * - :doc:`Quotas, simple qgroups<Qgroups>`
+     - 6.7
+     - 6.7
+     - simplified qgroup accounting, better performance
+   * - :doc:`Swapfile<Swapfile>`
+     - :statusok:`OK`
+     - n/a
+     - with some limitations
    * - nodatacow
      - :statusok:`OK`
      - OK
      -
-   * - :doc:`Device replace<Volume-management>`
+   * - :doc:`Subpage block size<Subpage>`
      - :statusmok:`mostly OK`
      - mostly OK
-     - (see below)
-   * - Degraded mount
-     - :statusok:`OK`
-     - n/a
-     -
+     - Also see table below for more detailed compatibility.
+   * - :doc:`Zoned mode<Zoned-mode>`
+     - :statusmok:`mostly OK`
+     - mostly OK
+     - Not yet feature complete but moderately stable, also see table below
+       for more detailed compatibility.
+
+Block group profiles
+^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feature
+     - Stability
+     - Performance
+     - Notes
    * - :ref:`Single (block group profile)<mkfs-section-profiles>`
      - :statusok:`OK`
      - OK
@@ -126,53 +196,66 @@ in following ways:
      - mostly OK
      - reading from mirrors in parallel can be optimized further (see below)
    * - :ref:`RAID56<mkfs-section-profiles>`
-     - :statusunst:`unstable`
+     - :statusunstable:`unstable`
      - n/a
      - (see below)
-   * - Mixed block groups
+   * - :ref:`Mixed block groups<mkfs-feature-mixed-bg>`
      - :statusok:`OK`
      - OK
      -
-   * - :doc:`Filesystem resize<Resize>`
-     - :statusok:`OK`
-     - OK
-     - shrink, grow
-   * - :doc:`Balance<Balance>`
-     - :statusok:`OK`
-     - OK
-     - balance + qgroups can be slow when there are many snapshots
-   * - Offline UUID change
-     - :statusok:`OK`
-     - OK
-     -
-   * - Metadata UUID change
-     - :statusok:`OK`
-     - OK
-     -
-   * - :doc:`Subvolumes, snapshots<Subvolumes>`
-     - :statusok:`OK`
-     - OK
-     -
-   * - :doc:`Send<Send-receive>`
+
+
+On-disk format
+^^^^^^^^^^^^^^
+
+Features that are typically set at *mkfs* time (sometimes can be changed or
+converted later).
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feature
+     - Stability
+     - Performance
+     - Notes
+   * - :ref:`extended-refs<mkfs-feature-extended-refs>`
      - :statusok:`OK`
      - OK
      -
-   * - :doc:`Receive<Send-receive>`
+   * - :ref:`skinny-metadata<mkfs-feature-skinny-metadata>`
      - :statusok:`OK`
      - OK
      -
-   * - :doc:`Seeding<Seeding-device>`
+   * - :ref:`no-holes<mkfs-feature-no-holes>`
      - :statusok:`OK`
      - OK
      -
-   * - :doc:`Quotas, qgroups<Qgroups>`
-     - :statusmok:`mostly OK`
-     - mostly OK
-     - qgroups with many snapshots slows down balance
-   * - :doc:`Swapfile<Swapfile>`
+   * - :ref:`Free space tree<mkfs-feature-free-space-tree>`
      - :statusok:`OK`
-     - n/a
-     - with some limitations
+     - OK
+     -
+   * - :ref:`Block group tree<mkfs-feature-block-group-tree>`
+     - :statusok:`OK`
+     - OK
+     -
+   * - :ref:`Raid stripe tree<mkfs-feature-raid-stripe-tree>`
+     - :statusok:`OK`
+     - OK
+     -
+
+Interoperability
+^^^^^^^^^^^^^^^^
+
+Integration with other Linux features or external systems.
+:doc:`See also<Interoperability>`.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feature
+     - Stability
+     - Performance
+     - Notes
    * - :ref:`NFS<interop-nfs>`
      - :statusok:`OK`
      - OK
@@ -181,10 +264,6 @@ in following ways:
      - :statusok:`OK`
      - OK
      - IO controller
-   * - :ref:`Samba<interop-samba>`
-     - :statusok:`OK`
-     - OK
-     - compression, server-side copies, snapshots
    * - :ref:`io_uring<interop-io-uring>`
      - :statusok:`OK`
      - OK
@@ -197,34 +276,10 @@ in following ways:
      - :statusok:`OK`
      - OK
      -
-   * - :ref:`Free space tree<mkfs-feature-free-space-tree>`
-     - :statusok:`OK`
-     -
-     -
-   * - Block group tree
-     - :statusok:`OK`
-     -
-     -
-   * - :ref:`no-holes<mkfs-feature-no-holes>`
+   * - :ref:`Samba<interop-samba>`
      - :statusok:`OK`
      - OK
-     -
-   * - :ref:`skinny-metadata<mkfs-feature-skinny-metadata>`
-     - :statusok:`OK`
-     - OK
-     -
-   * - :ref:`extended-refs<mkfs-feature-extended-refs>`
-     - :statusok:`OK`
-     - OK
-     -
-   * - :doc:`Subpage block size<Subpage>`
-     - :statusmok:`mostly OK`
-     - mostly OK
-     -
-   * - :doc:`Zoned mode<Zoned-mode>`
-     - :statusmok:`mostly OK`
-     - mostly OK
-     - there are known bugs, use only for testing
+     - compression, server-side copies, snapshots
 
 Please open an issue if:
 
@@ -232,6 +287,8 @@ Please open an issue if:
 -  a particular feature combination that has a different status and is
    worth mentioning separately
 -  you know of a bug that lowers the feature status
+
+.. _status-subpage-block-size:
 
 Subpage block size
 ------------------
@@ -247,18 +304,26 @@ with subpage or require another feature to work:
      - Status
      - Notes
    * - Inline files
-     - unsupported
-     - The max_inline mount option value is ignored
+     - :statusunsupp:`unsupported`
+     - The max_inline mount option value is ignored, as if mounted with max_inline=0
    * - Free space cache v1
-     - unsupported
-     - Free space tree is mandatory
+     - :statusunsupp:`unsupported`
+     - Free space tree is mandatory, v1 makes some assumptions about page size
    * - Compression
-     - partial support
+     - :statusok:`partial support`
      - Only page-aligned ranges can be compressed
+   * - Sectorsize
+     - :statusok:`supported`
+     - The list of supported sector sizes on a given version can be found
+       in file :file:`/sys/fs/btrfs/features/supported_sectorsizes`
 
 
 Zoned mode
 ----------
+
+Features that completely incompatible with zoned mode are listed below.
+Compatible features may not be listed and are assumed to work as they
+are unaffected by the zoned device constraints.
 
 .. list-table::
    :header-rows: 1
@@ -267,46 +332,70 @@ Zoned mode
      - Status
      - Notes
    * - Boot
-     - incompatible
-     - The blocks where partition table is stored is used for super block
+     - :statusincompat:`incompatible`
+     - The blocks where partition table is stored are used for super block
    * - Mixed block groups
-     - incompatible
+     - :statusincompat:`incompatible`
      - Interleaving data and metadata would lead to out of order write
    * - NODATACOW
-     - incompatible
+     - :statusincompat:`incompatible`
      - In-place overwrite
    * - fallocate
-     - incompatible
+     - :statusincompat:`incompatible`
      - Preallocation of blocks would require an out of order write
    * - Free space cache v1
-     - incompatible
+     - :statusincompat:`incompatible`
      - Cache data are updated in a NODATACOW-way
+   * - Swapfile
+     - :statusincompat:`incompatible`
+     - Swap blocks are written out of order
+   * - Offline UUID change
+     - :statusincompat:`incompatible`
+     - Metadata blocks are updated in-place
    * - Free space tree
-     - supported
+     - :statusok:`supported`
      -
-   * - fstrim
+   * - Block group tree
+     - :statusok:`supported`
+     -
+   * - Raid stripe tree
+     - :statusok:`supported`
+     - Allows to use RAID in zoned mode
+   * - Filesystem resize
+     - :statusok:`supported`
+     -
+   * - Balance
+     - :statusok:`supported`
+     -
+   * - Metadata UUID change
+     - :statusok:`supported`
+     -
+   * - RAID0, RAID1*
+     - :statusok:`supported`
+     - requires `raid-stripe-tree`
+   * - RAID56
      - not implemented
-     - This would require free space v1
-   * - single profile
-     - supported
-     - Both data and metadata
-   * - DUP profile
-     - partial support
-     - Only for metadata
-   * - RAID (all)
+     - will be supported once raid-stripe-tree support is implemented
+   * - discard
      - not implemented
-     - This requires raid-stripe-tree feature which is still work in progress
+     - May not be required at all due to automatic zone reclaim
+   * - fsverity
+     - TBD
+     -
+   * - seeding
+     - TBD
+     -
 
 
 Details that do not fit the table
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------------
 
 Defrag
 ^^^^^^
 
 The data affected by the defragmentation process will be newly written
 and will consume new space, the links to the original extents will not
-be kept. See also :doc:`btrfs-filesystem<btrfs-filesystem>` . Though
+be kept. See also :doc:`btrfs-filesystem` . Though
 autodefrag affects newly written data, it can read a few adjacent blocks
 (up to 64KiB) and write the contiguous extent to a new location. The
 adjacent blocks will be unshared. This happens on a smaller scale than

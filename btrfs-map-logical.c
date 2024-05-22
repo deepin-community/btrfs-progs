@@ -25,14 +25,17 @@
 #include <errno.h>
 #include <string.h>
 #include "kernel-lib/sizes.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/extent_io.h"
 #include "kernel-shared/volumes.h"
 #include "kernel-shared/disk-io.h"
 #include "common/internal.h"
-#include "common/utils.h"
+#include "common/messages.h"
 #include "common/help.h"
 #include "common/extent-cache.h"
+#include "common/extent-tree-utils.h"
 #include "common/string-utils.h"
 #include "cmds/commands.h"
 
@@ -201,7 +204,7 @@ static int write_extent_content(struct btrfs_fs_info *fs_info, int out_fd,
 
 static const char * const map_logical_usage[] = {
 	"btrfs-map-logical [options] device",
-	"Map logical addres on a device",
+	"Map logical address on a device",
 	"",
 	OPTLINE("-l OFFSET", "logical extent to map"),
 	OPTLINE("-c COPY", "copy of the extent to read (usually 1 or 2)"),

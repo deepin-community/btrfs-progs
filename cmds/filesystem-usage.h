@@ -20,7 +20,8 @@
 #define __CMDS_FI_USAGE_H__
 
 #include "kerncompat.h"
-#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/volumes.h"
+#include "common/array.h"
 
 struct device_info {
 	u64	devid;
@@ -44,12 +45,10 @@ struct chunk_info {
 	u64	num_stripes;
 };
 
-int load_chunk_and_device_info(int fd, struct chunk_info **chunkinfo_ret,
-		int *chunkcount_ret, struct device_info **devinfo_ret,
-		int *devcount_ret);
-void print_device_chunks(struct device_info *devinfo,
-		struct chunk_info *chunk_info, int chunkcount, unsigned unit_mode);
-void print_device_sizes(struct device_info *devinfo, unsigned unit_mode);
+int load_chunk_and_device_info(int fd, struct array *chunkinfos, struct array *devinfos);
+void print_device_chunks(const struct device_info *devinfo,
+			 const struct array *chunkinfos, unsigned unit_mode);
+void print_device_sizes(const struct device_info *devinfo, unsigned unit_mode);
 int dev_to_fsid(const char *dev, u8 *fsid);
 
 #endif

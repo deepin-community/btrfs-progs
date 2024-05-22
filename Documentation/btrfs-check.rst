@@ -12,7 +12,7 @@ DESCRIPTION
 The filesystem checker is used to verify structural integrity of a filesystem
 and attempt to repair it if requested.  It is recommended to unmount the
 filesystem prior to running the check, but it is possible to start checking a
-mounted filesystem (see *--force*).
+mounted filesystem (see :ref:`--force<man-check-option-force>`).
 
 By default, :command:`btrfs check` will not modify the device but you can reaffirm that
 by the option *--readonly*.
@@ -57,6 +57,20 @@ SAFE OR ADVISORY OPTIONS
 -E|--subvol-extents <subvolid>
         show extent state for the given subvolume
 
+--mode <MODE>
+        select mode of operation regarding memory and IO
+
+        The *MODE* can be one of:
+
+        original
+                The metadata are read into memory and verified, thus the requirements are high
+                on large filesystems and can even lead to out-of-memory conditions.  The
+                possible workaround is to export the block device over network to a machine
+                with enough memory.
+        lowmem
+                This mode is supposed to address the high memory consumption at the cost of
+                increased IO when it needs to re-read blocks.  This may increase run time.
+
 -p|--progress
         indicate progress at various checking phases
 
@@ -83,9 +97,9 @@ SAFE OR ADVISORY OPTIONS
 
         See also the *clear_cache* mount option.
 
---clear-ino-cache
-        remove leftover items pertaining to the deprecated inode map feature
-
+	.. warning::
+		This option is deprecated, please use `btrfs rescue clear-space-cache`
+		instead, this option would be removed in the future eventually.
 
 DANGEROUS OPTIONS
 -----------------
@@ -110,23 +124,7 @@ DANGEROUS OPTIONS
         .. warning::
                 Do not use unless you know what you're doing.
 
---mode <MODE>
-        select mode of operation regarding memory and IO
-
-        The *MODE* can be one of:
-
-        original
-                The metadata are read into memory and verified, thus the requirements are high
-                on large filesystems and can even lead to out-of-memory conditions.  The
-                possible workaround is to export the block device over network to a machine
-                with enough memory.
-        lowmem
-                This mode is supposed to address the high memory consumption at the cost of
-                increased IO when it needs to re-read blocks.  This may increase run time.
-
-        .. note::
-                *lowmem* mode does not work with *--repair* yet, and is still considered
-                experimental.
+.. _man-check-option-force:
 
 --force
         allow work on a mounted filesystem and skip mount checks. Note that
@@ -141,6 +139,16 @@ DANGEROUS OPTIONS
 
         This option also skips the delay and warning in the repair mode (see
         *--repair*).
+
+DEPRECATED OR MOVED OPTIONS
+---------------------------
+
+--clear-ino-cache
+        (removed: 6.7)
+
+        remove leftover items pertaining to the deprecated *inode cache* feature,
+        please use :ref:`btrfs rescue clear-ino-cache<man-rescue-clear-ino-cache>`
+        instead
 
 EXIT STATUS
 -----------
@@ -157,6 +165,6 @@ AVAILABILITY
 SEE ALSO
 --------
 
-:doc:`mkfs.btrfs(8)<mkfs.btrfs>`,
-:doc:`btrfs-scrub(8)<btrfs-scrub>`,
-:doc:`btrfs-rescue(8)<btrfs-rescue>`
+:doc:`mkfs.btrfs`,
+:doc:`btrfs-scrub`,
+:doc:`btrfs-rescue`

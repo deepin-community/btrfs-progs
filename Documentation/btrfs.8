@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "BTRFS" "8" "Jun 15, 2023" "6.3.2" "BTRFS"
+.TH "BTRFS" "8" "Dec 14, 2023" "6.6.3" "BTRFS"
 .SH NAME
 btrfs \- a toolbox to manage btrfs filesystems
 .SH SYNOPSIS
@@ -39,8 +39,8 @@ The \fBbtrfs\fP utility is a toolbox for managing btrfs filesystems.  There are
 command groups to work with subvolumes, devices, for whole filesystem or other
 specific actions. See section \fI\%COMMANDS\fP\&.
 .sp
-There are also standalone tools for some tasks like \fBbtrfs\-convert\fP or
-\fBbtrfstune\fP that were separate historically and/or haven\(aqt been merged to the
+There are also standalone tools for some tasks like \fI\%btrfs\-convert(8)\fP or
+\fI\%btrfstune(8)\fP that were separate historically and/or haven\(aqt been merged to the
 main utility. See section \fI\%STANDALONE TOOLS\fP
 for more details.
 .sp
@@ -80,15 +80,15 @@ if supported by the command, print subcommand output in that format (text, json)
 .INDENT 0.0
 .TP
 .B \-v|\-\-verbose
-increase verbosity of the subcommandn\(dq
+increase verbosity of the subcommand
 .TP
 .B \-q|\-\-quiet
-print only errorsn\(dq
+print only errors
 .UNINDENT
 .INDENT 0.0
 .TP
 .BI \-\-log \ <level>
-set log level (default, info, verbose, debug, quiet)n\(dq
+set log level (default, info, verbose, debug, quiet)
 .UNINDENT
 .sp
 The remaining options are relevant only for the main tool:

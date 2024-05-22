@@ -35,11 +35,13 @@
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/zoned.h"
+#include "kernel-shared/uapi/btrfs.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
 #include "common/device-utils.h"
+#include "common/sysfs-utils.h"
 #include "common/path-utils.h"
 #include "common/internal.h"
 #include "common/messages.h"
-#include "common/utils.h"
 #include "common/units.h"
 
 #ifndef BLKDISCARD
@@ -435,29 +437,25 @@ int device_get_queue_param(const char *file, const char *param, char *buf, size_
  */
 u64 device_get_zone_unusable(int fd, u64 flags)
 {
-	char buf[64];
-	int sys_fd;
-	u64 unusable = DEVICE_ZONE_UNUSABLE_UNKNOWN;
+	int ret;
+	u64 unusable;
 
 	/* Don't report it for a regular fs */
-	sys_fd = sysfs_open_fsid_file(fd, "features/zoned");
-	if (sys_fd < 0)
+	ret = sysfs_open_fsid_file(fd, "features/zoned");
+	if (ret < 0)
 		return DEVICE_ZONE_UNUSABLE_UNKNOWN;
-	close(sys_fd);
-	sys_fd = -1;
+	close(ret);
+	ret = -1;
 
 	if ((flags & BTRFS_BLOCK_GROUP_DATA) == BTRFS_BLOCK_GROUP_DATA)
-		sys_fd = sysfs_open_fsid_file(fd, "allocation/data/bytes_zone_unusable");
+		ret = sysfs_read_fsid_file_u64(fd, "allocation/data/bytes_zone_unusable", &unusable);
 	else if ((flags & BTRFS_BLOCK_GROUP_METADATA) == BTRFS_BLOCK_GROUP_METADATA)
-		sys_fd = sysfs_open_fsid_file(fd, "allocation/metadata/bytes_zone_unusable");
+		ret = sysfs_read_fsid_file_u64(fd, "allocation/metadata/bytes_zone_unusable", &unusable);
 	else if ((flags & BTRFS_BLOCK_GROUP_SYSTEM) == BTRFS_BLOCK_GROUP_SYSTEM)
-		sys_fd = sysfs_open_fsid_file(fd, "allocation/system/bytes_zone_unusable");
+		ret = sysfs_read_fsid_file_u64(fd, "allocation/system/bytes_zone_unusable", &unusable);
 
-	if (sys_fd < 0)
+	if (ret < 0)
 		return DEVICE_ZONE_UNUSABLE_UNKNOWN;
-	sysfs_read_file(sys_fd, buf, sizeof(buf));
-	unusable = strtoull(buf, NULL, 10);
-	close(sys_fd);
 
 	return unusable;
 }
@@ -502,6 +500,7 @@ u64 device_get_zone_size(int fd, const char *name)
 		/* /sys/fs/btrfs/FSID/devices/NAME/queue/chunk_sectors */
 		queue_fd = sysfs_open_fsid_file(fd, queue);
 		if (queue_fd < 0) {
+			queue_fd = -1;
 			ret = 0;
 			break;
 		}
@@ -527,6 +526,17 @@ int device_get_rotational(const char *file)
 		return 0;
 
 	return (rotational == '0');
+}
+
+int device_get_info(int fd, u64 devid, struct btrfs_ioctl_dev_info_args *di_args)
+{
+	int ret;
+
+	di_args->devid = devid;
+	memset(&di_args->uuid, 0, sizeof(di_args->uuid));
+	ret = ioctl(fd, BTRFS_IOC_DEV_INFO, di_args);
+
+	return ret < 0 ? -errno : 0;
 }
 
 ssize_t btrfs_direct_pread(int fd, void *buf, size_t count, off_t offset)

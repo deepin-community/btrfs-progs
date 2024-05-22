@@ -19,11 +19,14 @@
 #include <string.h>
 #include <unistd.h>
 #include "kernel-lib/sizes.h"
+#include "kernel-shared/accessors.h"
+#include "kernel-shared/ctree.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/volumes.h"
 #include "common/internal.h"
 #include "common/messages.h"
 #include "common/extent-cache.h"
+#include "common/extent-tree-utils.h"
 #include "convert/common.h"
 #include "convert/source-fs.h"
 
@@ -228,7 +231,7 @@ int record_file_blocks(struct blk_iterate_data *data,
 	int ret = 0;
 	struct btrfs_root *root = data->root;
 	struct btrfs_root *convert_root = data->convert_root;
-	struct btrfs_path path;
+	struct btrfs_path path = { 0 };
 	u32 sectorsize = root->fs_info->sectorsize;
 	u64 file_pos = file_block * sectorsize;
 	u64 old_disk_bytenr = disk_block * sectorsize;
@@ -240,8 +243,6 @@ int record_file_blocks(struct blk_iterate_data *data,
 		return btrfs_record_file_extent(data->trans, root,
 				data->objectid, data->inode, file_pos, 0,
 				num_bytes);
-
-	btrfs_init_path(&path);
 
 	/*
 	 * Search real disk bytenr from convert root

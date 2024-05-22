@@ -25,7 +25,6 @@
 #include <time.h>
 #include <uuid/uuid.h>
 #include <blkid/blkid.h>
-#include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/accessors.h"
 #include "kernel-shared/disk-io.h"
@@ -436,7 +435,12 @@ int make_btrfs(int fd, struct btrfs_mkfs_config *cfg)
 	} else {
 		uuid_parse(cfg->fs_uuid, super.fsid);
 	}
-	uuid_generate(super.dev_item.uuid);
+	if (!*cfg->dev_uuid) {
+		uuid_generate(super.dev_item.uuid);
+		uuid_unparse(super.dev_item.uuid, cfg->dev_uuid);
+	} else {
+		uuid_parse(cfg->dev_uuid, super.dev_item.uuid);
+	}
 	uuid_generate(chunk_tree_uuid);
 
 	for (i = 0; i < blocks_nr; i++) {
@@ -1067,7 +1071,7 @@ out:
  *  1: something is wrong, an error is printed
  *  0: all is fine
  */
-int test_dev_for_mkfs(const char *file, int force_overwrite)
+bool test_dev_for_mkfs(const char *file, int force_overwrite)
 {
 	int ret, fd;
 	struct stat st;
@@ -1076,15 +1080,15 @@ int test_dev_for_mkfs(const char *file, int force_overwrite)
 	if (ret < 0) {
 		errno = -ret;
 		error("checking status of %s: %m", file);
-		return 1;
+		return true;
 	}
 	if (ret == 1) {
 		error("%s is a swap device", file);
-		return 1;
+		return true;
 	}
 	ret = test_status_for_mkfs(file, force_overwrite);
 	if (ret)
-		return 1;
+		return true;
 	/*
 	 * Check if the device is busy. Open it in read-only mode to avoid triggering
 	 * udev events.
@@ -1092,26 +1096,26 @@ int test_dev_for_mkfs(const char *file, int force_overwrite)
 	fd = open(file, O_RDONLY | O_EXCL);
 	if (fd < 0) {
 		error("unable to open %s: %m", file);
-		return 1;
+		return true;
 	}
 	if (fstat(fd, &st)) {
 		error("unable to stat %s: %m", file);
 		close(fd);
-		return 1;
+		return true;
 	}
 	if (!S_ISBLK(st.st_mode)) {
 		error("%s is not a block device", file);
 		close(fd);
-		return 1;
+		return true;
 	}
 	close(fd);
-	return 0;
+	return false;
 }
 
 /*
  * check if the file (device) is formatted or mounted
  */
-int test_status_for_mkfs(const char *file, bool force_overwrite)
+bool test_status_for_mkfs(const char *file, bool force_overwrite)
 {
 	int ret;
 
@@ -1119,21 +1123,21 @@ int test_status_for_mkfs(const char *file, bool force_overwrite)
 		if (check_overwrite(file)) {
 			error("use the -f option to force overwrite of %s",
 					file);
-			return 1;
+			return true;
 		}
 	}
 	ret = check_mounted(file);
 	if (ret < 0) {
 		errno = -ret;
 		error("cannot check mount status of %s: %m", file);
-		return 1;
+		return true;
 	}
 	if (ret == 1) {
 		error("%s is mounted", file);
-		return 1;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
 int is_vol_small(const char *file)
