@@ -18,8 +18,7 @@ esac
 
 if [ -x /bin/btrfs ]
 then
-	fs_type="$(blkid -s TYPE | grep btrfs)"
-	if [ -n ${fs_type} ]; then
+	if blkid -t TYPE=btrfs >/dev/null; then
 		modprobe btrfs ||:
 		# If asked to be quiet, show only errors
 		[ "${quiet}" = "y" ] && exec >/dev/null
