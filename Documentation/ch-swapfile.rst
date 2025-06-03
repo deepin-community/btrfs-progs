@@ -1,6 +1,6 @@
 A swapfile, when active, is a file-backed swap area.  It is supported since kernel 5.0.
-Use ``swapon(8)`` to activate it, until then (respectively again after deactivating it
-with ``swapoff(8)``) it's just a normal file (with NODATACOW set), for which the special
+Use :manref:`swapon(8)` to activate it, until then (respectively again after deactivating it
+with :manref:`swapoff(8)`) it's just a normal file (with NODATACOW set), for which the special
 restrictions for active swapfiles don't apply.
 
 There are some limitations of the implementation in BTRFS and Linux swap
@@ -16,7 +16,11 @@ The limitations come namely from the COW-based design and mapping layer of
 blocks that allows the advanced features like relocation and multi-device
 filesystems. However, the swap subsystem expects simpler mapping and no
 background changes of the file block location once they've been assigned to
-swap.
+swap. The constraints mentioned above (single device and single profile) are
+related to the swapfile itself, i.e. the extents and their placement. It is
+possible to create swapfile on multi-device filesystem as long as the extents
+are on one device but this cannot be affected by user and depends on free space
+fragmentation and available unused space for new chunks.
 
 With active swapfiles, the following whole-filesystem operations will skip
 swapfile extents or may fail:

@@ -36,12 +36,15 @@
 #include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
 #include "common/open-utils.h"
+#include "common/sysfs-utils.h"
 #include "common/utils.h"
 #include "common/help.h"
 #include "common/units.h"
 #include "common/parse-utils.h"
+#include "common/string-utils.h"
 #include "common/format-output.h"
 #include "common/messages.h"
+#include "common/tree-search.h"
 #include "cmds/commands.h"
 #include "cmds/qgroup.h"
 
@@ -63,10 +66,14 @@ struct btrfs_qgroup_list {
 };
 
 struct qgroup_lookup {
+	/* This matches btrfs_qgroup_status_item::flags. */
+	u64 flags;
 	struct rb_root root;
 };
 
 struct btrfs_qgroup {
+	struct qgroup_lookup *lookup;
+
 	struct rb_node rb_node;
 	struct rb_node sort_node;
 	/*
@@ -76,8 +83,23 @@ struct btrfs_qgroup {
 	struct rb_node all_parent_node;
 	u64 qgroupid;
 
-	/* NULL for qgroups with level > 0 */
+	/*
+	 * NULL for qgroups with level > 0 or the subvolume is deleted but not
+	 * yet fully cleaned.
+	 *
+	 * A deleted subvolume means it hasn't been fully cleaned, so callers
+	 * should not rely on this to determine if a qgroup is stale.
+	 *
+	 * This member is only to help locating the path of the corresponding
+	 * subvolume.
+	 */
 	const char *path;
+
+	/*
+	 * This is only true if the qgroup is level 0 qgroup, and there is
+	 * no subvolume tree for the qgroup at all.
+	 */
+	bool stale;
 
 	/*
 	 * info_item
@@ -225,6 +247,13 @@ static struct {
 static btrfs_qgroup_filter_func all_filter_funcs[];
 static btrfs_qgroup_comp_func all_comp_funcs[];
 
+static bool is_qgroup_empty(const struct btrfs_qgroup *qg)
+{
+	return !(qg->info.referenced || qg->info.exclusive ||
+		 qg->info.referenced_compressed ||
+		 qg->info.exclusive_compressed);
+}
+
 static void qgroup_setup_print_column(enum btrfs_qgroup_column_enum column)
 {
 	int i;
@@ -296,6 +325,26 @@ static void print_qgroup_column_add_blank(enum btrfs_qgroup_column_enum column,
 		printf(" ");
 }
 
+static const char *get_qgroup_path(struct btrfs_qgroup *qgroup)
+{
+	if (qgroup->path)
+		return qgroup->path;
+
+	/* No path but not stale either, the qgroup is being deleted. */
+	if (!qgroup->stale)
+		return "<under deletion>";
+	/*
+	 * Squota mode stale qgroup, but not empty.
+	 * This is fully deleted but still necessary.
+	 */
+	if (qgroup->stale &&
+	    (qgroup->lookup->flags & BTRFS_QGROUP_STATUS_FLAG_SIMPLE_MODE) &&
+	    !is_qgroup_empty(qgroup))
+		return "<squota space holder>";
+
+	return "<stale>";
+}
+
 static void print_path_column(struct btrfs_qgroup *qgroup)
 {
 	struct btrfs_qgroup_list *list = NULL;
@@ -313,11 +362,8 @@ static void print_path_column(struct btrfs_qgroup *qgroup)
 			if (count)
 				pr_verbose(LOG_DEFAULT, " ");
 			if (level == 0) {
-				const char *path = member->path;
-
-				if (!path)
-					path = "<stale>";
-				pr_verbose(LOG_DEFAULT, "%s", path);
+				pr_verbose(LOG_DEFAULT, "%s",
+					   get_qgroup_path(qgroup));
 			} else {
 				pr_verbose(LOG_DEFAULT, "%llu/%llu", level, sid);
 			}
@@ -328,7 +374,7 @@ static void print_path_column(struct btrfs_qgroup *qgroup)
 	} else if (qgroup->path) {
 		pr_verbose(LOG_DEFAULT, "%s%s", (*qgroup->path ? "" : "<toplevel>"), qgroup->path);
 	} else {
-		pr_verbose(LOG_DEFAULT, "<stale>");
+		pr_verbose(LOG_DEFAULT, "%s", get_qgroup_path(qgroup));
 	}
 }
 
@@ -780,6 +826,7 @@ static struct btrfs_qgroup *get_or_add_qgroup(int fd,
 		return ERR_PTR(-ENOMEM);
 	}
 
+	bq->lookup = qgroup_lookup;
 	bq->qgroupid = qgroupid;
 	INIT_LIST_HEAD(&bq->qgroups);
 	INIT_LIST_HEAD(&bq->members);
@@ -788,16 +835,33 @@ static struct btrfs_qgroup *get_or_add_qgroup(int fd,
 		enum btrfs_util_error uret;
 		char *path;
 
-		uret = btrfs_util_subvolume_path_fd(fd, qgroupid, &path);
+		uret = btrfs_util_subvolume_get_path_fd(fd, qgroupid, &path);
 		if (uret == BTRFS_UTIL_OK)
 			bq->path = path;
-		/* Ignore stale qgroup items */
 		else if (uret != BTRFS_UTIL_ERROR_SUBVOLUME_NOT_FOUND) {
 			error("%s", btrfs_util_strerror(uret));
 			if (uret == BTRFS_UTIL_ERROR_NO_MEMORY)
 				return ERR_PTR(-ENOMEM);
 			else
 				return ERR_PTR(-EIO);
+		}
+		/*
+		 * Do a correct stale detection by searching for the ROOT_ITEM of
+		 * the subvolume.
+		 *
+		 * Passing @subvol as NULL will force the search to only search
+		 * for the ROOT_ITEM.
+		 */
+		uret = btrfs_util_subvolume_get_info_fd(fd, qgroupid, NULL);
+		if (uret == BTRFS_UTIL_OK) {
+			bq->stale = false;
+		} else if (uret == BTRFS_UTIL_ERROR_SUBVOLUME_NOT_FOUND) {
+			bq->stale = true;
+		} else {
+			warning("failed to search root item for qgroup %u/%llu, assuming it not stale",
+				btrfs_qgroup_level(qgroupid),
+				btrfs_qgroup_subvolid(qgroupid));
+			bq->stale = false;
 		}
 	}
 
@@ -1254,13 +1318,32 @@ static bool key_in_range(const struct btrfs_key *key,
 	return true;
 }
 
-static int __qgroups_search(int fd, struct btrfs_ioctl_search_args *args,
+static int quota_enabled(int fd) {
+	struct btrfs_tree_search_args args = { 0 };
+	struct btrfs_ioctl_search_key *sk;
+	int ret;
+
+	sk = btrfs_tree_search_sk(&args);
+	sk->tree_id = BTRFS_QUOTA_TREE_OBJECTID;
+	sk->min_type = 0;
+	sk->max_type = (u8)-1;
+	sk->max_objectid = (u64)-1;
+	sk->max_offset = (u64)-1;
+	sk->max_transid = (u64)-1;
+	sk->nr_items = 1;
+
+	ret = btrfs_tree_search_ioctl(fd, &args);
+	if (ret < 0)
+		ret = -errno;
+	return ret;
+}
+
+static int __qgroups_search(int fd, struct btrfs_tree_search_args *args,
 			    struct qgroup_lookup *qgroup_lookup)
 {
 	int ret;
-	struct btrfs_ioctl_search_key *sk = &args->key;
-	struct btrfs_ioctl_search_key filter_key = args->key;
-	struct btrfs_ioctl_search_header *sh;
+	struct btrfs_ioctl_search_key *sk;
+	struct btrfs_ioctl_search_key filter_key;
 	unsigned long off = 0;
 	unsigned int i;
 	struct btrfs_qgroup_status_item *si;
@@ -1270,10 +1353,13 @@ static int __qgroups_search(int fd, struct btrfs_ioctl_search_args *args,
 	u64 qgroupid;
 	u64 child, parent;
 
+	sk = btrfs_tree_search_sk(args);
+	filter_key = *sk;
+
 	qgroup_lookup_init(qgroup_lookup);
 
 	while (1) {
-		ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, args);
+		ret = btrfs_tree_search_ioctl(fd, args);
 		if (ret < 0) {
 			if (errno == ENOENT)
 				ret = -ENOTTY;
@@ -1293,38 +1379,36 @@ static int __qgroups_search(int fd, struct btrfs_ioctl_search_args *args,
 		 */
 		for (i = 0; i < sk->nr_items; i++) {
 			struct btrfs_key key;
+			struct btrfs_ioctl_search_header sh;
 
-			sh = (struct btrfs_ioctl_search_header *)(args->buf +
-								  off);
-			off += sizeof(*sh);
+			memcpy(&sh, btrfs_tree_search_data(args, off), sizeof(sh));
+			off += sizeof(sh);
 
-			key.objectid = btrfs_search_header_objectid(sh);
-			key.type = btrfs_search_header_type(sh);
-			key.offset = btrfs_search_header_offset(sh);
+			key.objectid = sh.objectid;
+			key.type = sh.type;
+			key.offset = sh.offset;
 
 			if (!key_in_range(&key, &filter_key))
 				goto next;
 
 			switch (key.type) {
 			case BTRFS_QGROUP_STATUS_KEY:
-				si = (struct btrfs_qgroup_status_item *)
-				     (args->buf + off);
+				si = btrfs_tree_search_data(args, off);
 				flags = btrfs_stack_qgroup_status_flags(si);
+				qgroup_lookup->flags = flags;
 
 				print_status_flag_warning(flags);
 				break;
 			case BTRFS_QGROUP_INFO_KEY:
 				qgroupid = key.offset;
-				info = (struct btrfs_qgroup_info_item *)
-				       (args->buf + off);
+				info = btrfs_tree_search_data(args, off);
 
 				ret = update_qgroup_info(fd, qgroup_lookup,
 							 qgroupid, info);
 				break;
 			case BTRFS_QGROUP_LIMIT_KEY:
 				qgroupid = key.offset;
-				limit = (struct btrfs_qgroup_limit_item *)
-					(args->buf + off);
+				limit = btrfs_tree_search_data(args, off);
 
 				ret = update_qgroup_limit(fd, qgroup_lookup,
 							  qgroupid, limit);
@@ -1347,15 +1431,15 @@ static int __qgroups_search(int fd, struct btrfs_ioctl_search_args *args,
 				return ret;
 
 next:
-			off += btrfs_search_header_len(sh);
+			off += sh.len;
 
 			/*
 			 * record the mins in sk so we can make sure the
 			 * next search doesn't repeat this root
 			 */
+			sk->min_objectid = key.objectid;
 			sk->min_type = key.type;
 			sk->min_offset = key.offset;
-			sk->min_objectid = key.objectid;
 		}
 		sk->nr_items = 4096;
 		/*
@@ -1373,18 +1457,19 @@ next:
 
 static int qgroups_search_all(int fd, struct qgroup_lookup *qgroup_lookup)
 {
-	struct btrfs_ioctl_search_args args = {
-		.key = {
-			.tree_id = BTRFS_QUOTA_TREE_OBJECTID,
-			.max_type = BTRFS_QGROUP_RELATION_KEY,
-			.min_type = BTRFS_QGROUP_STATUS_KEY,
-			.max_objectid = (u64)-1,
-			.max_offset = (u64)-1,
-			.max_transid = (u64)-1,
-			.nr_items = 4096,
-		},
-	};
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	int ret;
+
+	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
+	sk->tree_id = BTRFS_QUOTA_TREE_OBJECTID;
+	sk->max_type = BTRFS_QGROUP_RELATION_KEY;
+	sk->min_type = BTRFS_QGROUP_STATUS_KEY;
+	sk->max_objectid = (u64)-1;
+	sk->max_offset = (u64)-1;
+	sk->max_transid = (u64)-1;
+	sk->nr_items = 4096;
 
 	ret = __qgroups_search(fd, &args, qgroup_lookup);
 	if (ret == -ENOTTY) {
@@ -1398,22 +1483,24 @@ static int qgroups_search_all(int fd, struct qgroup_lookup *qgroup_lookup)
 
 int btrfs_qgroup_query(int fd, u64 qgroupid, struct btrfs_qgroup_stats *stats)
 {
-	struct btrfs_ioctl_search_args args = {
-		.key = {
-			.tree_id = BTRFS_QUOTA_TREE_OBJECTID,
-			.min_type = BTRFS_QGROUP_INFO_KEY,
-			.max_type = BTRFS_QGROUP_LIMIT_KEY,
-			.max_objectid = 0,
-			.min_offset = qgroupid,
-			.max_offset = qgroupid,
-			.max_transid = (u64)-1,
-			.nr_items = 4096,
-		},
-	};
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	struct qgroup_lookup qgroup_lookup;
 	struct btrfs_qgroup *qgroup;
 	struct rb_node *n;
 	int ret;
+
+	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
+	sk->tree_id = BTRFS_QUOTA_TREE_OBJECTID;
+	sk->min_objectid = 0;
+	sk->min_type = BTRFS_QGROUP_INFO_KEY;
+	sk->min_offset = qgroupid;
+	sk->max_objectid = 0;
+	sk->max_type = BTRFS_QGROUP_LIMIT_KEY;
+	sk->max_offset = qgroupid;
+	sk->max_transid = (u64)-1;
+	sk->nr_items = 4096;
 
 	ret = __qgroups_search(fd, &args, &qgroup_lookup);
 	if (ret < 0)
@@ -1524,6 +1611,31 @@ static void print_all_qgroups_json(struct qgroup_lookup *qgroup_lookup)
 	fmt_end(&fctx);
 }
 
+/*
+ * Tree search based 'inconsistent' flag is only updated at transaction commit
+ * time.  Thus even if the qgroup_status flag shows consistent, the qgroup may
+ * already be in an inconsistent state.
+ */
+static void check_qgroup_sysfs_inconsistent(int fd, const struct qgroup_lookup *qgroup_lookup)
+{
+	u64 value;
+	int sysfs_fd;
+	int ret;
+
+	if (qgroup_lookup->flags & BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT)
+		return;
+	sysfs_fd = sysfs_open_fsid_file(fd, "qgroups/inconsistent");
+	if (fd < 0)
+		return;
+	ret = sysfs_read_fsid_file_u64(fd, "qgroups/inconsistent", &value);
+	if (ret < 0)
+		goto out;
+	if (value)
+		warning("qgroup data inconsistent, rescan recommended");
+out:
+	close(sysfs_fd);
+}
+
 static int show_qgroups(int fd,
 		       struct btrfs_qgroup_filter_set *filter_set,
 		       struct btrfs_qgroup_comparer_set *comp_set)
@@ -1536,6 +1648,8 @@ static int show_qgroups(int fd,
 	ret = qgroups_search_all(fd, &qgroup_lookup);
 	if (ret)
 		return ret;
+
+	check_qgroup_sysfs_inconsistent(fd, &qgroup_lookup);
 	__filter_and_sort_qgroups(&qgroup_lookup, &sort_tree,
 				  filter_set, comp_set);
 	if (bconf.output_format == CMD_FORMAT_JSON)
@@ -1622,111 +1736,6 @@ out:
 	return ret;
 }
 
-int btrfs_qgroup_inherit_size(struct btrfs_qgroup_inherit *p)
-{
-	return sizeof(*p) + sizeof(p->qgroups[0]) *
-			    (p->num_qgroups + 2 * p->num_ref_copies +
-			     2 * p->num_excl_copies);
-}
-
-static int qgroup_inherit_realloc(struct btrfs_qgroup_inherit **inherit, int n,
-		int pos)
-{
-	struct btrfs_qgroup_inherit *out;
-	int nitems = 0;
-
-	if (*inherit) {
-		nitems = (*inherit)->num_qgroups +
-			 (*inherit)->num_ref_copies +
-			 (*inherit)->num_excl_copies;
-	}
-
-	out = calloc(1, sizeof(*out) + sizeof(out->qgroups[0]) * (nitems + n));
-	if (out == NULL) {
-		error_msg(ERROR_MSG_MEMORY, NULL);
-		return -ENOMEM;
-	}
-
-	if (*inherit) {
-		struct btrfs_qgroup_inherit *i = *inherit;
-		int s = sizeof(out->qgroups[0]);
-
-		out->num_qgroups = i->num_qgroups;
-		out->num_ref_copies = i->num_ref_copies;
-		out->num_excl_copies = i->num_excl_copies;
-		memcpy(out->qgroups, i->qgroups, pos * s);
-		memcpy(out->qgroups + pos + n, i->qgroups + pos,
-		       (nitems - pos) * s);
-	}
-	free(*inherit);
-	*inherit = out;
-
-	return 0;
-}
-
-int btrfs_qgroup_inherit_add_group(struct btrfs_qgroup_inherit **inherit, char *arg)
-{
-	int ret;
-	u64 qgroupid = parse_qgroupid_or_path(arg);
-	int pos = 0;
-
-	if (qgroupid == 0) {
-		error("invalid qgroup specification, qgroupid must not 0");
-		return -EINVAL;
-	}
-
-	if (*inherit)
-		pos = (*inherit)->num_qgroups;
-	ret = qgroup_inherit_realloc(inherit, 1, pos);
-	if (ret)
-		return ret;
-
-	(*inherit)->qgroups[(*inherit)->num_qgroups++] = qgroupid;
-
-	return 0;
-}
-
-int btrfs_qgroup_inherit_add_copy(struct btrfs_qgroup_inherit **inherit, char *arg,
-			    int type)
-{
-	int ret;
-	u64 qgroup_src;
-	u64 qgroup_dst;
-	char *p;
-	int pos = 0;
-
-	p = strchr(arg, ':');
-	if (!p) {
-bad:
-		error("invalid copy specification, missing separator :");
-		return -EINVAL;
-	}
-	*p = 0;
-	qgroup_src = parse_qgroupid_or_path(arg);
-	qgroup_dst = parse_qgroupid_or_path(p + 1);
-	*p = ':';
-
-	if (!qgroup_src || !qgroup_dst)
-		goto bad;
-
-	if (*inherit)
-		pos = (*inherit)->num_qgroups +
-		      (*inherit)->num_ref_copies * 2 * type;
-
-	ret = qgroup_inherit_realloc(inherit, 2, pos);
-	if (ret)
-		return ret;
-
-	(*inherit)->qgroups[pos++] = qgroup_src;
-	(*inherit)->qgroups[pos++] = qgroup_dst;
-
-	if (!type)
-		++(*inherit)->num_ref_copies;
-	else
-		++(*inherit)->num_excl_copies;
-
-	return 0;
-}
 static const char * const qgroup_cmd_group_usage[] = {
 	"btrfs qgroup <command> [options] <path>",
 	NULL
@@ -1740,7 +1749,6 @@ static int _cmd_qgroup_assign(const struct cmd_struct *cmd, int assign,
 	bool rescan = true;
 	char *path;
 	struct btrfs_ioctl_qgroup_assign_args args;
-	DIR *dirstream = NULL;
 
 	optind = 0;
 	while (1) {
@@ -1785,7 +1793,7 @@ static int _cmd_qgroup_assign(const struct cmd_struct *cmd, int assign,
 		error("bad relation requested: %s", path);
 		return 1;
 	}
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0)
 		return 1;
 
@@ -1794,7 +1802,7 @@ static int _cmd_qgroup_assign(const struct cmd_struct *cmd, int assign,
 		error("unable to assign quota group: %s",
 				errno == ENOTCONN ? "quota not enabled"
 						: strerror(errno));
-		close_file_or_dir(fd, dirstream);
+		close(fd);
 		return 1;
 	}
 
@@ -1820,7 +1828,7 @@ static int _cmd_qgroup_assign(const struct cmd_struct *cmd, int assign,
 			ret = 0;
 		}
 	}
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	return ret;
 }
 
@@ -1830,7 +1838,6 @@ static int _cmd_qgroup_create(int create, int argc, char **argv)
 	int fd;
 	char *path;
 	struct btrfs_ioctl_qgroup_create_args args;
-	DIR *dirstream = NULL;
 
 	if (check_argc_exact(argc - optind, 2))
 		return 1;
@@ -1844,12 +1851,12 @@ static int _cmd_qgroup_create(int create, int argc, char **argv)
 	}
 	path = argv[optind + 1];
 
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0)
 		return 1;
 
 	ret = ioctl(fd, BTRFS_IOC_QGROUP_CREATE, &args);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	if (ret < 0) {
 		error("unable to %s quota group: %s",
 			create ? "create":"destroy",
@@ -1957,7 +1964,6 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 	char *path;
 	int ret = 0;
 	int fd;
-	DIR *dirstream = NULL;
 	u64 qgroupid;
 	int filter_flag = 0;
 	unsigned unit_mode;
@@ -2030,7 +2036,7 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 		return 1;
 
 	path = argv[optind];
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0) {
 		free(filter_set);
 		free(comparer_set);
@@ -2038,7 +2044,7 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 	}
 
 	if (sync) {
-		err = btrfs_util_sync_fd(fd);
+		err = btrfs_util_fs_sync_fd(fd);
 		if (err)
 			warning("sync ioctl failed on '%s': %m", path);
 	}
@@ -2048,7 +2054,7 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 		if (ret < 0) {
 			errno = -ret;
 			error("cannot resolve rootid for %s: %m", path);
-			close_file_or_dir(fd, dirstream);
+			close(fd);
 			goto out;
 		}
 		if (filter_flag & 0x1)
@@ -2061,7 +2067,7 @@ static int cmd_qgroup_show(const struct cmd_struct *cmd, int argc, char **argv)
 					qgroupid);
 	}
 	ret = show_qgroups(fd, filter_set, comparer_set);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	free(filter_set);
 	free(comparer_set);
 
@@ -2088,7 +2094,6 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 	unsigned long long size;
 	bool compressed = false;
 	bool exclusive = false;
-	DIR *dirstream = NULL;
 	enum btrfs_util_error err;
 
 	optind = 0;
@@ -2114,7 +2119,7 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 	if (!strcasecmp(argv[optind], "none"))
 		size = -1ULL;
 	else
-		size = parse_size_from_string(argv[optind]);
+		size = arg_strtou64_with_suffix(argv[optind]);
 
 	memset(&args, 0, sizeof(args));
 	if (compressed)
@@ -2131,7 +2136,7 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 	if (argc - optind == 2) {
 		args.qgroupid = 0;
 		path = argv[optind + 1];
-		err = btrfs_util_is_subvolume(path);
+		err = btrfs_util_subvolume_is_valid(path);
 		if (err) {
 			error_btrfs_util(err);
 			return 1;
@@ -2146,12 +2151,12 @@ static int cmd_qgroup_limit(const struct cmd_struct *cmd, int argc, char **argv)
 	} else
 		usage(cmd, 1);
 
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0)
 		return 1;
 
 	ret = ioctl(fd, BTRFS_IOC_QGROUP_LIMIT, &args);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	if (ret < 0) {
 		error("unable to limit requested quota group: %s",
 				errno == ENOTCONN ? "quota not enabled"
@@ -2174,12 +2179,71 @@ static const char * const cmd_qgroup_clear_stale_usage[] = {
 	NULL
 };
 
+/*
+ * Return >0 if the qgroup should or can not be deleted.
+ * Return 0 if the qgroup is deleted.
+ * Return <0 for critical error.
+ */
+static int delete_one_stale_qgroup(struct qgroup_lookup *lookup,
+				   struct btrfs_qgroup *qg, int fd)
+{
+	u16 level = btrfs_qgroup_level(qg->qgroupid);
+	struct btrfs_ioctl_qgroup_create_args args = { .create = false };
+	const bool inconsistent = (lookup->flags & BTRFS_QGROUP_STATUS_FLAG_INCONSISTENT);
+	const bool squota = (lookup->flags & BTRFS_QGROUP_STATUS_FLAG_SIMPLE_MODE);
+	const bool empty = is_qgroup_empty(qg);
+	bool attempt = false;
+	int ret;
+
+	if (level || !qg->stale)
+		return 1;
+
+	/*
+	 * By design, squota can have a subvolume fully dropped but its qgroup
+	 * numbers are not zero.  Such qgroup is still needed for future
+	 * accounting, thus can not be deleted.
+	 */
+	if (squota && !empty)
+		return 1;
+
+	/*
+	 * We can have inconsistent qgroup numbers, in that case a really stale
+	 * qgroup can exist while its numbers are not zero.
+	 *
+	 * In this case we only attempt to delete the qgroup, depending on the
+	 * kernel implementation, we may or may not be able to delete it.
+	 */
+	if (inconsistent && !empty)
+		attempt = true;
+
+	if (attempt)
+		pr_verbose(LOG_DEFAULT,
+		"Attempt to delete stale but non-empty qgroup %u/%llu\n",
+			   level, btrfs_qgroup_subvolid(qg->qgroupid));
+	else
+		pr_verbose(LOG_DEFAULT, "Delete stale qgroup %u/%llu\n",
+			   level, btrfs_qgroup_subvolid(qg->qgroupid));
+	args.qgroupid = qg->qgroupid;
+	ret = ioctl(fd, BTRFS_IOC_QGROUP_CREATE, &args);
+	if (ret < 0) {
+		if (attempt) {
+			warning("not possible to delete non-empty stale qgroup %u/%llu",
+				level, btrfs_qgroup_subvolid(qg->qgroupid));
+			ret = 1;
+		} else {
+			error("failed to delete qgroup %u/%llu",
+			      level, btrfs_qgroup_subvolid(qg->qgroupid));
+		}
+	}
+	return ret;
+}
+
 static int cmd_qgroup_clear_stale(const struct cmd_struct *cmd, int argc, char **argv)
 {
+	enum btrfs_util_error err;
 	int ret = 0;
 	int fd;
 	char *path = NULL;
-	DIR *dirstream = NULL;
 	struct qgroup_lookup qgroup_lookup;
 	struct rb_node *node;
 	struct btrfs_qgroup *entry;
@@ -2189,43 +2253,51 @@ static int cmd_qgroup_clear_stale(const struct cmd_struct *cmd, int argc, char *
 
 	path = argv[optind];
 
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0)
 		return 1;
+
+	/* Do the check first so the sync is not done if quotas are not enabled. */
+	ret = quota_enabled(fd);
+	if (ret == -ENOENT) {
+		warning("qgroups not enabled");
+		ret = 0;
+		goto out_close;
+	} else if (ret < 0) {
+		errno = -ret;
+		error("cannot check qgroup status: %m");
+		goto out_close;
+	}
+
+	/* Sync the fs so that the qgroup numbers are uptodate. */
+	err = btrfs_util_fs_sync_fd(fd);
+	if (err)
+		warning("syncing filesystem failed: %m");
 
 	ret = qgroups_search_all(fd, &qgroup_lookup);
 	if (ret == -ENOTTY) {
 		error("can't list qgroups: quotas not enabled");
-		goto out;
+		goto out_close;
 	} else if (ret < 0) {
 		errno = -ret;
 		error("can't list qgroups: %m");
-		goto out;
+		goto out_close;
 	}
 
 	node = rb_first(&qgroup_lookup.root);
 	while (node) {
-		u64 level;
-		struct btrfs_ioctl_qgroup_create_args args = { .create = false };
+		int ret2;
 
 		entry = rb_entry(node, struct btrfs_qgroup, rb_node);
-		level = btrfs_qgroup_level(entry->qgroupid);
-		if (!entry->path && level == 0) {
-			pr_verbose(LOG_DEFAULT, "Delete stale qgroup %llu/%llu\n",
-					level, btrfs_qgroup_subvolid(entry->qgroupid));
-			args.qgroupid = entry->qgroupid;
-			ret = ioctl(fd, BTRFS_IOC_QGROUP_CREATE, &args);
-			if (ret < 0) {
-				error("cannot delete qgroup %llu/%llu: %m",
-					level,
-					btrfs_qgroup_subvolid(entry->qgroupid));
-			}
-		}
+		ret2 = delete_one_stale_qgroup(&qgroup_lookup, entry, fd);
+		if (ret2 < 0 && !ret)
+			ret = ret2;
 		node = rb_next(node);
 	}
 
-out:
-	close_file_or_dir(fd, dirstream);
+	__free_all_qgroups(&qgroup_lookup);
+out_close:
+	close(fd);
 	return !!ret;
 }
 static DEFINE_SIMPLE_COMMAND(qgroup_clear_stale, "clear-stale");

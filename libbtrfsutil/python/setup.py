@@ -20,16 +20,24 @@
 import re
 import os
 import os.path
+import sys
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 import subprocess
 
 
 def get_version():
-    f = open('../../VERSION', 'r')
-    version = f.readline().strip()
-    f.close()
-    return ".".join(version[1:].split('.'))
+    version = 0
+    try:
+        import version
+        version = version.btrfs_util_py_version
+    except:
+        # Don't fail if this is only the 'clean' target or no command
+        if 'clean' in sys.argv or len(sys.argv) == 1:
+            version = '0.0'
+        else:
+            raise Exception("No generated version.py found, please configure")
+    return version
 
 
 def out_of_date(dependencies, target):
@@ -70,7 +78,12 @@ void add_module_constants(PyObject *m)
 
 class my_build_ext(build_ext):
     def run(self):
-        if out_of_date(['../btrfsutil.h'], 'constants.c'):
+        # Running dist outside of git
+        if not os.path.exists('../btrfsutil.h'):
+            # But no generated constants.c found
+            if not os.path.exists('constants.c'):
+                raise Exception("No generated constants.c found, please fix")
+        elif out_of_date(['../btrfsutil.h'], 'constants.c'):
             try:
                 gen_constants()
             except Exception as e:
@@ -101,6 +114,8 @@ setup(
     name='btrfsutil',
     version=get_version(),
     description='Library for managing Btrfs filesystems',
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     url='https://github.com/kdave/btrfs-progs',
     license='LGPLv2+',
     cmdclass={'build_ext': my_build_ext},

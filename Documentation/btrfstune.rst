@@ -42,6 +42,16 @@ OPTIONS
 
         Convert to free-space-tree feature (v2 of space cache).
 
+--enable-simple-quota
+	(since kernel 6.7)
+
+	Enable simple quota accounting (*squota* mkfs feature). This is an
+	alternative to qgroups with a smaller performance impact but no notion
+	of shared vs. exclusive usage.
+
+--remove-simple-quota
+	Remove simple quota accounting related structures.
+
 -f
         Allow dangerous changes, e.g. clear the seeding flag or change fsid.
         Make sure that you are aware of the dangers.
@@ -105,7 +115,7 @@ OPTIONS
 -U <UUID>
         Change fsid to *UUID* in all metadata blocks.
 
-        The *UUID* should be a 36 bytes string in ``printf(3)`` format
+        The *UUID* should be a 36 bytes string in :manref:`printf(3)` format
         ``%08x-%04x-%04x-%04x-%012x``.
         If there is a previous unfinished fsid change, it will continue only if the
         *UUID* matches the unfinished one or if you use the option *-u*.
@@ -127,6 +137,9 @@ OPTIONS
         All newly created extents will use the new representation. To
         completely switch the entire filesystem, run a full balance of the
         metadata. Please refer to :doc:`btrfs-balance`.
+
+--version
+        Print the :command:`btrfstune` version, builtin features and exit.
 
 
 EXIT STATUS

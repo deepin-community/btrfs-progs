@@ -21,6 +21,7 @@ tools.  Currently covers:
 #. filesystems with multiple block group profiles
 #. seeding device
 #. RAID56 status and recommended practices
+#. glossary
 #. storage model, hardware considerations
 
 .. _man-btrfs5-mount-options:
@@ -141,6 +142,11 @@ raid1c34
 
         extended RAID1 mode with copies on 3 or 4 devices respectively
 
+raid_stripe_tree
+        (since: 6.7)
+
+        a separate tree for tracking file extents on RAID profiles
+
 RAID56
         (since: 3.9)
 
@@ -149,7 +155,7 @@ RAID56
 rmdir_subvol
         (since: 4.18)
 
-        indicate that ``rmdir(2)`` syscall can delete an empty subvolume just like an
+        indicate that :manref:`rmdir(2)` syscall can delete an empty subvolume just like an
         ordinary directory. Note that this feature only depends on the kernel version.
 
 skinny_metadata
@@ -161,6 +167,11 @@ send_stream_version
         (since: 5.10)
 
         number of the highest supported send stream version
+
+simple_quota
+        (since: 6.7)
+
+        simplified quota accounting
 
 supported_checksums
         (since: 5.5)
@@ -210,7 +221,7 @@ SYSFS INTERFACE
 
 .. include:: ch-sysfs.rst
 
-.. _man-btrfs5-fileysstem-exclusive-operations:
+.. _man-btrfs5-filesystem-exclusive-operations:
 
 FILESYSTEM EXCLUSIVE OPERATIONS
 -------------------------------
@@ -432,6 +443,12 @@ immediately and would require a rebalance. A fixed configured stripe width is
 not implemented.
 
 
+GLOSSARY
+--------
+
+.. include:: ch-glossary.rst
+
+
 STORAGE MODEL, HARDWARE CONSIDERATIONS
 --------------------------------------
 
@@ -440,11 +457,12 @@ STORAGE MODEL, HARDWARE CONSIDERATIONS
 SEE ALSO
 --------
 
-``acl(5)``,
+:manref:`acl(5)`,
 :doc:`btrfs`,
-``chattr(1)``,
-``fstrim(8)``,
-``ioctl(2)``,
+:manref:`chattr(1)`,
+:manref:`fstrim(8)`,
+:manref:`ioctl(2)`,
+:doc:`btrfs-ioctl`,
 :doc:`mkfs.btrfs`,
-``mount(8)``,
-``swapon(8)``
+:manref:`mount(8)`,
+:manref:`swapon(8)`

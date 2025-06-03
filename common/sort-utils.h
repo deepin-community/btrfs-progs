@@ -17,6 +17,8 @@
 #ifndef __COMMON_SORT_UTILS_H__
 #define __COMMON_SORT_UTILS_H__
 
+#include <stdbool.h>
+
 /*
  * Example:
 
@@ -42,13 +44,13 @@ void test() {
 	struct entry entries[SIZE];
 	// Comparator structure
 	struct compare comp = { 0 };
-	// Keys, item comparators, help text defitions
+	// Keys, item comparators, help text definitions
 	struct sortdef sortit[] = {
 		{ .name = "id",   .comp = (sort_cmp_t)cmp_entry_id,
 		  .desc = "sort by id" },
 		{ .name = "size", .comp = (sort_cmp_t)cmp_entry_size,
 		  .desc = "sort by entry size" },
-		{ .name = NULL,   .comp = NULL }
+		SORTDEF_END
 	};
 	// List of keys to use for sort (e.g. from command line options)
 	const char *sortby[] = { "size", "id" };
@@ -66,17 +68,24 @@ void test() {
 }
  */
 
+#define SORTDEF_END		{ .name = NULL, .comp = NULL }
+#define SORT_MAX_KEYS		32
+
 typedef int (*sort_cmp_t)(const void *a, const void *b);
 typedef int (*sort_r_cmp_t)(const void *a, const void *b, void *data);
+
+#define SORTDEF_END { .name = NULL,   .comp = NULL }
 
 struct sortdef {
 	const char *name;
 	const char *desc;
 	sort_cmp_t comp;
+	/* User defined identifier of this sort key. */
+	int id;
 };
 
 struct compare {
-	sort_cmp_t comp[32];
+	sort_cmp_t comp[SORT_MAX_KEYS];
 	unsigned long invert_map;
 	int count;
 	const struct sortdef *sortdef;
@@ -85,5 +94,11 @@ struct compare {
 int compare_init(struct compare *comp, const struct sortdef *sortdef);
 int compare_cmp_multi(const void *a, const void *b, const struct compare *comp);
 int compare_add_sort_key(struct compare *comp, const char *key);
+int compare_parse_key_to_id(const struct compare *comp, const char **next);
+int compare_add_sort_id(struct compare *comp, int id);
+int compare_key_id(const struct compare *comp, const char *key);
+const char *compare_id_name(const struct compare *comp, int id);
+bool compare_has_id(const struct compare *comp, int id);
+int compare_setup_sort(struct compare *comp, const struct sortdef *sdef, const char *def);
 
 #endif

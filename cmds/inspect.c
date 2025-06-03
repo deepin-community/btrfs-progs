@@ -47,6 +47,7 @@
 #include "common/string-utils.h"
 #include "common/string-table.h"
 #include "common/sort-utils.h"
+#include "common/tree-search.h"
 #include "cmds/commands.h"
 
 static const char * const inspect_cmd_group_usage[] = {
@@ -59,7 +60,8 @@ static int __ino_to_path_fd(u64 inum, int fd, const char *prepend)
 	int ret;
 	int i;
 	struct btrfs_ioctl_ino_path_args ipa;
-	struct btrfs_data_container fspath[PATH_MAX];
+	char pathbuf[PATH_MAX];
+	struct btrfs_data_container *fspath = (struct btrfs_data_container *)pathbuf;
 
 	memset(fspath, 0, sizeof(*fspath));
 	ipa.inum = inum;
@@ -109,7 +111,6 @@ static int cmd_inspect_inode_resolve(const struct cmd_struct *cmd,
 {
 	int fd;
 	int ret;
-	DIR *dirstream = NULL;
 
 	optind = 0;
 	while (1) {
@@ -129,12 +130,12 @@ static int cmd_inspect_inode_resolve(const struct cmd_struct *cmd,
 	if (check_argc_exact(argc - optind, 2))
 		return 1;
 
-	fd = btrfs_open_dir(argv[optind + 1], &dirstream, 1);
+	fd = btrfs_open_dir(argv[optind + 1]);
 	if (fd < 0)
 		return 1;
 
 	ret = __ino_to_path_fd(arg_strtou64(argv[optind]), fd, argv[optind+1]);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	return !!ret;
 
 }
@@ -169,7 +170,6 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 	u64 size = SZ_64K;
 	char full_path[PATH_MAX];
 	char *path_ptr;
-	DIR *dirstream = NULL;
 	u64 flags = 0;
 	unsigned long request = BTRFS_IOC_LOGICAL_INO;
 
@@ -214,7 +214,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 	loi.flags = flags;
 	loi.inodes = ptr_to_u64(inodes);
 
-	fd = btrfs_open_dir(argv[optind + 1], &dirstream, 1);
+	fd = btrfs_open_dir(argv[optind + 1]);
 	if (fd < 0) {
 		ret = 12;
 		goto out;
@@ -247,7 +247,6 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 		u64 offset = inodes->val[i+1];
 		u64 root = inodes->val[i+2];
 		int path_fd;
-		DIR *dirs = NULL;
 
 		if (getpath) {
 			char mount_path[PATH_MAX];
@@ -260,7 +259,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 			if (name[0] == 0) {
 				path_ptr[-1] = '\0';
 				path_fd = fd;
-				strncpy(mount_path, full_path, PATH_MAX);
+				strncpy_null(mount_path, full_path, PATH_MAX);
 			} else {
 				char *mounted = NULL;
 				char subvol[PATH_MAX];
@@ -293,10 +292,10 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 					continue;
 				}
 
-				strncpy(mount_path, mounted, PATH_MAX);
+				strncpy_null(mount_path, mounted, PATH_MAX);
 				free(mounted);
 
-				path_fd = btrfs_open_dir(mount_path, &dirs, 1);
+				path_fd = btrfs_open_dir(mount_path);
 				if (path_fd < 0) {
 					ret = -ENOENT;
 					goto out;
@@ -304,7 +303,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 			}
 			ret = __ino_to_path_fd(inum, path_fd, mount_path);
 			if (path_fd != fd)
-				close_file_or_dir(path_fd, dirs);
+				close(path_fd);
 		} else {
 			pr_verbose(LOG_DEFAULT, "inode %llu offset %llu root %llu\n", inum,
 				offset, root);
@@ -312,7 +311,7 @@ static int cmd_inspect_logical_resolve(const struct cmd_struct *cmd,
 	}
 
 out:
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	free(inodes);
 	return !!ret;
 }
@@ -331,14 +330,13 @@ static int cmd_inspect_subvolid_resolve(const struct cmd_struct *cmd,
 	int fd = -1;
 	u64 subvol_id;
 	char path[PATH_MAX];
-	DIR *dirstream = NULL;
 
 	clean_args_no_options(cmd, argc, argv);
 
 	if (check_argc_exact(argc - optind, 2))
 		return 1;
 
-	fd = btrfs_open_dir(argv[optind + 1], &dirstream, 1);
+	fd = btrfs_open_dir(argv[optind + 1]);
 	if (fd < 0) {
 		ret = -ENOENT;
 		goto out;
@@ -356,7 +354,7 @@ static int cmd_inspect_subvolid_resolve(const struct cmd_struct *cmd,
 	pr_verbose(LOG_DEFAULT, "%s\n", path);
 
 out:
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	return !!ret;
 }
 static DEFINE_SIMPLE_COMMAND(inspect_subvolid_resolve, "subvolid-resolve");
@@ -373,14 +371,13 @@ static int cmd_inspect_rootid(const struct cmd_struct *cmd,
 	int ret;
 	int fd = -1;
 	u64 rootid;
-	DIR *dirstream = NULL;
 
 	clean_args_no_options(cmd, argc, argv);
 
 	if (check_argc_exact(argc - optind, 1))
 		return 1;
 
-	fd = btrfs_open_file_or_dir(argv[optind], &dirstream, 1);
+	fd = btrfs_open_file_or_dir(argv[optind]);
 	if (fd < 0) {
 		ret = -ENOENT;
 		goto out;
@@ -395,7 +392,7 @@ static int cmd_inspect_rootid(const struct cmd_struct *cmd,
 
 	pr_verbose(LOG_DEFAULT, "%llu\n", rootid);
 out:
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 
 	return !!ret;
 }
@@ -564,19 +561,20 @@ static int print_min_dev_size(int fd, u64 devid)
 	 * ignore it here.
 	 */
 	u64 min_size = SZ_1M;
-	struct btrfs_ioctl_search_args args;
-	struct btrfs_ioctl_search_key *sk = &args.key;
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	u64 last_pos = (u64)-1;
 	LIST_HEAD(extents);
 	LIST_HEAD(holes);
 
 	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
 	sk->tree_id = BTRFS_DEV_TREE_OBJECTID;
 	sk->min_objectid = devid;
-	sk->max_objectid = devid;
-	sk->max_type = BTRFS_DEV_EXTENT_KEY;
 	sk->min_type = BTRFS_DEV_EXTENT_KEY;
 	sk->min_offset = 0;
+	sk->max_objectid = devid;
+	sk->max_type = BTRFS_DEV_EXTENT_KEY;
 	sk->max_offset = (u64)-1;
 	sk->min_transid = 0;
 	sk->max_transid = (u64)-1;
@@ -584,10 +582,9 @@ static int print_min_dev_size(int fd, u64 devid)
 
 	while (1) {
 		int i;
-		struct btrfs_ioctl_search_header *sh;
 		unsigned long off = 0;
 
-		ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
+		ret = btrfs_tree_search_ioctl(fd, &args);
 		if (ret < 0) {
 			error("tree search ioctl: %m");
 			ret = 1;
@@ -599,32 +596,29 @@ static int print_min_dev_size(int fd, u64 devid)
 
 		for (i = 0; i < sk->nr_items; i++) {
 			struct btrfs_dev_extent *extent;
+			struct btrfs_ioctl_search_header sh;
 			u64 len;
 
-			sh = (struct btrfs_ioctl_search_header *)(args.buf +
-								  off);
-			off += sizeof(*sh);
-			extent = (struct btrfs_dev_extent *)(args.buf + off);
-			off += btrfs_search_header_len(sh);
+			memcpy(&sh, btrfs_tree_search_data(&args, off), sizeof(sh));
+			off += sizeof(sh);
+			extent = btrfs_tree_search_data(&args, off);
+			off += sh.len;
 
-			sk->min_objectid = btrfs_search_header_objectid(sh);
-			sk->min_type = btrfs_search_header_type(sh);
-			sk->min_offset = btrfs_search_header_offset(sh) + 1;
+			sk->min_objectid = sh.objectid;
+			sk->min_type = sh.type;
+			sk->min_offset = sh.offset + 1;
 
-			if (btrfs_search_header_objectid(sh) != devid ||
-			    btrfs_search_header_type(sh) != BTRFS_DEV_EXTENT_KEY)
+			if (sh.objectid != devid || sh.type != BTRFS_DEV_EXTENT_KEY)
 				continue;
 
 			len = btrfs_stack_dev_extent_length(extent);
 			min_size += len;
-			ret = add_dev_extent(&extents,
-				btrfs_search_header_offset(sh),
-				btrfs_search_header_offset(sh) + len - 1, 0);
+			ret = add_dev_extent(&extents, sh.offset,
+					     sh.offset + len - 1, 0);
 
-			if (!ret && last_pos != (u64)-1 &&
-			    last_pos != btrfs_search_header_offset(sh))
+			if (!ret && last_pos != (u64)-1 && last_pos != sh.offset)
 				ret = add_dev_extent(&holes, last_pos,
-					btrfs_search_header_offset(sh) - 1, 1);
+						     sh.offset - 1, 1);
 			if (ret) {
 				errno = -ret;
 				error("add device extent: %m");
@@ -632,7 +626,7 @@ static int print_min_dev_size(int fd, u64 devid)
 				goto out;
 			}
 
-			last_pos = btrfs_search_header_offset(sh) + len;
+			last_pos = sh.offset + len;
 		}
 
 		if (sk->min_type != BTRFS_DEV_EXTENT_KEY ||
@@ -655,7 +649,6 @@ static int cmd_inspect_min_dev_size(const struct cmd_struct *cmd,
 {
 	int ret;
 	int fd = -1;
-	DIR *dirstream = NULL;
 	u64 devid = 1;
 
 	optind = 0;
@@ -682,39 +675,35 @@ static int cmd_inspect_min_dev_size(const struct cmd_struct *cmd,
 	if (check_argc_exact(argc - optind, 1))
 		return 1;
 
-	fd = btrfs_open_dir(argv[optind], &dirstream, 1);
+	fd = btrfs_open_dir(argv[optind]);
 	if (fd < 0) {
 		ret = -ENOENT;
 		goto out;
 	}
 
 	ret = print_min_dev_size(fd, devid);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 out:
 	return !!ret;
 }
 static DEFINE_SIMPLE_COMMAND(inspect_min_dev_size, "min-dev-size");
 
-#if EXPERIMENTAL
-
 static const char * const cmd_inspect_list_chunks_usage[] = {
 	"btrfs inspect-internal list-chunks [options] <path>",
-	"Show chunks (block groups) layout",
-	"Show chunks (block groups) layout for all devices",
+	"Enumerate chunks on all devices",
+	"Enumerate chunks on all devices. Chunks are the physical storage tied to a device,",
+	"striped profiles they appear multiple times for a ginve logical offset, on other",
+	"profiles the correspondence is 1:1 or 1:N.",
 	"",
 	HELPINFO_UNITS_LONG,
-	OPTLINE("--sort MODE", "sort by a column ascending (default: pstart),\n"
-			"MODE can be one of:\n"
-			"pstart - physical offset, grouped by device\n"
+	OPTLINE("--sort MODE", "sort by a column (ascending):\n"
+			"MODE is a coma separated list of:\n"
+			"devid - by device id (default, with pstart)\n"
+			"pstart - physical start\n"
 			"lstart - logical offset\n"
-			"usage - by chunk usage (implies --usage)\n"
-			"length_p - by chunk length, secondary by physical offset\n"
-			"length_l - by chunk length, secondary by logical offset"
+			"usage  - by chunk usage\n"
+			"length - by chunk length"
 	       ),
-	OPTLINE("--usage", "show usage per block group (note: this can be slow)"),
-	OPTLINE("--no-usage", "don't show usage per block group"),
-	OPTLINE("--empty", "show empty space between block groups"),
-	OPTLINE("--no-empty", "do not show empty space between block groups"),
 	NULL
 };
 
@@ -726,7 +715,7 @@ struct list_chunks_entry {
 	u64 flags;
 	u64 lnumber;
 	u64 used;
-	u32 number;
+	u64 pnumber;
 };
 
 struct list_chunks_ctx {
@@ -735,7 +724,19 @@ struct list_chunks_ctx {
 	struct list_chunks_entry *stats;
 };
 
-static int cmp_cse_devid_start(const void *va, const void *vb)
+static int cmp_cse_devid(const void *va, const void *vb)
+{
+	const struct list_chunks_entry *a = va;
+	const struct list_chunks_entry *b = vb;
+
+	if (a->devid < b->devid)
+		return -1;
+	if (a->devid > b->devid)
+		return 1;
+	return 0;
+}
+
+static int cmp_cse_devid_pstart(const void *va, const void *vb)
 {
 	const struct list_chunks_entry *a = va;
 	const struct list_chunks_entry *b = vb;
@@ -747,38 +748,37 @@ static int cmp_cse_devid_start(const void *va, const void *vb)
 
 	if (a->start < b->start)
 		return -1;
-	if (a->start == b->start) {
-		error(
-	"chunks start on same offset in the same device: devid %llu start %llu",
-		    a->devid, a->start);
+	if (a->start == b->start)
 		return 0;
-	}
 	return 1;
 }
 
-static int cmp_cse_devid_lstart(const void *va, const void *vb)
+static int cmp_cse_pstart(const void *va, const void *vb)
 {
 	const struct list_chunks_entry *a = va;
 	const struct list_chunks_entry *b = vb;
 
-	if (a->devid < b->devid)
+	if (a->start < b->start)
 		return -1;
-	if (a->devid > b->devid)
-		return 1;
+	if (a->start == b->start)
+		return 0;
+	return 1;
+}
+
+static int cmp_cse_lstart(const void *va, const void *vb)
+{
+	const struct list_chunks_entry *a = va;
+	const struct list_chunks_entry *b = vb;
 
 	if (a->lstart < b->lstart)
 		return -1;
-	if (a->lstart == b->lstart) {
-		error(
-"chunks logically start on same offset in the same device: devid %llu start %llu",
-		    a->devid, a->lstart);
+	if (a->lstart == b->lstart)
 		return 0;
-	}
 	return 1;
 }
 
 /* Compare entries by usage percent, descending. */
-static int cmp_cse_devid_usage(const void *va, const void *vb)
+static int cmp_cse_usage(const void *va, const void *vb)
 {
 	const struct list_chunks_entry *a = va;
 	const struct list_chunks_entry *b = vb;
@@ -793,7 +793,7 @@ static int cmp_cse_devid_usage(const void *va, const void *vb)
 	return 0;
 }
 
-static int cmp_cse_length_physical(const void *va, const void *vb)
+static int cmp_cse_length(const void *va, const void *vb)
 {
 	const struct list_chunks_entry *a = va;
 	const struct list_chunks_entry *b = vb;
@@ -802,173 +802,126 @@ static int cmp_cse_length_physical(const void *va, const void *vb)
 		return -1;
 	if (a->length > b->length)
 		return 1;
-
-	if (a->start < b->start)
-		return -1;
-	if (a->start > b->start)
-		return 1;
 	return 0;
 }
 
-static int cmp_cse_length_logical(const void *va, const void *vb)
-{
-	const struct list_chunks_entry *a = va;
-	const struct list_chunks_entry *b = vb;
-
-	if (a->length < b->length)
-		return -1;
-	if (a->length > b->length)
-		return 1;
-
-	if (a->lstart < b->lstart)
-		return -1;
-	if (a->lstart > b->lstart)
-		return 1;
-	return 0;
-}
-
-static int print_list_chunks(struct list_chunks_ctx *ctx, const char* sortmode,
-			     unsigned unit_mode, bool with_usage, bool with_empty)
+static int print_list_chunks(struct list_chunks_ctx *ctx, const char *sortmode,
+			     unsigned unit_mode)
 {
 	u64 devid;
 	struct list_chunks_entry e;
 	struct string_table *table;
+	int col_count, col;
 	int i;
-	int chidx;
-	u64 lastend;
 	u64 number;
-	u32 gaps;
 	u32 tabidx;
-	static const struct sortdef sortit[] = {
-		{ .name = "pstart", .comp = (sort_cmp_t)cmp_cse_devid_start,
-		  .desc = "sort by physical srart offset, group by device" },
-		{ .name = "lstart", .comp = (sort_cmp_t)cmp_cse_devid_lstart,
-		  .desc = "sort by logical offset" },
-		{ .name = "usage", .comp = (sort_cmp_t)cmp_cse_devid_usage,
-		  .desc = "sort by chunk usage" },
-		{ .name = "length_p", .comp = (sort_cmp_t)cmp_cse_length_physical,
-		  .desc = "sort by lentgh, secondary by physical offset" },
-		{ .name = "length_l", .comp = (sort_cmp_t)cmp_cse_length_logical,
-		  .desc = "sort by lentgh, secondary by logical offset" },
-	};
 	enum {
 		CHUNK_SORT_PSTART,
 		CHUNK_SORT_LSTART,
 		CHUNK_SORT_USAGE,
-		CHUNK_SORT_LENGTH_P,
-		CHUNK_SORT_LENGTH_L,
+		CHUNK_SORT_LENGTH,
 		CHUNK_SORT_DEFAULT = CHUNK_SORT_PSTART
 	};
-	unsigned int sort_mode;
+	static const struct sortdef sortit[] = {
+		{ .name = "devid", .comp = (sort_cmp_t)cmp_cse_devid,
+		  .desc = "sort by device id (default, with pstart)",
+		  .id = CHUNK_SORT_PSTART
+		},
+		{ .name = "pstart", .comp = (sort_cmp_t)cmp_cse_pstart,
+		  .desc = "sort by physical start offset",
+		  .id = CHUNK_SORT_PSTART
+		},
+		{ .name = "lstart", .comp = (sort_cmp_t)cmp_cse_lstart,
+		  .desc = "sort by logical offset",
+		  .id = CHUNK_SORT_LSTART
+		},
+		{ .name = "usage", .comp = (sort_cmp_t)cmp_cse_usage,
+		  .desc = "sort by chunk usage",
+		  .id = CHUNK_SORT_USAGE
+		},
+		{ .name = "length", .comp = (sort_cmp_t)cmp_cse_length,
+		  .desc = "sort by length",
+		  .id = CHUNK_SORT_LENGTH
+		},
+		SORTDEF_END
+	};
+	const char *tmp;
 	struct compare comp;
+	int id;
 
-	if (!sortmode) {
-		sort_mode = CHUNK_SORT_DEFAULT;
-		sortmode = "pstart";
-	} else if (strcmp(sortmode, "pstart") == 0) {
-		sort_mode = CHUNK_SORT_PSTART;
-	} else if (strcmp(sortmode, "lstart") == 0) {
-		sort_mode = CHUNK_SORT_LSTART;
-	} else if (strcmp(sortmode, "usage") == 0) {
-		sort_mode = CHUNK_SORT_USAGE;
-		with_usage = true;
-	} else if (strcmp(sortmode, "length_p") == 0) {
-		sort_mode = CHUNK_SORT_LENGTH_P;
-	} else if (strcmp(sortmode, "length_l") == 0) {
-		sort_mode = CHUNK_SORT_LENGTH_L;
-	} else {
-		error("unknown sort mode: %s", sortmode);
-		exit(1);
-	}
+	compare_init(&comp, sortit);
+
+	tmp = sortmode;
+	do {
+		id = compare_parse_key_to_id(&comp, &tmp);
+		if (id == -1) {
+			error("unknown sort key: %s", tmp);
+			return 1;
+		}
+		compare_add_sort_id(&comp, id);
+	} while (id >= 0);
 
 	/*
 	 * Chunks are sorted logically as found by the ioctl, we need to sort
 	 * them once to find the physical ordering. This is the default mode.
 	 */
-	qsort(ctx->stats, ctx->length, sizeof(ctx->stats[0]), cmp_cse_devid_start);
+	qsort(ctx->stats, ctx->length, sizeof(ctx->stats[0]), cmp_cse_devid_pstart);
 	devid = 0;
 	number = 0;
-	gaps = 0;
-	lastend = 0;
 	for (i = 0; i < ctx->length; i++) {
 		e = ctx->stats[i];
 		if (e.devid != devid) {
 			devid = e.devid;
 			number = 0;
 		}
-		ctx->stats[i].number = number;
-		number++;
-		if (with_empty && sort_mode == CHUNK_SORT_PSTART && e.start != lastend)
-			gaps++;
-		lastend = e.start + e.length;
+		ctx->stats[i].pnumber = number++;
 	}
 
-	compare_init(&comp, sortit);
-	compare_add_sort_key(&comp, sortmode);
-	qsort_r(ctx->stats, ctx->length, sizeof(ctx->stats[0]), (sort_r_cmp_t)compare_cmp_multi,
-		&comp);
+	/* Skip additional sort if nothing defined by user. */
+	if (comp.count > 0)
+		qsort_r(ctx->stats, ctx->length, sizeof(ctx->stats[0]),
+			(sort_r_cmp_t)compare_cmp_multi, &comp);
 
-	/* Optional usage, two rows for header and separator, gaps */
-	table = table_create(7 + (int)with_usage, 2 + ctx->length + gaps);
+	col_count = 9;
+	/* Two rows for header and separator. */
+	table = table_create(col_count, 2 + ctx->length);
 	if (!table) {
 		error_msg(ERROR_MSG_MEMORY, NULL);
 		return 1;
 	}
-	devid = 0;
+	/* Print header */
+	col = 0;
 	tabidx = 0;
-	chidx = 1;
+	table_printf(table, col++, tabidx, ">Devid");
+	table_printf(table, col++, tabidx, ">PNumber");
+	table_printf(table, col++, tabidx, ">Type/profile");
+	table_printf(table, col++, tabidx, ">PStart");
+	table_printf(table, col++, tabidx, ">Length");
+	table_printf(table, col++, tabidx, ">PEnd");
+	table_printf(table, col++, tabidx, ">LNumber");
+	table_printf(table, col++, tabidx, ">LStart");
+	table_printf(table, col++, tabidx, ">Usage%%");
+	for (int j = 0; j < col_count; j++)
+		table_printf(table, j, tabidx + 1, "*-");
+
+	tabidx = 2;
+	devid = 0;
 	for (i = 0; i < ctx->length; i++) {
 		e = ctx->stats[i];
-		/* TODO: print header and devid */
-		if (e.devid != devid) {
-			int j;
-
+		if (e.devid != devid)
 			devid = e.devid;
-			table_printf(table, 0, tabidx, ">Number");
-			table_printf(table, 1, tabidx, ">Type/profile");
-			table_printf(table, 2, tabidx, ">PStart");
-			table_printf(table, 3, tabidx, ">Length");
-			table_printf(table, 4, tabidx, ">PEnd");
-			table_printf(table, 5, tabidx, ">LNumber");
-			table_printf(table, 6, tabidx, ">LStart");
-			if (with_usage) {
-				table_printf(table, 7, tabidx, ">Usage%%");
-				table_printf(table, 7, tabidx + 1, "*-");
-			}
-			for (j = 0; j < 7; j++)
-				table_printf(table, j, tabidx + 1, "*-");
-
-			chidx = 1;
-			lastend = 0;
-			tabidx += 2;
-		}
-		if (with_empty && sort_mode == CHUNK_SORT_PSTART && e.start != lastend) {
-			table_printf(table, 0, tabidx, ">-");
-			table_printf(table, 1, tabidx, ">%s", "empty");
-			table_printf(table, 2, tabidx, ">-");
-			table_printf(table, 3, tabidx, ">%s",
-				pretty_size_mode(e.start - lastend, unit_mode));
-			table_printf(table, 4, tabidx, ">-");
-			table_printf(table, 5, tabidx, ">-");
-			table_printf(table, 6, tabidx, ">-");
-			if (with_usage)
-				table_printf(table, 7, tabidx, ">-");
-			tabidx++;
-		}
-
-		table_printf(table, 0, tabidx, ">%llu", chidx++);
-		table_printf(table, 1, tabidx, ">%10s/%-6s",
+		col = 0;
+		table_printf(table, col++, tabidx, ">%llu", e.devid);
+		table_printf(table, col++, tabidx, ">%llu", e.pnumber + 1);
+		table_printf(table, col++, tabidx, ">%10s/%-6s",
 				btrfs_group_type_str(e.flags),
 				btrfs_group_profile_str(e.flags));
-		table_printf(table, 2, tabidx, ">%s", pretty_size_mode(e.start, unit_mode));
-		table_printf(table, 3, tabidx, ">%s", pretty_size_mode(e.length, unit_mode));
-		table_printf(table, 4, tabidx, ">%s", pretty_size_mode(e.start + e.length, unit_mode));
-		table_printf(table, 5, tabidx, ">%llu", e.lnumber + 1);
-		table_printf(table, 6, tabidx, ">%s", pretty_size_mode(e.lstart, unit_mode));
-		if (with_usage)
-			table_printf(table, 7, tabidx, ">%6.2f",
-					(float)e.used / e.length * 100);
-		lastend = e.start + e.length;
+		table_printf(table, col++, tabidx, ">%s", pretty_size_mode(e.start, unit_mode));
+		table_printf(table, col++, tabidx, ">%s", pretty_size_mode(e.length, unit_mode));
+		table_printf(table, col++, tabidx, ">%s", pretty_size_mode(e.start + e.length, unit_mode));
+		table_printf(table, col++, tabidx, ">%llu", e.lnumber + 1);
+		table_printf(table, col++, tabidx, ">%s", pretty_size_mode(e.lstart, unit_mode));
+		table_printf(table, col++, tabidx, ">%6.2f", (float)e.used / e.length * 100);
 		tabidx++;
 	}
 	table_dump(table);
@@ -979,24 +932,24 @@ static int print_list_chunks(struct list_chunks_ctx *ctx, const char* sortmode,
 
 static u64 fill_usage(int fd, u64 lstart)
 {
-	struct btrfs_ioctl_search_args args;
-	struct btrfs_ioctl_search_key *sk = &args.key;
-	struct btrfs_ioctl_search_header sh;
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	struct btrfs_block_group_item *item;
 	int ret;
 
 	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
 	sk->tree_id = BTRFS_EXTENT_TREE_OBJECTID;
 	sk->min_objectid = lstart;
-	sk->max_objectid = lstart;
 	sk->min_type = BTRFS_BLOCK_GROUP_ITEM_KEY;
-	sk->max_type = BTRFS_BLOCK_GROUP_ITEM_KEY;
 	sk->min_offset = 0;
+	sk->max_objectid = lstart;
+	sk->max_type = BTRFS_BLOCK_GROUP_ITEM_KEY;
 	sk->max_offset = (u64)-1;
 	sk->max_transid = (u64)-1;
 	sk->nr_items = 1;
 
-	ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
+	ret = btrfs_tree_search_ioctl(fd, &args);
 	if (ret < 0) {
 		error("cannot perform the search: %m");
 		return 1;
@@ -1008,8 +961,8 @@ static u64 fill_usage(int fd, u64 lstart)
 	if (sk->nr_items > 1)
 		warning("found more than one blockgroup %llu", lstart);
 
-	memcpy(&sh, args.buf, sizeof(sh));
-	item = (struct btrfs_block_group_item*)(args.buf + sizeof(sh));
+	/* Only one item, we don't need search header. */
+	item = btrfs_tree_search_data(&args, sizeof(struct btrfs_ioctl_search_header));
 
 	return item->used;
 }
@@ -1017,20 +970,16 @@ static u64 fill_usage(int fd, u64 lstart)
 static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 				   int argc, char **argv)
 {
-	struct btrfs_ioctl_search_args args;
-	struct btrfs_ioctl_search_key *sk = &args.key;
-	struct btrfs_ioctl_search_header sh;
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	unsigned long off = 0;
 	u64 *lnumber = NULL;
 	unsigned lnumber_size = 128;
 	int ret;
 	int fd;
 	int i;
-	DIR *dirstream = NULL;
 	unsigned unit_mode;
 	char *sortmode = NULL;
-	bool with_usage = true;
-	bool with_empty = true;
 	const char *path;
 	struct list_chunks_ctx ctx = {
 		.length = 0,
@@ -1043,15 +992,10 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 	while (1) {
 		int c;
 		enum { GETOPT_VAL_SORT = GETOPT_VAL_FIRST,
-		       GETOPT_VAL_USAGE, GETOPT_VAL_NO_USAGE,
 		       GETOPT_VAL_EMPTY, GETOPT_VAL_NO_EMPTY
 		};
 		static const struct option long_options[] = {
 			{"sort", required_argument, NULL, GETOPT_VAL_SORT },
-			{"usage", no_argument, NULL, GETOPT_VAL_USAGE },
-			{"no-usage", no_argument, NULL, GETOPT_VAL_NO_USAGE },
-			{"empty", no_argument, NULL, GETOPT_VAL_EMPTY },
-			{"no-empty", no_argument, NULL, GETOPT_VAL_NO_EMPTY },
 			{NULL, 0, NULL, 0}
 		};
 
@@ -1063,14 +1007,6 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 		case GETOPT_VAL_SORT:
 			free(sortmode);
 			sortmode = strdup(optarg);
-			break;
-		case GETOPT_VAL_USAGE:
-		case GETOPT_VAL_NO_USAGE:
-			with_usage = (c == GETOPT_VAL_USAGE);
-			break;
-		case GETOPT_VAL_EMPTY:
-		case GETOPT_VAL_NO_EMPTY:
-			with_empty = (c == GETOPT_VAL_EMPTY);
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -1084,22 +1020,23 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 	if (!ctx.stats) {
 		ret = 1;
 		error_msg(ERROR_MSG_MEMORY, NULL);
-		goto out_nomem;
+		goto out;
 	}
 
 	path = argv[optind];
 
-	fd = open_file_or_dir(path, &dirstream);
+	fd = btrfs_open_file_or_dir(path);
 	if (fd < 0) {
-	        error("cannot access '%s': %m", path);
-		return 1;
+		ret = 1;
+		goto out;
 	}
 
 	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
 	sk->tree_id = BTRFS_CHUNK_TREE_OBJECTID;
 	sk->min_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
-	sk->max_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
 	sk->min_type = BTRFS_CHUNK_ITEM_KEY;
+	sk->max_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
 	sk->max_type = BTRFS_CHUNK_ITEM_KEY;
 	sk->max_offset = (u64)-1;
 	sk->max_transid = (u64)-1;
@@ -1107,15 +1044,15 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 	if (!lnumber) {
 		ret = 1;
 		error_msg(ERROR_MSG_MEMORY, NULL);
-		goto out_nomem;
+		goto out;
 	}
 
 	while (1) {
 		sk->nr_items = 1;
-		ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
+		ret = btrfs_tree_search_ioctl(fd, &args);
 		if (ret < 0) {
 			error("cannot perform the search: %m");
-			return 1;
+			goto out;
 		}
 		if (sk->nr_items == 0)
 			break;
@@ -1124,12 +1061,13 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 		for (i = 0; i < sk->nr_items; i++) {
 			struct btrfs_chunk *item;
 			struct btrfs_stripe *stripes;
+			struct btrfs_ioctl_search_header sh;
 			int sidx;
 			u64 used = (u64)-1;
 
-			memcpy(&sh, args.buf + off, sizeof(sh));
+			memcpy(&sh, btrfs_tree_search_data(&args, off), sizeof(sh));
 			off += sizeof(sh);
-			item = (struct btrfs_chunk*)(args.buf + off);
+			item = btrfs_tree_search_data(&args, off);
 			off += sh.len;
 
 			stripes = &item->stripe;
@@ -1144,7 +1082,7 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 				e->lstart = sh.offset;
 				e->length = item->length;
 				e->flags = item->type;
-				e->number = -1;
+				e->pnumber = -1;
 				while (devid > lnumber_size) {
 					u64 *tmp;
 					unsigned old_size = lnumber_size;
@@ -1154,19 +1092,15 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 					if (!tmp) {
 						ret = 1;
 						error_msg(ERROR_MSG_MEMORY, NULL);
-						goto out_nomem;
+						goto out;
 					}
 					memcpy(tmp, lnumber, sizeof(u64) * old_size);
 					lnumber = tmp;
 				}
 				e->lnumber = lnumber[devid]++;
-				if (with_usage) {
-					if (used == (u64)-1)
-						used = fill_usage(fd, sh.offset);
-					e->used = used;
-				} else {
-					e->used = 0;
-				}
+				if (used == (u64)-1)
+					used = fill_usage(fd, sh.offset);
+				e->used = used;
 
 				ctx.length++;
 
@@ -1177,7 +1111,7 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 					if (!ctx.stats) {
 						ret = 1;
 						error_msg(ERROR_MSG_MEMORY, NULL);
-						goto out_nomem;
+						goto out;
 					}
 				}
 			}
@@ -1192,18 +1126,16 @@ static int cmd_inspect_list_chunks(const struct cmd_struct *cmd,
 			break;
 	}
 
-	ret = print_list_chunks(&ctx, sortmode, unit_mode, with_usage, with_empty);
-	close_file_or_dir(fd, dirstream);
+	ret = print_list_chunks(&ctx, sortmode, unit_mode);
+	close(fd);
 
-out_nomem:
+out:
 	free(ctx.stats);
 	free(lnumber);
 
 	return !!ret;
 }
 static DEFINE_SIMPLE_COMMAND(inspect_list_chunks, "list-chunks");
-
-#endif
 
 static const char * const cmd_inspect_map_swapfile_usage[] = {
 	"btrfs inspect-internal map-swapfile <file>",
@@ -1239,35 +1171,36 @@ struct chunk_tree {
 
 static int read_chunk_tree(int fd, struct chunk **chunks, size_t *num_chunks)
 {
-	struct btrfs_ioctl_search_args search = {
-		.key = {
-			.tree_id = BTRFS_CHUNK_TREE_OBJECTID,
-			.min_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID,
-			.min_type = BTRFS_CHUNK_ITEM_KEY,
-			.min_offset = 0,
-			.max_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID,
-			.max_type = BTRFS_CHUNK_ITEM_KEY,
-			.max_offset = (u64)-1,
-			.min_transid = 0,
-			.max_transid = (u64)-1,
-			.nr_items = 0,
-		},
-	};
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	size_t items_pos = 0, buf_off = 0;
 	size_t capacity = 0;
 	int ret;
 
+	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
+	sk->tree_id = BTRFS_CHUNK_TREE_OBJECTID;
+	sk->min_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
+	sk->min_type = BTRFS_CHUNK_ITEM_KEY;
+	sk->min_offset = 0;
+	sk->max_objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
+	sk->max_type = BTRFS_CHUNK_ITEM_KEY;
+	sk->max_offset = (u64)-1;
+	sk->min_transid = 0;
+	sk->max_transid = (u64)-1;
+	sk->nr_items = 0;
+
 	*chunks = NULL;
 	*num_chunks = 0;
 	for (;;) {
-		const struct btrfs_ioctl_search_header *header;
+		struct btrfs_ioctl_search_header sh;
 		const struct btrfs_chunk *item;
 		struct chunk *chunk;
 		size_t i;
 
-		if (items_pos >= search.key.nr_items) {
-			search.key.nr_items = 4096;
-			ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &search);
+		if (items_pos >= sk->nr_items) {
+			sk->nr_items = 4096;
+			ret = btrfs_tree_search_ioctl(fd, &args);
 			if (ret == -1) {
 				perror("BTRFS_IOC_TREE_SEARCH");
 				return -1;
@@ -1275,15 +1208,17 @@ static int read_chunk_tree(int fd, struct chunk **chunks, size_t *num_chunks)
 			items_pos = 0;
 			buf_off = 0;
 
-			if (search.key.nr_items == 0)
+			if (sk->nr_items == 0)
 				break;
 		}
 
-		header = (struct btrfs_ioctl_search_header *)(search.buf + buf_off);
-		if (header->type != BTRFS_CHUNK_ITEM_KEY)
+		memcpy(&sh, btrfs_tree_search_data(&args, buf_off), sizeof(sh));
+		buf_off += sizeof(sh);
+
+		if (sh.type != BTRFS_CHUNK_ITEM_KEY)
 			goto next;
 
-		item = (void *)(header + 1);
+		item = btrfs_tree_search_data(&args, buf_off);
 		if (*num_chunks >= capacity) {
 			struct chunk *tmp;
 
@@ -1300,14 +1235,13 @@ static int read_chunk_tree(int fd, struct chunk **chunks, size_t *num_chunks)
 		}
 
 		chunk = &(*chunks)[*num_chunks];
-		chunk->offset = header->offset;
-		chunk->length = le64_to_cpu(item->length);
-		chunk->stripe_len = le64_to_cpu(item->stripe_len);
-		chunk->type = le64_to_cpu(item->type);
-		chunk->num_stripes = le16_to_cpu(item->num_stripes);
-		chunk->sub_stripes = le16_to_cpu(item->sub_stripes);
-		chunk->stripes = calloc(chunk->num_stripes,
-					sizeof(*chunk->stripes));
+		chunk->offset = sh.offset;
+		chunk->length = get_unaligned_le64(&item->length);
+		chunk->stripe_len = get_unaligned_le64(&item->stripe_len);
+		chunk->type = get_unaligned_le64(&item->type);
+		chunk->num_stripes = get_unaligned_le16(&item->num_stripes);
+		chunk->sub_stripes = get_unaligned_le16(&item->sub_stripes);
+		chunk->stripes = calloc(chunk->num_stripes, sizeof(*chunk->stripes));
 		if (!chunk->stripes) {
 			perror("calloc");
 			return -1;
@@ -1318,17 +1252,17 @@ static int read_chunk_tree(int fd, struct chunk **chunks, size_t *num_chunks)
 			const struct btrfs_stripe *stripe;
 
 			stripe = &item->stripe + i;
-			chunk->stripes[i].devid = le64_to_cpu(stripe->devid);
-			chunk->stripes[i].offset = le64_to_cpu(stripe->offset);
+			chunk->stripes[i].devid = get_unaligned_le64(&stripe->devid);
+			chunk->stripes[i].offset = get_unaligned_le64(&stripe->offset);
 		}
 
 next:
 		items_pos++;
-		buf_off += sizeof(*header) + header->len;
-		if (header->offset == (u64)-1)
+		buf_off += sh.len;
+		if (sh.offset == (u64)-1)
 			break;
 		else
-			search.key.min_offset = header->offset + 1;
+			sk->min_offset = sh.offset + 1;
 	}
 	return 0;
 }
@@ -1358,18 +1292,9 @@ static struct chunk *find_chunk(struct chunk *chunks, size_t num_chunks, u64 log
 static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
 			      u64 *physical_start)
 {
-	struct btrfs_ioctl_search_args search = {
-		.key = {
-			.min_type = BTRFS_EXTENT_DATA_KEY,
-			.max_type = BTRFS_EXTENT_DATA_KEY,
-			.min_offset = 0,
-			.max_offset = (u64)-1,
-			.min_transid = 0,
-			.max_transid = (u64)-1,
-			.nr_items = 0,
-		},
-	};
-	struct btrfs_ioctl_ino_lookup_args args = {
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
+	struct btrfs_ioctl_ino_lookup_args ino_args = {
 		.treeid = 0,
 		.objectid = BTRFS_FIRST_FREE_OBJECTID,
 	};
@@ -1390,24 +1315,33 @@ static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
 		return -EINVAL;
 	}
 
-	ret = ioctl(fd, BTRFS_IOC_INO_LOOKUP, &args);
+	ret = ioctl(fd, BTRFS_IOC_INO_LOOKUP, &ino_args);
 	if (ret == -1) {
 		error("cannot lookup parent subvolume: %m");
 		return -errno;
 	}
 
-	search.key.tree_id = args.treeid;
-	search.key.min_objectid = search.key.max_objectid = st.st_ino;
+	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
+	sk->min_type = BTRFS_EXTENT_DATA_KEY;
+	sk->max_type = BTRFS_EXTENT_DATA_KEY;
+	sk->min_offset = 0;
+	sk->max_offset = (u64)-1;
+	sk->min_transid = 0;
+	sk->max_transid = (u64)-1;
+	sk->nr_items = 0;
+	sk->tree_id = ino_args.treeid;
+	sk->min_objectid = sk->max_objectid = st.st_ino;
 	for (;;) {
-		const struct btrfs_ioctl_search_header *header;
+		struct btrfs_ioctl_search_header sh;
 		const struct btrfs_file_extent_item *item;
 		u8 type;
 		u64 logical_offset = 0;
 		struct chunk *chunk = NULL;
 
-		if (items_pos >= search.key.nr_items) {
-			search.key.nr_items = 4096;
-			ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &search);
+		if (items_pos >= sk->nr_items) {
+			sk->nr_items = 4096;
+			ret = btrfs_tree_search_ioctl(fd, &args);
 			if (ret == -1) {
 				error("cannot search tree: %m");
 				return -errno;
@@ -1415,20 +1349,22 @@ static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
 			items_pos = 0;
 			buf_off = 0;
 
-			if (search.key.nr_items == 0)
+			if (sk->nr_items == 0)
 				break;
 		}
 
-		header = (struct btrfs_ioctl_search_header *)(search.buf + buf_off);
-		if (header->type != BTRFS_EXTENT_DATA_KEY)
+		memcpy(&sh, btrfs_tree_search_data(&args, buf_off), sizeof(sh));
+		buf_off += sizeof(sh);
+
+		if (sh.type != BTRFS_EXTENT_DATA_KEY)
 			goto next;
 
-		item = (void *)(header + 1);
+		item = btrfs_tree_search_data(&args, buf_off);
 
 		type = item->type;
 		if (type == BTRFS_FILE_EXTENT_REG ||
 		    type == BTRFS_FILE_EXTENT_PREALLOC) {
-			logical_offset = le64_to_cpu(item->disk_bytenr);
+			logical_offset = get_unaligned_le64(&item->disk_bytenr);
 			if (logical_offset) {
 				/* Regular extent */
 				chunk = find_chunk(chunks, num_chunks, logical_offset);
@@ -1462,7 +1398,7 @@ static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
 			goto out;
 		}
 		if (item->other_encoding != 0) {
-			error("file with other_encoding: %u", le16_to_cpu(item->other_encoding));
+			error("file with other_encoding: %u", get_unaligned_le16(&item->other_encoding));
 			ret = -EINVAL;
 			goto out;
 		}
@@ -1502,11 +1438,11 @@ static int map_physical_start(int fd, struct chunk *chunks, size_t num_chunks,
 
 next:
 		items_pos++;
-		buf_off += sizeof(*header) + header->len;
-		if (header->offset == (u64)-1)
+		buf_off += sh.len;
+		if (sh.offset == (u64)-1)
 			break;
 		else
-			search.key.min_offset = header->offset + 1;
+			sk->min_offset = sh.offset + 1;
 	}
 	return 0;
 
@@ -1626,9 +1562,7 @@ static const struct cmd_group inspect_cmd_group = {
 		&cmd_struct_inspect_dump_tree,
 		&cmd_struct_inspect_dump_super,
 		&cmd_struct_inspect_tree_stats,
-#if EXPERIMENTAL
 		&cmd_struct_inspect_list_chunks,
-#endif
 		NULL
 	}
 };

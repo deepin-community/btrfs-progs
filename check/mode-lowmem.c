@@ -44,6 +44,7 @@
 
 static u64 last_allocated_chunk;
 static u64 total_used = 0;
+static bool found_free_ino_cache = false;
 
 static int calc_extent_flag(struct btrfs_root *root, struct extent_buffer *eb,
 			    u64 *flags_ret)
@@ -838,8 +839,8 @@ static int find_dir_index(struct btrfs_root *root, u64 dirid, u64 location_id,
 
 	/* search from the last index */
 	key.objectid = dirid;
-	key.offset = (u64)-1;
 	key.type = BTRFS_DIR_INDEX_KEY;
+	key.offset = (u64)-1;
 
 	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
 	if (ret < 0)
@@ -2629,6 +2630,12 @@ static int check_inode_item(struct btrfs_root *root, struct btrfs_path *path)
 		return err;
 	}
 
+	if (inode_id == BTRFS_FREE_INO_OBJECTID) {
+		warning("subvolume %lld has deprecated inode cache",
+			root->root_key.objectid);
+		found_free_ino_cache = true;
+	}
+
 	is_orphan = has_orphan_item(root, inode_id);
 	ii = btrfs_item_ptr(node, slot, struct btrfs_inode_item);
 	isize = btrfs_inode_size(node, ii);
@@ -3351,6 +3358,31 @@ out_no_release:
 	return err;
 }
 
+static int read_inode_item(struct btrfs_root *root,
+			   u64 ino, struct btrfs_inode_item *ret_ii)
+{
+	struct btrfs_path path = { 0 };
+	struct btrfs_key key = {
+		.objectid = ino,
+		.type = BTRFS_INODE_ITEM_KEY,
+		.offset = 0
+	};
+	int ret;
+
+	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
+	if (ret > 0)
+		ret = -ENOENT;
+	if (ret < 0)
+		goto out;
+
+	read_extent_buffer(path.nodes[0], ret_ii,
+			   btrfs_item_ptr_offset(path.nodes[0], path.slots[0]),
+			   sizeof(*ret_ii));
+out:
+	btrfs_release_path(&path);
+	return ret;
+}
+
 /*
  * Check EXTENT_DATA item, mainly for its dbackref in extent tree
  *
@@ -3371,6 +3403,7 @@ static int check_extent_data_item(struct btrfs_root *root,
 	struct btrfs_extent_item *ei;
 	struct btrfs_extent_inline_ref *iref;
 	struct btrfs_extent_data_ref *dref;
+	struct btrfs_inode_item inode_item;
 	u64 owner;
 	u64 disk_bytenr;
 	u64 disk_num_bytes;
@@ -3399,6 +3432,24 @@ static int check_extent_data_item(struct btrfs_root *root,
 	disk_num_bytes = btrfs_file_extent_disk_num_bytes(eb, fi);
 	extent_num_bytes = btrfs_file_extent_num_bytes(eb, fi);
 	offset = btrfs_file_extent_offset(eb, fi);
+
+	/*
+	 * There is a regular/preallocated data extent. Make sure the owning
+	 * inode is not a symbolic link.
+	 * As symbolic links can only have inline data extents.
+	 */
+	ret = read_inode_item(root, fi_key.objectid, &inode_item);
+	if (ret < 0) {
+		errno = -ret;
+		error("failed to grab the inode item for inode %llu: %m",
+		      fi_key.objectid);
+		err |= INODE_ITEM_MISSING;
+	}
+	if (S_ISLNK(inode_item.mode)) {
+		error("symbolic link at root %lld ino %llu has regular/preallocated extents",
+		      root->root_key.objectid, fi_key.objectid);
+		err |= FILE_EXTENT_ERROR;
+	}
 
 	/* Check unaligned disk_bytenr, disk_num_bytes and num_bytes */
 	if (!IS_ALIGNED(disk_bytenr, gfs_info->sectorsize)) {
@@ -3864,8 +3915,8 @@ static int is_tree_reloc_root(struct extent_buffer *eb)
 	int ret = 0;
 
 	key.objectid = BTRFS_TREE_RELOC_OBJECTID;
-	key.offset = owner;
 	key.type = BTRFS_ROOT_ITEM_KEY;
+	key.offset = owner;
 
 	tree_reloc_root = btrfs_read_fs_root_no_cache(gfs_info, &key);
 	if (IS_ERR(tree_reloc_root))
@@ -4719,6 +4770,17 @@ static int check_chunk_item(struct extent_buffer *eb, int slot)
 	chunk = btrfs_item_ptr(eb, slot, struct btrfs_chunk);
 	length = btrfs_chunk_length(eb, chunk);
 	chunk_end = chunk_key.offset + length;
+	if (!IS_ALIGNED(chunk_key.offset, BTRFS_STRIPE_LEN) ||
+	    !IS_ALIGNED(length, BTRFS_STRIPE_LEN)) {
+		if (get_env_bool("BTRFS_PROGS_DEBUG_STRICT_CHUNK_ALIGNMENT")) {
+			error("chunk[%llu %llu) is not fully aligned to BTRFS_STRIPE_LEN (%u)",
+				chunk_key.offset, length, BTRFS_STRIPE_LEN);
+			err |= BYTES_UNALIGNED;
+			goto out;
+		}
+		warning("chunk[%llu %llu) is not fully aligned to BTRFS_STRIPE_LEN (%u)",
+			chunk_key.offset, length, BTRFS_STRIPE_LEN);
+	}
 	ret = btrfs_check_chunk_valid(eb, chunk, chunk_key.offset);
 	if (ret < 0) {
 		error("chunk[%llu %llu) is invalid", chunk_key.offset,
@@ -5472,8 +5534,8 @@ int check_fs_roots_lowmem(void)
 	int err = 0;
 
 	key.objectid = BTRFS_FS_TREE_OBJECTID;
-	key.offset = 0;
 	key.type = BTRFS_ROOT_ITEM_KEY;
+	key.offset = 0;
 
 	ret = btrfs_search_slot(NULL, tree_root, &key, &path, 0, 0);
 	if (ret < 0) {
@@ -5561,6 +5623,9 @@ next:
 
 out:
 	btrfs_release_path(&path);
+	if (found_free_ino_cache)
+		pr_verbose(LOG_DEFAULT,
+			   "deprecated inode cache can be removed by 'btrfs rescue clear-ino-cache'\n");
 	return err;
 }
 
@@ -5586,8 +5651,8 @@ int check_chunks_and_extents_lowmem(void)
 	err |= ret;
 
 	key.objectid = BTRFS_EXTENT_TREE_OBJECTID;
-	key.offset = 0;
 	key.type = BTRFS_ROOT_ITEM_KEY;
+	key.offset = 0;
 
 	ret = btrfs_search_slot(NULL, gfs_info->tree_root, &key, &path, 0, 0);
 	if (ret) {

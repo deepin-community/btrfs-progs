@@ -38,7 +38,7 @@ static bool is_root(void)
 }
 
 /*
- * This intentionally duplicates btrfs_util_is_subvolume_fd() instead of opening
+ * This intentionally duplicates btrfs_util_subvolume_is_valid_fd() instead of opening
  * a file descriptor and calling it, because fstat() and fstatfs() don't accept
  * file descriptors opened with O_PATH on old kernels (before v3.6 and before
  * v3.12, respectively), but stat() and statfs() can be called on a path that
@@ -70,6 +70,8 @@ PUBLIC enum btrfs_util_error btrfs_util_is_subvolume(const char *path)
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_is_valid(const char *path)
+LIBBTRFSUTIL_ALIAS(btrfs_util_is_subvolume);
 
 PUBLIC enum btrfs_util_error btrfs_util_is_subvolume_fd(int fd)
 {
@@ -97,6 +99,8 @@ PUBLIC enum btrfs_util_error btrfs_util_is_subvolume_fd(int fd)
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_is_valid_fd(int fd)
+LIBBTRFSUTIL_ALIAS(btrfs_util_is_subvolume_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_subvolume_id(const char *path,
 						     uint64_t *id_ret)
@@ -108,10 +112,12 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_id(const char *path,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_subvolume_id_fd(fd, id_ret);
+	err = btrfs_util_subvolume_get_id_fd(fd, id_ret);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_id(const char *path, uint64_t *id_ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_id);
 
 PUBLIC enum btrfs_util_error btrfs_util_subvolume_id_fd(int fd,
 							uint64_t *id_ret)
@@ -130,6 +136,8 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_id_fd(int fd,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_id_fd(int fd, uint64_t *id_ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_id_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_subvolume_path(const char *path,
 						       uint64_t id,
@@ -142,10 +150,12 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_path(const char *path,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_subvolume_path_fd(fd, id, path_ret);
+	err = btrfs_util_subvolume_get_path_fd(fd, id, path_ret);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_path(const char *path, uint64_t id, char **path_ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_path);
 
 PUBLIC enum btrfs_util_error btrfs_util_subvolume_path_fd(int fd, uint64_t id,
 							  char **path_ret)
@@ -156,11 +166,11 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_path_fd(int fd, uint64_t id,
 	if (id == 0) {
 		enum btrfs_util_error err;
 
-		err = btrfs_util_is_subvolume_fd(fd);
+		err = btrfs_util_subvolume_is_valid_fd(fd);
 		if (err)
 			return err;
 
-		err = btrfs_util_subvolume_id_fd(fd, &id);
+		err = btrfs_util_subvolume_get_id_fd(fd, &id);
 		if (err)
 			return err;
 	}
@@ -210,12 +220,12 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_path_fd(int fd, uint64_t id,
 		header = (struct btrfs_ioctl_search_header *)search.buf;
 		ref = (struct btrfs_root_ref *)(header + 1);
 		name = (char *)(ref + 1);
-		name_len = le16_to_cpu(ref->name_len);
+		name_len = get_unaligned_le16(&ref->name_len);
 
-		id = header->offset;
+		id = btrfs_search_header_offset(header);
 
 		lookup.treeid = id;
-		lookup.objectid = le64_to_cpu(ref->dirid);
+		lookup.objectid = get_unaligned_le64(&ref->dirid);
 		ret = ioctl(fd, BTRFS_IOC_INO_LOOKUP, &lookup);
 		if (ret == -1) {
 			free(path);
@@ -255,28 +265,30 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_path_fd(int fd, uint64_t id,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_path_fd(int fd, uint64_t id, char **path_ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_path_fd);
 
+/* The @timespec could be from a raw buffer, do not assume any alignment. */
 static void copy_timespec(struct timespec *timespec,
 			  const struct btrfs_timespec *btrfs_timespec)
 {
-	timespec->tv_sec = le64_to_cpu(btrfs_timespec->sec);
-	timespec->tv_nsec = le32_to_cpu(btrfs_timespec->nsec);
+	timespec->tv_sec = get_unaligned_le64(&btrfs_timespec->sec);
+	timespec->tv_nsec = get_unaligned_le32(&btrfs_timespec->nsec);
 }
 
+/* The @root could be from a raw search buffer, do not assume any alignment. */
 static void copy_root_item(struct btrfs_util_subvolume_info *subvol,
 			   const struct btrfs_root_item *root)
 {
-	subvol->flags = le64_to_cpu(root->flags);
+	subvol->flags = get_unaligned_le64(&root->flags);
 	memcpy(subvol->uuid, root->uuid, sizeof(subvol->uuid));
-	memcpy(subvol->parent_uuid, root->parent_uuid,
-	       sizeof(subvol->parent_uuid));
-	memcpy(subvol->received_uuid, root->received_uuid,
-	       sizeof(subvol->received_uuid));
-	subvol->generation = le64_to_cpu(root->generation);
-	subvol->ctransid = le64_to_cpu(root->ctransid);
-	subvol->otransid = le64_to_cpu(root->otransid);
-	subvol->stransid = le64_to_cpu(root->stransid);
-	subvol->rtransid = le64_to_cpu(root->rtransid);
+	memcpy(subvol->parent_uuid, root->parent_uuid, sizeof(subvol->parent_uuid));
+	memcpy(subvol->received_uuid, root->received_uuid, sizeof(subvol->received_uuid));
+	subvol->generation = get_unaligned_le64(&root->generation);
+	subvol->ctransid = get_unaligned_le64(&root->ctransid);
+	subvol->otransid = get_unaligned_le64(&root->otransid);
+	subvol->stransid = get_unaligned_le64(&root->stransid);
+	subvol->rtransid = get_unaligned_le64(&root->rtransid);
 	copy_timespec(&subvol->ctime, &root->ctime);
 	copy_timespec(&subvol->otime, &root->otime);
 	copy_timespec(&subvol->stime, &root->stime);
@@ -294,10 +306,13 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_info(const char *path,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_subvolume_info_fd(fd, id, subvol);
+	err = btrfs_util_subvolume_get_info_fd(fd, id, subvol);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_info(const char *path, uint64_t id,
+							   struct btrfs_util_subvolume_info *subvol)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_info);
 
 static enum btrfs_util_error get_subvolume_info_privileged(int fd, uint64_t id,
 							   struct btrfs_util_subvolume_info *subvol)
@@ -374,7 +389,7 @@ static enum btrfs_util_error get_subvolume_info_privileged(int fd, uint64_t id,
 
 				ref = (const struct btrfs_root_ref *)(header + 1);
 				subvol->parent_id = btrfs_search_header_offset(header);
-				subvol->dir_id = le64_to_cpu(ref->dirid);
+				subvol->dir_id = get_unaligned_le64(&ref->dirid);
 			}
 			need_root_backref = false;
 			search.key.min_type = UINT32_MAX;
@@ -432,14 +447,14 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_info_fd(int fd, uint64_t id,
 	enum btrfs_util_error err;
 
 	if (id == 0) {
-		err = btrfs_util_is_subvolume_fd(fd);
+		err = btrfs_util_subvolume_is_valid_fd(fd);
 		if (err)
 			return err;
 
 		if (!is_root())
 			return get_subvolume_info_unprivileged(fd, subvol);
 
-		err = btrfs_util_subvolume_id_fd(fd, &id);
+		err = btrfs_util_subvolume_get_id_fd(fd, &id);
 		if (err)
 			return err;
 	}
@@ -452,6 +467,9 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_info_fd(int fd, uint64_t id,
 
 	return get_subvolume_info_privileged(fd, id, subvol);
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_info_fd(int fd, uint64_t id,
+							      struct btrfs_util_subvolume_info *subvol)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_info_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_get_subvolume_read_only_fd(int fd,
 								   bool *read_only_ret)
@@ -466,6 +484,8 @@ PUBLIC enum btrfs_util_error btrfs_util_get_subvolume_read_only_fd(int fd,
 	*read_only_ret = flags & BTRFS_SUBVOL_RDONLY;
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_read_only_fd(int fd, bool *ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_get_subvolume_read_only_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_get_subvolume_read_only(const char *path,
 								bool *ret)
@@ -477,10 +497,12 @@ PUBLIC enum btrfs_util_error btrfs_util_get_subvolume_read_only(const char *path
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_get_subvolume_read_only_fd(fd, ret);
+	err = btrfs_util_subvolume_get_read_only_fd(fd, ret);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_read_only(const char *path, bool *ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_get_subvolume_read_only);
 
 PUBLIC enum btrfs_util_error btrfs_util_set_subvolume_read_only(const char *path,
 								bool read_only)
@@ -492,10 +514,12 @@ PUBLIC enum btrfs_util_error btrfs_util_set_subvolume_read_only(const char *path
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_set_subvolume_read_only_fd(fd, read_only);
+	err = btrfs_util_subvolume_set_read_only_fd(fd, read_only);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_set_read_only(const char *path, bool read_only)
+LIBBTRFSUTIL_ALIAS(btrfs_util_set_subvolume_read_only);
 
 PUBLIC enum btrfs_util_error btrfs_util_set_subvolume_read_only_fd(int fd,
 								   bool read_only)
@@ -518,6 +542,8 @@ PUBLIC enum btrfs_util_error btrfs_util_set_subvolume_read_only_fd(int fd,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_set_read_only_fd(int fd, bool read_only)
+LIBBTRFSUTIL_ALIAS(btrfs_util_set_subvolume_read_only_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_get_default_subvolume(const char *path,
 							      uint64_t *id_ret)
@@ -529,10 +555,12 @@ PUBLIC enum btrfs_util_error btrfs_util_get_default_subvolume(const char *path,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_get_default_subvolume_fd(fd, id_ret);
+	err = btrfs_util_subvolume_get_default_fd(fd, id_ret);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_default(const char *path, uint64_t *id_ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_get_default_subvolume);
 
 PUBLIC enum btrfs_util_error btrfs_util_get_default_subvolume_fd(int fd,
 								 uint64_t *id_ret)
@@ -572,27 +600,29 @@ PUBLIC enum btrfs_util_error btrfs_util_get_default_subvolume_fd(int fd,
 		}
 
 		header = (struct btrfs_ioctl_search_header *)(search.buf + buf_off);
-		if (header->type == BTRFS_DIR_ITEM_KEY) {
+		if (btrfs_search_header_type(header) == BTRFS_DIR_ITEM_KEY) {
 			const struct btrfs_dir_item *dir;
 			const char *name;
 			uint16_t name_len;
 
 			dir = (struct btrfs_dir_item *)(header + 1);
 			name = (const char *)(dir + 1);
-			name_len = le16_to_cpu(dir->name_len);
+			name_len = get_unaligned_le16(&dir->name_len);
 			if (strncmp(name, "default", name_len) == 0) {
-				*id_ret = le64_to_cpu(dir->location.objectid);
+				*id_ret = get_unaligned_le64(&dir->location.objectid);
 				break;
 			}
 		}
 
 		items_pos++;
-		buf_off += sizeof(*header) + header->len;
-		search.key.min_offset = header->offset + 1;
+		buf_off += sizeof(*header) + btrfs_search_header_len(header);
+		search.key.min_offset = btrfs_search_header_offset(header) + 1;
 	}
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_get_default_fd(int fd, uint64_t *id_ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_get_default_subvolume_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_set_default_subvolume(const char *path,
 							      uint64_t id)
@@ -604,10 +634,12 @@ PUBLIC enum btrfs_util_error btrfs_util_set_default_subvolume(const char *path,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_set_default_subvolume_fd(fd, id);
+	err = btrfs_util_subvolume_set_default_fd(fd, id);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_set_default(const char *path, uint64_t id)
+LIBBTRFSUTIL_ALIAS(btrfs_util_set_default_subvolume);
 
 PUBLIC enum btrfs_util_error btrfs_util_set_default_subvolume_fd(int fd,
 								 uint64_t id)
@@ -616,11 +648,11 @@ PUBLIC enum btrfs_util_error btrfs_util_set_default_subvolume_fd(int fd,
 	int ret;
 
 	if (id == 0) {
-		err = btrfs_util_is_subvolume_fd(fd);
+		err = btrfs_util_subvolume_is_valid_fd(fd);
 		if (err)
 			return err;
 
-		err = btrfs_util_subvolume_id_fd(fd, &id);
+		err = btrfs_util_subvolume_get_id_fd(fd, &id);
 		if (err)
 			return err;
 	}
@@ -631,6 +663,8 @@ PUBLIC enum btrfs_util_error btrfs_util_set_default_subvolume_fd(int fd,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_set_default_fd(int fd, uint64_t id)
+LIBBTRFSUTIL_ALIAS(btrfs_util_set_default_subvolume_fd);
 
 static enum btrfs_util_error openat_parent_and_name(int dirfd, const char *path,
 						    char *name, size_t name_len,
@@ -696,11 +730,15 @@ PUBLIC enum btrfs_util_error btrfs_util_create_subvolume(const char *path,
 	if (err)
 		return err;
 
-	err = btrfs_util_create_subvolume_fd(parent_fd, name, flags,
-					    unused, qgroup_inherit);
+	err = btrfs_util_subvolume_create_fd(parent_fd, name, flags,
+					     unused, qgroup_inherit);
 	SAVE_ERRNO_AND_CLOSE(parent_fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_create(const char *path, int flags,
+							 uint64_t *unused,
+							 struct btrfs_util_qgroup_inherit *qgroup_inherit)
+LIBBTRFSUTIL_ALIAS(btrfs_util_create_subvolume);
 
 PUBLIC enum btrfs_util_error btrfs_util_create_subvolume_fd(int parent_fd,
 							    const char *name,
@@ -739,8 +777,14 @@ PUBLIC enum btrfs_util_error btrfs_util_create_subvolume_fd(int parent_fd,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_create_fd(int parent_fd,
+							    const char *name,
+							    int flags,
+							    uint64_t *unused,
+							    struct btrfs_util_qgroup_inherit *qgroup_inherit)
+LIBBTRFSUTIL_ALIAS(btrfs_util_create_subvolume_fd);
 
-#define BTRFS_UTIL_SUBVOLUME_ITERATOR_CLOSE_FD (1 << 30)
+#define BTRFS_UTIL_SUBVOLUME_ITERATOR_CLOSE_FD (1U << 30)
 
 struct search_stack_entry {
 	union {
@@ -794,7 +838,7 @@ static enum btrfs_util_error check_expected_subvolume(int fd, int parent_fd,
 	int ret;
 
 	/* Make sure it's a subvolume. */
-	err = btrfs_util_is_subvolume_fd(fd);
+	err = btrfs_util_subvolume_is_valid_fd(fd);
 	if (err == BTRFS_UTIL_ERROR_NOT_BTRFS ||
 	    err == BTRFS_UTIL_ERROR_NOT_SUBVOLUME) {
 		errno = ENOENT;
@@ -816,7 +860,7 @@ static enum btrfs_util_error check_expected_subvolume(int fd, int parent_fd,
 	}
 
 	/* Make sure it's the subvolume that we expected. */
-	err = btrfs_util_subvolume_id_fd(fd, &id);
+	err = btrfs_util_subvolume_get_id_fd(fd, &id);
 	if (err)
 		return err;
 	if (id != tree_id) {
@@ -886,7 +930,8 @@ static enum btrfs_util_error append_to_search_stack(struct btrfs_util_subvolume_
 				return err;
 			}
 
-			close(iter->cur_fd);
+			if (iter->cur_fd != iter->fd)
+				close(iter->cur_fd);
 			iter->cur_fd = fd;
 		}
 	}
@@ -941,7 +986,7 @@ PUBLIC enum btrfs_util_error btrfs_util_create_subvolume_iterator(const char *pa
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_create_subvolume_iterator_fd(fd, top, flags, ret);
+	err = btrfs_util_subvolume_iter_create_fd(fd, top, flags, ret);
 	if (err)
 		SAVE_ERRNO_AND_CLOSE(fd);
 	else
@@ -949,6 +994,11 @@ PUBLIC enum btrfs_util_error btrfs_util_create_subvolume_iterator(const char *pa
 
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_iter_create(const char *path,
+							      uint64_t top,
+							      int flags,
+							      struct btrfs_util_subvolume_iterator **ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_create_subvolume_iterator);
 
 PUBLIC enum btrfs_util_error btrfs_util_create_subvolume_iterator_fd(int fd,
 								     uint64_t top,
@@ -966,11 +1016,11 @@ PUBLIC enum btrfs_util_error btrfs_util_create_subvolume_iterator_fd(int fd,
 
 	use_tree_search = top != 0 || is_root();
 	if (top == 0) {
-		err = btrfs_util_is_subvolume_fd(fd);
+		err = btrfs_util_subvolume_is_valid_fd(fd);
 		if (err)
 			return err;
 
-		err = btrfs_util_subvolume_id_fd(fd, &top);
+		err = btrfs_util_subvolume_get_id_fd(fd, &top);
 		if (err)
 			return err;
 	}
@@ -1016,6 +1066,11 @@ out_iter:
 	free(iter);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_iter_create_fd(int fd,
+								 uint64_t top,
+								 int flags,
+								 struct btrfs_util_subvolume_iterator **ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_create_subvolume_iterator_fd);
 
 static enum btrfs_util_error snapshot_subvolume_children(int fd, int parent_fd,
 							 const char *name)
@@ -1028,7 +1083,7 @@ static enum btrfs_util_error snapshot_subvolume_children(int fd, int parent_fd,
 	if (dstfd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_create_subvolume_iterator_fd(fd, 0, 0, &iter);
+	err = btrfs_util_subvolume_iter_create_fd(fd, 0, 0, &iter);
 	if (err)
 		goto out;
 
@@ -1037,8 +1092,7 @@ static enum btrfs_util_error snapshot_subvolume_children(int fd, int parent_fd,
 		char *child_path;
 		int child_fd, new_parent_fd;
 
-		err = btrfs_util_subvolume_iterator_next(iter, &child_path,
-							 NULL);
+		err = btrfs_util_subvolume_iter_next(iter, &child_path, NULL);
 		if (err) {
 			if (err == BTRFS_UTIL_ERROR_STOP_ITERATION)
 				err = BTRFS_UTIL_OK;
@@ -1068,16 +1122,15 @@ static enum btrfs_util_error snapshot_subvolume_children(int fd, int parent_fd,
 			break;
 		}
 
-		err = btrfs_util_create_snapshot_fd2(child_fd, new_parent_fd,
-						     child_name, 0,
-						     NULL, NULL);
+		err = btrfs_util_subvolume_snapshot_fd2(child_fd, new_parent_fd,
+							child_name, 0, NULL, NULL);
 		SAVE_ERRNO_AND_CLOSE(child_fd);
 		SAVE_ERRNO_AND_CLOSE(new_parent_fd);
 		if (err)
 			break;
 	}
 
-	btrfs_util_destroy_subvolume_iterator(iter);
+	btrfs_util_subvolume_iter_destroy(iter);
 out:
 	SAVE_ERRNO_AND_CLOSE(dstfd);
 	return err;
@@ -1096,11 +1149,15 @@ PUBLIC enum btrfs_util_error btrfs_util_create_snapshot(const char *source,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_create_snapshot_fd(fd, path, flags, unused,
-					    qgroup_inherit);
+	err = btrfs_util_subvolume_snapshot_fd(fd, path, flags, unused, qgroup_inherit);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_snapshot(const char *source,
+							   const char *path, int flags,
+							   uint64_t *unused,
+							   struct btrfs_util_qgroup_inherit *qgroup_inherit)
+LIBBTRFSUTIL_ALIAS(btrfs_util_create_snapshot);
 
 PUBLIC enum btrfs_util_error btrfs_util_create_snapshot_fd(int fd,
 							   const char *path,
@@ -1117,11 +1174,16 @@ PUBLIC enum btrfs_util_error btrfs_util_create_snapshot_fd(int fd,
 	if (err)
 		return err;
 
-	err = btrfs_util_create_snapshot_fd2(fd, parent_fd, name, flags,
-					     unused, qgroup_inherit);
+	err = btrfs_util_subvolume_snapshot_fd2(fd, parent_fd, name, flags,
+						unused, qgroup_inherit);
 	SAVE_ERRNO_AND_CLOSE(parent_fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_snapshot_fd(int fd, const char *path,
+							      int flags,
+							      uint64_t *unused,
+							      struct btrfs_util_qgroup_inherit *qgroup_inherit)
+LIBBTRFSUTIL_ALIAS(btrfs_util_create_snapshot_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_create_snapshot_fd2(int fd,
 							    int parent_fd,
@@ -1172,6 +1234,12 @@ PUBLIC enum btrfs_util_error btrfs_util_create_snapshot_fd2(int fd,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_snapshot_fd2(int fd, int parent_fd,
+							       const char *name,
+							       int flags,
+							       uint64_t *unused,
+							       struct btrfs_util_qgroup_inherit *qgroup_inherit)
+LIBBTRFSUTIL_ALIAS(btrfs_util_create_snapshot_fd2);
 
 static enum btrfs_util_error delete_subvolume_children(int parent_fd,
 						       const char *name)
@@ -1184,9 +1252,7 @@ static enum btrfs_util_error delete_subvolume_children(int parent_fd,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_create_subvolume_iterator_fd(fd, 0,
-						      BTRFS_UTIL_SUBVOLUME_ITERATOR_POST_ORDER,
-						      &iter);
+	err = btrfs_util_subvolume_iter_create_fd(fd, 0, BTRFS_UTIL_SUBVOLUME_ITERATOR_POST_ORDER, &iter);
 	if (err)
 		goto out;
 
@@ -1195,8 +1261,7 @@ static enum btrfs_util_error delete_subvolume_children(int parent_fd,
 		char *child_path;
 		int child_parent_fd;
 
-		err = btrfs_util_subvolume_iterator_next(iter, &child_path,
-							 NULL);
+		err = btrfs_util_subvolume_iter_next(iter, &child_path, NULL);
 		if (err) {
 			if (err == BTRFS_UTIL_ERROR_STOP_ITERATION)
 				err = BTRFS_UTIL_OK;
@@ -1210,14 +1275,13 @@ static enum btrfs_util_error delete_subvolume_children(int parent_fd,
 		if (err)
 			break;
 
-		err = btrfs_util_delete_subvolume_fd(child_parent_fd,
-						     child_name, 0);
+		err = btrfs_util_subvolume_delete_fd(child_parent_fd, child_name, 0);
 		SAVE_ERRNO_AND_CLOSE(child_parent_fd);
 		if (err)
 			break;
 	}
 
-	btrfs_util_destroy_subvolume_iterator(iter);
+	btrfs_util_subvolume_iter_destroy(iter);
 out:
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
@@ -1235,10 +1299,12 @@ PUBLIC enum btrfs_util_error btrfs_util_delete_subvolume(const char *path,
 	if (err)
 		return err;
 
-	err = btrfs_util_delete_subvolume_fd(parent_fd, name, flags);
+	err = btrfs_util_subvolume_delete_fd(parent_fd, name, flags);
 	SAVE_ERRNO_AND_CLOSE(parent_fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_delete(const char *path, int flags)
+LIBBTRFSUTIL_ALIAS(btrfs_util_delete_subvolume);
 
 PUBLIC enum btrfs_util_error btrfs_util_delete_subvolume_fd(int parent_fd,
 							    const char *name,
@@ -1274,6 +1340,10 @@ PUBLIC enum btrfs_util_error btrfs_util_delete_subvolume_fd(int parent_fd,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_delete_fd(int parent_fd,
+							    const char *name,
+							    int flags)
+LIBBTRFSUTIL_ALIAS(btrfs_util_delete_subvolume_fd);
 
 PUBLIC enum btrfs_util_error btrfs_util_delete_subvolume_by_id_fd(int parent_fd,
 							    uint64_t subvolid)
@@ -1290,6 +1360,8 @@ PUBLIC enum btrfs_util_error btrfs_util_delete_subvolume_by_id_fd(int parent_fd,
 
 	return BTRFS_UTIL_OK;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_delete_by_id_fd(int fd, uint64_t subvolid)
+LIBBTRFSUTIL_ALIAS(btrfs_util_delete_subvolume_by_id_fd);
 
 PUBLIC void btrfs_util_destroy_subvolume_iterator(struct btrfs_util_subvolume_iterator *iter)
 {
@@ -1303,11 +1375,15 @@ PUBLIC void btrfs_util_destroy_subvolume_iterator(struct btrfs_util_subvolume_it
 		free(iter);
 	}
 }
+PUBLIC void btrfs_util_subvolume_iter_destroy(struct btrfs_util_subvolume_iterator *iter)
+LIBBTRFSUTIL_ALIAS(btrfs_util_destroy_subvolume_iterator);
 
 PUBLIC int btrfs_util_subvolume_iterator_fd(const struct btrfs_util_subvolume_iterator *iter)
 {
 	return iter->fd;
 }
+PUBLIC int btrfs_util_subvolume_iterator_get_fd(const struct btrfs_util_subvolume_iterator *iter)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_iterator_fd);
 
 static enum btrfs_util_error build_subvol_path(struct btrfs_util_subvolume_iterator *iter,
 					       const char *name, size_t name_len,
@@ -1360,6 +1436,9 @@ static enum btrfs_util_error build_subvol_path(struct btrfs_util_subvolume_itera
 	return BTRFS_UTIL_OK;
 }
 
+/*
+ * The @ref could be from raw search buffer, do not assume any alignment
+ */
 static enum btrfs_util_error build_subvol_path_privileged(struct btrfs_util_subvolume_iterator *iter,
 							  const struct btrfs_ioctl_search_header *header,
 							  const struct btrfs_root_ref *ref,
@@ -1368,7 +1447,7 @@ static enum btrfs_util_error build_subvol_path_privileged(struct btrfs_util_subv
 {
 	struct btrfs_ioctl_ino_lookup_args lookup = {
 		.treeid = btrfs_search_header_objectid(header),
-		.objectid = le64_to_cpu(ref->dirid),
+		.objectid = get_unaligned_le64(&ref->dirid),
 	};
 	int ret;
 
@@ -1376,7 +1455,7 @@ static enum btrfs_util_error build_subvol_path_privileged(struct btrfs_util_subv
 	if (ret == -1)
 		return BTRFS_UTIL_ERROR_INO_LOOKUP_FAILED;
 
-	return build_subvol_path(iter, name, le16_to_cpu(ref->name_len),
+	return build_subvol_path(iter, name, get_unaligned_le16(&ref->name_len),
 				 lookup.name, strlen(lookup.name),
 				 path_len_ret);
 }
@@ -1586,6 +1665,10 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_iterator_next(struct btrfs_uti
 							    id_ret);
 	}
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_iter_next(struct btrfs_util_subvolume_iterator *iter,
+							     char **path_ret,
+							     uint64_t *id_ret)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_iterator_next);
 
 PUBLIC enum btrfs_util_error btrfs_util_subvolume_iterator_next_info(struct btrfs_util_subvolume_iterator *iter,
 								     char **path_ret,
@@ -1594,15 +1677,19 @@ PUBLIC enum btrfs_util_error btrfs_util_subvolume_iterator_next_info(struct btrf
 	enum btrfs_util_error err;
 	uint64_t id;
 
-	err = btrfs_util_subvolume_iterator_next(iter, path_ret, &id);
+	err = btrfs_util_subvolume_iter_next(iter, path_ret, &id);
 	if (err)
 		return err;
 
 	if (iter->use_tree_search)
-		return btrfs_util_subvolume_info_fd(iter->fd, id, subvol);
+		return btrfs_util_subvolume_get_info_fd(iter->fd, id, subvol);
 	else
-		return btrfs_util_subvolume_info_fd(iter->cur_fd, 0, subvol);
+		return btrfs_util_subvolume_get_info_fd(iter->cur_fd, 0, subvol);
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_iter_next_info(struct btrfs_util_subvolume_iterator *iter,
+								 char **path_ret,
+								 struct btrfs_util_subvolume_info *subvol)
+LIBBTRFSUTIL_ALIAS(btrfs_util_subvolume_iterator_next_info);
 
 PUBLIC enum btrfs_util_error btrfs_util_deleted_subvolumes(const char *path,
 							   uint64_t **ids,
@@ -1615,10 +1702,12 @@ PUBLIC enum btrfs_util_error btrfs_util_deleted_subvolumes(const char *path,
 	if (fd == -1)
 		return BTRFS_UTIL_ERROR_OPEN_FAILED;
 
-	err = btrfs_util_deleted_subvolumes_fd(fd, ids, n);
+	err = btrfs_util_subvolume_list_deleted_fd(fd, ids, n);
 	SAVE_ERRNO_AND_CLOSE(fd);
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_list_deleted(const char *path, uint64_t **ids, size_t *n)
+LIBBTRFSUTIL_ALIAS(btrfs_util_deleted_subvolumes);
 
 PUBLIC enum btrfs_util_error btrfs_util_deleted_subvolumes_fd(int fd,
 							      uint64_t **ids,
@@ -1647,6 +1736,7 @@ PUBLIC enum btrfs_util_error btrfs_util_deleted_subvolumes_fd(int fd,
 	*n = 0;
 	for (;;) {
 		const struct btrfs_ioctl_search_header *header;
+		struct btrfs_util_subvolume_info subvol;
 
 		if (items_pos >= search.key.nr_items) {
 			search.key.nr_items = 4096;
@@ -1668,7 +1758,7 @@ PUBLIC enum btrfs_util_error btrfs_util_deleted_subvolumes_fd(int fd,
 		 * The orphan item might be for a free space cache inode, so
 		 * check if there's a matching root item.
 		 */
-		err = btrfs_util_subvolume_info_fd(fd, header->offset, NULL);
+		err = btrfs_util_subvolume_get_info_fd(fd, btrfs_search_header_offset(header), &subvol);
 		if (!err) {
 			if (*n >= capacity) {
 				size_t new_capacity;
@@ -1685,14 +1775,14 @@ PUBLIC enum btrfs_util_error btrfs_util_deleted_subvolumes_fd(int fd,
 				*ids = new_ids;
 				capacity = new_capacity;
 			}
-			(*ids)[(*n)++] = header->offset;
+			(*ids)[(*n)++] = btrfs_search_header_offset(header);
 		} else if (err != BTRFS_UTIL_ERROR_SUBVOLUME_NOT_FOUND) {
 			goto out;
 		}
 
 		items_pos++;
-		buf_off += sizeof(*header) + header->len;
-		search.key.min_offset = header->offset + 1;
+		buf_off += sizeof(*header) + btrfs_search_header_len(header);
+		search.key.min_offset = btrfs_search_header_offset(header) + 1;
 	}
 
 	err = BTRFS_UTIL_OK;
@@ -1704,3 +1794,5 @@ out:
 	}
 	return err;
 }
+PUBLIC enum btrfs_util_error btrfs_util_subvolume_list_deleted_fd(int fd, uint64_t **ids, size_t *n)
+LIBBTRFSUTIL_ALIAS(btrfs_util_deleted_subvolumes_fd);

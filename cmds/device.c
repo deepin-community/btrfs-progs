@@ -26,7 +26,6 @@
 #include <dirent.h>
 #include <stdbool.h>
 #include "kernel-shared/zoned.h"
-#include "kernel-shared/volumes.h"
 #include "common/string-table.h"
 #include "common/utils.h"
 #include "common/help.h"
@@ -62,7 +61,6 @@ static int cmd_device_add(const struct cmd_struct *cmd,
 {
 	char	*mntpnt;
 	int i, fdmnt, ret = 0;
-	DIR	*dirstream = NULL;
 	bool discard = true;
 	bool force = false;
 	int last_dev;
@@ -75,7 +73,7 @@ static int cmd_device_add(const struct cmd_struct *cmd,
 		int c;
 		enum { GETOPT_VAL_ENQUEUE = GETOPT_VAL_FIRST };
 		static const struct option long_options[] = {
-			{ "nodiscard", optional_argument, NULL, 'K'},
+			{ "nodiscard", no_argument, NULL, 'K' },
 			{ "force", no_argument, NULL, 'f'},
 			{ "enqueue", no_argument, NULL, GETOPT_VAL_ENQUEUE},
 			{ NULL, 0, NULL, 0}
@@ -105,7 +103,7 @@ static int cmd_device_add(const struct cmd_struct *cmd,
 	last_dev = argc - 1;
 	mntpnt = argv[last_dev];
 
-	fdmnt = btrfs_open_dir(mntpnt, &dirstream, 1);
+	fdmnt = btrfs_open_dir(mntpnt);
 	if (fdmnt < 0)
 		return 1;
 
@@ -113,7 +111,7 @@ static int cmd_device_add(const struct cmd_struct *cmd,
 	if (ret != 0) {
 		if (ret < 0)
 			error("unable to check status of exclusive operation: %m");
-		close_file_or_dir(fdmnt, dirstream);
+		close(fdmnt);
 		return 1;
 	}
 
@@ -170,7 +168,7 @@ static int cmd_device_add(const struct cmd_struct *cmd,
 		}
 
 		memset(&ioctl_args, 0, sizeof(ioctl_args));
-		strncpy_null(ioctl_args.name, path);
+		strncpy_null(ioctl_args.name, path, sizeof(ioctl_args.name));
 		res = ioctl(fdmnt, BTRFS_IOC_ADD_DEV, &ioctl_args);
 		if (res < 0) {
 			error("error adding device '%s': %m", path);
@@ -181,7 +179,7 @@ static int cmd_device_add(const struct cmd_struct *cmd,
 
 error_out:
 	btrfs_warn_multiple_profiles(fdmnt);
-	close_file_or_dir(fdmnt, dirstream);
+	close(fdmnt);
 	return !!ret;
 }
 static DEFINE_SIMPLE_COMMAND(device_add, "add");
@@ -191,7 +189,6 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 {
 	char	*mntpnt;
 	int i, fdmnt, ret = 0;
-	DIR	*dirstream = NULL;
 	bool enqueue = false;
 	bool cancel = false;
 	bool force = false;
@@ -227,7 +224,7 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 
 	mntpnt = argv[argc - 1];
 
-	fdmnt = btrfs_open_dir(mntpnt, &dirstream, 1);
+	fdmnt = btrfs_open_dir(mntpnt);
 	if (fdmnt < 0)
 		return 1;
 
@@ -236,7 +233,7 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 		if (cancel) {
 			error("cancel requested but another device specified: %s\n",
 				argv[i]);
-			close_file_or_dir(fdmnt, dirstream);
+			close(fdmnt);
 			return 1;
 		}
 		if (strcmp("cancel", argv[i]) == 0) {
@@ -271,7 +268,7 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 			if (ret < 0)
 				error(
 			"unable to check status of exclusive operation: %m");
-			close_file_or_dir(fdmnt, dirstream);
+			close(fdmnt);
 			return 1;
 		}
 	}
@@ -289,7 +286,7 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 		} else if (strcmp(argv[i], "missing") == 0 ||
 			   cancel ||
 			   path_is_block_device(argv[i]) == 1) {
-			strncpy_null(argv2.name, argv[i]);
+			strncpy_null(argv2.name, argv[i], sizeof(argv2.name));
 		} else {
 			error("not a block device: %s", argv[i]);
 			ret++;
@@ -314,7 +311,7 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 				continue;
 			}
 			memset(&arg, 0, sizeof(arg));
-			strncpy_null(arg.name, argv[i]);
+			strncpy_null(arg.name, argv[i], sizeof(arg.name));
 			res = ioctl(fdmnt, BTRFS_IOC_RM_DEV, &arg);
 		}
 
@@ -337,7 +334,7 @@ static int _cmd_device_remove(const struct cmd_struct *cmd,
 	}
 
 	btrfs_warn_multiple_profiles(fdmnt);
-	close_file_or_dir(fdmnt, dirstream);
+	close(fdmnt);
 	return !!ret;
 }
 
@@ -398,7 +395,7 @@ static int btrfs_forget_devices(const char *path)
 
 	memset(&args, 0, sizeof(args));
 	if (path)
-		strncpy_null(args.name, path);
+		strncpy_null(args.name, path, sizeof(args.name));
 	ret = ioctl(fd, BTRFS_IOC_FORGET_DEV, &args);
 	if (ret)
 		ret = -errno;
@@ -559,7 +556,7 @@ static int cmd_device_ready(const struct cmd_struct *cmd, int argc, char **argv)
 	}
 
 	memset(&args, 0, sizeof(args));
-	strncpy_null(args.name, path);
+	strncpy_null(args.name, path, sizeof(args.name));
 	ret = ioctl(fd, BTRFS_IOC_DEVICES_READY, &args);
 	if (ret < 0) {
 		error("unable to determine if device '%s' is ready for mount: %m",
@@ -719,7 +716,6 @@ static int cmd_device_stats(const struct cmd_struct *cmd, int argc, char **argv)
 	bool free_table = false;
 	bool tabular = false;
 	__u64 flags = 0;
-	DIR *dirstream = NULL;
 	struct format_ctx fctx;
 
 	optind = 0;
@@ -755,7 +751,7 @@ static int cmd_device_stats(const struct cmd_struct *cmd, int argc, char **argv)
 
 	dev_path = argv[optind];
 
-	fdmnt = open_path_or_dev_mnt(dev_path, &dirstream, 1);
+	fdmnt = btrfs_open_mnt(dev_path);
 	if (fdmnt < 0)
 		return 1;
 
@@ -802,9 +798,8 @@ static int cmd_device_stats(const struct cmd_struct *cmd, int argc, char **argv)
 		char path[BTRFS_DEVICE_PATH_NAME_MAX + 1];
 		int err2;
 
-		strncpy(path, (char *)di_args[i].path,
-			BTRFS_DEVICE_PATH_NAME_MAX);
-		path[BTRFS_DEVICE_PATH_NAME_MAX] = 0;
+		strncpy_null(path, (char *)di_args[i].path,
+			     BTRFS_DEVICE_PATH_NAME_MAX + 1);
 
 		args.devid = di_args[i].devid;
 		args.nr_items = BTRFS_DEV_STAT_VALUES_MAX;
@@ -841,7 +836,7 @@ static int cmd_device_stats(const struct cmd_struct *cmd, int argc, char **argv)
 
 out:
 	free(di_args);
-	close_file_or_dir(fdmnt, dirstream);
+	close(fdmnt);
 	if (free_table)
 		table_free(table);
 
@@ -900,12 +895,11 @@ static int cmd_device_usage(const struct cmd_struct *cmd, int argc, char **argv)
 
 	for (i = optind; i < argc; i++) {
 		int fd;
-		DIR *dirstream = NULL;
 
 		if (i > 1)
 			pr_verbose(LOG_DEFAULT, "\n");
 
-		fd = btrfs_open_dir(argv[i], &dirstream, 1);
+		fd = btrfs_open_dir(argv[i]);
 		if (fd < 0) {
 			ret = 1;
 			break;
@@ -913,7 +907,7 @@ static int cmd_device_usage(const struct cmd_struct *cmd, int argc, char **argv)
 
 		ret = _cmd_device_usage(fd, argv[i], unit_mode);
 		btrfs_warn_multiple_profiles(fd);
-		close_file_or_dir(fd, dirstream);
+		close(fd);
 
 		if (ret)
 			break;

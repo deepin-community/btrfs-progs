@@ -25,15 +25,15 @@ RUN zypper install -y --no-recommends glibc-devel-static libblkid-devel-static \
 	    libcom_err-devel-static libext2fs-devel-static libuuid-devel-static \
 	    libzstd-devel-static lzo-devel-static zlib-devel-static
 
-RUN zypper install -y --no-recommends gcc13
 RUN zypper install -y --no-recommends libgcrypt-devel libsodium-devel libkcapi-devel \
 	   libbotan-devel libopenssl-3-devel
+RUN zypper install -y --no-recommends gcc14
 
 COPY ./test-build .
 COPY ./run-tests .
 COPY ./devel.tar.gz .
 
-CMD ./test-build devel --disable-documentation
+CMD ["./test-build", "devel", "--disable-documentation"]
 
 # Continue with:
 # cd /tmp

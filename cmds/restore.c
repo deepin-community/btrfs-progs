@@ -99,9 +99,7 @@ static int decompress_zlib(char *inbuf, char *outbuf, u64 compress_len,
 }
 static inline size_t read_compress_length(unsigned char *buf)
 {
-	__le32 dlen;
-	memcpy(&dlen, buf, LZO_LEN);
-	return le32_to_cpu(dlen);
+	return get_unaligned_le32(buf);
 }
 
 static int decompress_lzo(struct btrfs_root *root, unsigned char *inbuf,
@@ -1167,9 +1165,9 @@ static int do_list_roots(struct btrfs_root *root)
 
 	root = root->fs_info->tree_root;
 
-	key.offset = 0;
 	key.objectid = 0;
 	key.type = BTRFS_ROOT_ITEM_KEY;
+	key.offset = 0;
 	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
 	if (ret < 0) {
 		error("failed search next root item: %d", ret);
@@ -1537,8 +1535,7 @@ static int cmd_restore(const struct cmd_struct *cmd, int argc, char **argv)
 		ret = 1;
 		goto out;
 	}
-	strncpy(dir_name, argv[optind + 1], sizeof dir_name);
-	dir_name[sizeof dir_name - 1] = 0;
+	strncpy_null(dir_name, argv[optind + 1], sizeof(dir_name));
 
 	/* Strip the trailing / on the dir name */
 	len = strlen(dir_name);

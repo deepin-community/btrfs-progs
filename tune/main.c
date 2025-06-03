@@ -29,6 +29,9 @@
 #include "kernel-shared/transaction.h"
 #include "kernel-shared/volumes.h"
 #include "kernel-shared/free-space-tree.h"
+#include "kernel-shared/zoned.h"
+#include "crypto/hash.h"
+#include "common/cpu-utils.h"
 #include "common/utils.h"
 #include "common/open-utils.h"
 #include "common/device-scan.h"
@@ -102,7 +105,8 @@ static const char * const tune_usage[] = {
 	OPTLINE("-x", "enable skinny metadata extent refs (mkfs: skinny-metadata)"),
 	OPTLINE("-n", "enable no-holes feature (mkfs: no-holes, more efficient sparse file representation)"),
 	OPTLINE("-S <0|1>", "set/unset seeding status of a device"),
-	OPTLINE("-q", "enable simple quotas on the file system. (mkfs: squota)"),
+	OPTLINE("--enable-simple-quota", "enable simple quotas on the file system. (mkfs: squota)"),
+	OPTLINE("--remove-simple-quota", "remove simple quotas from the file system."),
 	OPTLINE("--convert-to-block-group-tree", "convert filesystem to track block groups in "
 			"the separate block-group-tree instead of extent tree (sets the incompat bit)"),
 	OPTLINE("--convert-from-block-group-tree",
@@ -112,12 +116,17 @@ static const char * const tune_usage[] = {
 	"UUID changes:",
 	OPTLINE("-u", "rewrite fsid, use a random one"),
 	OPTLINE("-U UUID", "rewrite fsid to UUID"),
-	OPTLINE("-m", "change fsid in metadata_uuid to a random UUID incompat change, more lightweight than -u|-U)"),
-	OPTLINE("-M UUID", "change fsid in metadata_uuid to UUID"),
+	OPTLINE("-m", "change fsid to a random UUID, copy original fsid into "
+		      "metadata_uuid if it's not NULL, this is an incompat change "
+		      "(more lightweight than -u|-U)"),
+	OPTLINE("-M UUID", "change fsid to UUID, copy original fsid into "
+		      "metadata_uuid if it's not NULL, this is an incompat change "
+		      "(more lightweight than -u|-U)"),
 	"",
 	"General:",
 	OPTLINE("-f", "allow dangerous operations, make sure that you are aware of the dangers"),
-	OPTLINE("--help", "print this help"),
+	OPTLINE("--version", "print the btrfstune version, builtin features and exit"),
+	OPTLINE("--help", "print this help and exit"),
 #if EXPERIMENTAL
 	"",
 	"EXPERIMENTAL FEATURES:",
@@ -161,7 +170,7 @@ enum btrfstune_group_enum {
 
 static bool btrfstune_cmd_groups[BTRFSTUNE_NR_GROUPS] = { 0 };
 
-static unsigned int btrfstune_count_set_groups()
+static unsigned int btrfstune_count_set_groups(void)
 {
 	int ret = 0;
 
@@ -180,7 +189,7 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 {
 	struct btrfs_root *root;
 	struct btrfs_fs_info *fs_info;
-	unsigned ctree_flags = OPEN_CTREE_WRITES;
+	unsigned ctree_flags = OPEN_CTREE_WRITES | OPEN_CTREE_EXCLUSIVE;
 	int seeding_flag = 0;
 	u64 seeding_value = 0;
 	int random_fsid = 0;
@@ -193,8 +202,12 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 	int ret;
 	u64 super_flags = 0;
 	int quota = 0;
+	int remove_simple_quota = 0;
 	int fd = -1;
+	int oflags = O_RDWR;
 
+	cpu_detect_flags();
+	hash_init_accel();
 	btrfs_config_init();
 
 	while(1) {
@@ -203,10 +216,12 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		       GETOPT_VAL_DISABLE_BLOCK_GROUP_TREE,
 		       GETOPT_VAL_ENABLE_FREE_SPACE_TREE,
 		       GETOPT_VAL_ENABLE_SIMPLE_QUOTA,
-
+		       GETOPT_VAL_REMOVE_SIMPLE_QUOTA,
+		       GETOPT_VAL_VERSION,
 		};
 		static const struct option long_options[] = {
 			{ "help", no_argument, NULL, GETOPT_VAL_HELP},
+			{ "version", no_argument, NULL, GETOPT_VAL_VERSION },
 			{ "convert-to-block-group-tree", no_argument, NULL,
 				GETOPT_VAL_ENABLE_BLOCK_GROUP_TREE},
 			{ "convert-from-block-group-tree", no_argument, NULL,
@@ -215,6 +230,8 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 				GETOPT_VAL_ENABLE_FREE_SPACE_TREE},
 			{ "enable-simple-quota", no_argument, NULL,
 				GETOPT_VAL_ENABLE_SIMPLE_QUOTA },
+			{ "remove-simple-quota", no_argument, NULL,
+				GETOPT_VAL_REMOVE_SIMPLE_QUOTA},
 #if EXPERIMENTAL
 			{ "csum", required_argument, NULL, GETOPT_VAL_CSUM },
 #endif
@@ -282,6 +299,10 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 			quota = 1;
 			btrfstune_cmd_groups[QGROUP] = true;
 			break;
+		case GETOPT_VAL_REMOVE_SIMPLE_QUOTA:
+			remove_simple_quota = 1;
+			btrfstune_cmd_groups[QGROUP] = true;
+			break;
 #if EXPERIMENTAL
 		case GETOPT_VAL_CSUM:
 			btrfs_warn_experimental(
@@ -291,6 +312,10 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 			btrfstune_cmd_groups[CSUM_CHANGE] = true;
 			break;
 #endif
+		case GETOPT_VAL_VERSION:
+			help_builtin_features("btrfstune, part of ");
+			ret = 0;
+			goto free_out;
 		case GETOPT_VAL_HELP:
 		default:
 			usage(&tune_cmd, c != GETOPT_VAL_HELP);
@@ -337,7 +362,9 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 		}
 	}
 
-	fd = open(device, O_RDWR);
+	if (zoned_model(device) == ZONED_HOST_MANAGED)
+		oflags |= O_DIRECT;
+	fd = open(device, oflags);
 	if (fd < 0) {
 		error("mount check: cannot open %s: %m", device);
 		ret = 1;
@@ -527,6 +554,12 @@ int BOX_MAIN(btrfstune)(int argc, char *argv[])
 			goto out;
 	}
 
+	if (remove_simple_quota) {
+		ret = remove_squota(root->fs_info);
+		if (ret)
+			goto out;
+	}
+
 out:
 	if (ret < 0) {
 		fs_info->readonly = 1;
@@ -535,6 +568,7 @@ out:
 	}
 	close_ctree(root);
 	btrfs_close_all_devices();
+	close(fd);
 
 free_out:
 	return ret;

@@ -1,0 +1,49 @@
+# Build static binaries (published as artifacts)
+# - btrfs.static - the main tool
+# - btrfs.box.static - all-in-one tool (functionality selected by file name)
+
+name: Static binaries
+run-name: Static binaries
+on:
+  push:
+    branches:
+      - master
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev python3-sphinx libaio-dev liburing-dev
+      - name: Configure
+        run: ./autogen.sh && ./configure --disable-documentation
+      - name: Make static
+        run: make V=1 EXTRA_CFLAGS='-march=x86-64' static
+      - name: Make box.static
+        run: make V=1 EXTRA_CFLAGS='-march=x86-64' btrfs.box.static
+      - name: Strip binaries
+        run: strip btrfs.static btrfs.box.static
+      - name: Calculate SHA256 checksums
+        run: |
+          sha256sum btrfs.static | tee btrfs.static.sha256
+          sha256sum btrfs.box.static | tee btrfs.box.static.sha256
+      - name: Save artifacts - btrfs.static
+        uses: actions/upload-artifact@v4
+        with:
+          name: btrfs.static
+          path: btrfs.static
+      - name: Save artifacts - btrfs.static.sha256
+        uses: actions/upload-artifact@v4
+        with:
+          name: btrfs.static.sha256
+          path: btrfs.static.sha256
+      - name: Save artifacts - btrfs.box.static
+        uses: actions/upload-artifact@v4
+        with:
+          name: btrfs.box.static
+          path: btrfs.box.static
+      - name: Save artifacts - btrfs.box.static.sha256
+        uses: actions/upload-artifact@v4
+        with:
+          name: btrfs.box.static.sha256
+          path: btrfs.box.static.sha256

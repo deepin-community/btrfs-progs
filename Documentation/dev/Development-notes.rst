@@ -120,7 +120,7 @@ There are several ways how to react to the unexpected conditions:
    This would cause the filesystem to be flipped read-only to prevent further
    corruption.
 
-   Additionally call trace would be dumpped for the first btrfs_abort_transaction()
+   Additionally call trace would be dumped for the first btrfs_abort_transaction()
    call site.
 
 -  ASSERT()
@@ -239,7 +239,7 @@ Patches
 
 -  additional information
 
-    -  if there's a stack trace relevant for the patch, add it ther (lockdep,
+    -  if there's a stack trace relevant for the patch, add it there (lockdep,
        crash, warning)
     -  steps to reproduce a bug (that will also get turned to a proper fstests
        case)
@@ -413,6 +413,7 @@ Please refer to the option documentation for further details.
 
    -  **CONFIG_BTRFS_DEBUG**
    -  **CONFIG_BTRFS_ASSERT**
+   -  **CONFIG_BTRFS_EXPERIMENTAL**
    -  **CONFIG_BTRFS_FS_RUN_SANITY_TESTS** -- basic tests on module load
    -  **CONFIG_BTRFS_FS_CHECK_INTEGRITY** -- block integrity checker
       enabled by mount options
@@ -477,10 +478,12 @@ Kernel config options for complete test coverage
 -  ``CONFIG_DM_ERROR=m`` or ``y``
 -  ``CONFIG_DM_LOG_WRITES=m`` or ``y``
 -  ``CONFIG_DM_DUST=m`` or ``y``
+-  ``CONFIG_DM_ZERO=m`` or ``y``
 -  ``CONFIG_BLK_DEV_LOOP=m`` or ``y``
 -  ``CONFIG_EXT4_FS=m`` or ``y``
 -  ``CONFIG_SCSI_DEBUG=m``
 -  ``CONFIG_BLK_DEV_ZONED=y`` for zoned mode test coverage
+-  ``CONFIG_IO_URING==y``
 
 
 Kernel config options for better bug reports
@@ -492,19 +495,25 @@ See the list in the section above for more options.
 User space utilities and development library dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--  fio
--  dmsetup (device-mapper)
--  lvm
--  xfsprogs >= 4.3.1 (``xfs_io -c reflink`` is required)
+-  acl
+-  attr
 -  btrfsprogs
 -  dbench
--  openssl
--  libacl
--  libattr
--  libaio
--  libuuid
--  libcap-progs
+-  dmsetup (device-mapper)
 -  duperemove
+-  e2fsprogs
+-  fio
+-  fsverity-utils
+-  libacl
+-  libaio
+-  libattr
+-  libcap-progs
+-  libuuid
+-  lvm2
+-  openssl
+-  parted
+-  psmisc (killall)
+-  xfsprogs >= 4.3.1 (``xfs_io -c reflink`` is required)
 
 Note: This list may be incomplete.
 
@@ -524,4 +533,6 @@ Other requirements
 ^^^^^^^^^^^^^^^^^^
 
 -  An ``fsgqa`` user and group must exist.
+-  An ``fsgqa2`` user and group must exist.
+-  The user ``nobody`` must exist.
 -  An ``123456-fsgqa`` user and group must exist.

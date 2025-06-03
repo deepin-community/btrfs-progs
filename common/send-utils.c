@@ -29,9 +29,11 @@
 #include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/ctree.h"
+#include "kernel-shared/uuid-tree.h"
 #include "common/send-utils.h"
 #include "common/messages.h"
 #include "common/utils.h"
+#include "common/tree-search.h"
 
 static int btrfs_subvolid_resolve_sub(int fd, char *path, size_t *path_len,
 				      u64 subvol_id);
@@ -62,16 +64,15 @@ static int btrfs_read_root_item_raw(int mnt_fd, u64 root_id, size_t buf_len,
 				    u32 *read_len, void *buf)
 {
 	int ret;
-	struct btrfs_ioctl_search_args args;
-	struct btrfs_ioctl_search_key *sk = &args.key;
-	struct btrfs_ioctl_search_header *sh;
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	unsigned long off = 0;
 	int found = 0;
 	int i;
 
 	*read_len = 0;
 	memset(&args, 0, sizeof(args));
-
+	sk = btrfs_tree_search_sk(&args);
 	sk->tree_id = BTRFS_ROOT_TREE_OBJECTID;
 
 	/*
@@ -80,15 +81,15 @@ static int btrfs_read_root_item_raw(int mnt_fd, u64 root_id, size_t buf_len,
 	 * them.
 	 */
 	sk->min_objectid = root_id;
+	sk->min_type = BTRFS_ROOT_ITEM_KEY;
 	sk->max_objectid = root_id;
 	sk->max_type = BTRFS_ROOT_ITEM_KEY;
-	sk->min_type = BTRFS_ROOT_ITEM_KEY;
 	sk->max_offset = (u64)-1;
 	sk->max_transid = (u64)-1;
 	sk->nr_items = 4096;
 
 	while (1) {
-		ret = ioctl(mnt_fd, BTRFS_IOC_TREE_SEARCH, &args);
+		ret = btrfs_tree_search_ioctl(mnt_fd, &args);
 		if (ret < 0) {
 			error("can't perform the search: %m");
 			return 0;
@@ -100,30 +101,30 @@ static int btrfs_read_root_item_raw(int mnt_fd, u64 root_id, size_t buf_len,
 		off = 0;
 		for (i = 0; i < sk->nr_items; i++) {
 			struct btrfs_root_item *item;
-			sh = (struct btrfs_ioctl_search_header *)(args.buf +
-								  off);
+			struct btrfs_ioctl_search_header sh;
 
-			off += sizeof(*sh);
-			item = (struct btrfs_root_item *)(args.buf + off);
-			off += btrfs_search_header_len(sh);
+			memcpy(&sh, btrfs_tree_search_data(&args, off), sizeof(sh));
+			off += sizeof(sh);
 
-			sk->min_objectid = btrfs_search_header_objectid(sh);
-			sk->min_type = btrfs_search_header_type(sh);
-			sk->min_offset = btrfs_search_header_offset(sh);
+			item = btrfs_tree_search_data(&args, off);
+			off += sh.len;
 
-			if (btrfs_search_header_objectid(sh) > root_id)
+			sk->min_objectid = sh.objectid;
+			sk->min_type = sh.type;
+			sk->min_offset = sh.offset;
+
+			if (sh.objectid > root_id)
 				break;
 
-			if (btrfs_search_header_objectid(sh) == root_id &&
-			    btrfs_search_header_type(sh) == BTRFS_ROOT_ITEM_KEY) {
-				if (btrfs_search_header_len(sh) > buf_len) {
+			if (sh.objectid == root_id && sh.type == BTRFS_ROOT_ITEM_KEY) {
+				if (sh.len > buf_len) {
 					/* btrfs-progs is too old for kernel */
 					error(
 			"buf for read_root_item_raw() is too small, get newer btrfs tools");
 					return -EOVERFLOW;
 				}
-				memcpy(buf, item, btrfs_search_header_len(sh));
-				*read_len = btrfs_search_header_len(sh);
+				memcpy(buf, item, sh.len);
+				*read_len = sh.len;
 				found = 1;
 			}
 		}
@@ -192,9 +193,10 @@ static int btrfs_subvolid_resolve_sub(int fd, char *path, size_t *path_len,
 				      u64 subvol_id)
 {
 	int ret;
-	struct btrfs_ioctl_search_args search_arg;
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	struct btrfs_ioctl_ino_lookup_args ino_lookup_arg;
-	struct btrfs_ioctl_search_header *search_header;
+	struct btrfs_ioctl_search_header sh;
 	struct btrfs_root_ref *backref_item;
 
 	if (subvol_id == BTRFS_FS_TREE_OBJECTID) {
@@ -205,16 +207,17 @@ static int btrfs_subvolid_resolve_sub(int fd, char *path, size_t *path_len,
 		return 0;
 	}
 
-	memset(&search_arg, 0, sizeof(search_arg));
-	search_arg.key.tree_id = BTRFS_ROOT_TREE_OBJECTID;
-	search_arg.key.min_objectid = subvol_id;
-	search_arg.key.max_objectid = subvol_id;
-	search_arg.key.min_type = BTRFS_ROOT_BACKREF_KEY;
-	search_arg.key.max_type = BTRFS_ROOT_BACKREF_KEY;
-	search_arg.key.max_offset = (u64)-1;
-	search_arg.key.max_transid = (u64)-1;
-	search_arg.key.nr_items = 1;
-	ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &search_arg);
+	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
+	sk->tree_id = BTRFS_ROOT_TREE_OBJECTID;
+	sk->min_objectid = subvol_id;
+	sk->min_type = BTRFS_ROOT_BACKREF_KEY;
+	sk->max_objectid = subvol_id;
+	sk->max_type = BTRFS_ROOT_BACKREF_KEY;
+	sk->max_offset = (u64)-1;
+	sk->max_transid = (u64)-1;
+	sk->nr_items = 1;
+	ret = btrfs_tree_search_ioctl(fd, &args);
 	if (ret < 0) {
 		fprintf(stderr,
 			"ioctl(BTRFS_IOC_TREE_SEARCH, subvol_id %llu) ret=%d, error: %m\n",
@@ -222,18 +225,16 @@ static int btrfs_subvolid_resolve_sub(int fd, char *path, size_t *path_len,
 		return ret;
 	}
 
-	if (search_arg.key.nr_items < 1) {
+	if (sk->nr_items < 1) {
 		fprintf(stderr, "failed to lookup subvol_id %llu!\n", subvol_id);
 		return -ENOENT;
 	}
-	search_header = (struct btrfs_ioctl_search_header *)search_arg.buf;
-	backref_item = (struct btrfs_root_ref *)(search_header + 1);
-	if (btrfs_search_header_offset(search_header)
-	    != BTRFS_FS_TREE_OBJECTID) {
+	memcpy(&sh, btrfs_tree_search_data(&args, 0), sizeof(sh));
+	backref_item = btrfs_tree_search_data(&args, sizeof(sh));
+	if (sh.offset != BTRFS_FS_TREE_OBJECTID) {
 		int sub_ret;
 
-		sub_ret = btrfs_subvolid_resolve_sub(fd, path, path_len,
-				btrfs_search_header_offset(search_header));
+		sub_ret = btrfs_subvolid_resolve_sub(fd, path, path_len, sh.offset);
 		if (sub_ret)
 			return sub_ret;
 		if (*path_len < 1)
@@ -247,8 +248,7 @@ static int btrfs_subvolid_resolve_sub(int fd, char *path, size_t *path_len,
 		int len;
 
 		memset(&ino_lookup_arg, 0, sizeof(ino_lookup_arg));
-		ino_lookup_arg.treeid =
-			btrfs_search_header_offset(search_header);
+		ino_lookup_arg.treeid = sh.offset;
 		ino_lookup_arg.objectid =
 			btrfs_stack_root_ref_dirid(backref_item);
 		ret = ioctl(fd, BTRFS_IOC_INO_LOOKUP, &ino_lookup_arg);

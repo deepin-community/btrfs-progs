@@ -44,6 +44,7 @@
 #include "common/sysfs-utils.h"
 #include "common/messages.h"
 #include "common/path-utils.h"
+#include "common/tree-search.h"
 #include "cmds/filesystem-usage.h"
 #include "cmds/commands.h"
 
@@ -144,13 +145,13 @@ static int cmp_chunk_info(const void *a, const void *b)
 static int load_chunk_info(int fd, struct array *chunkinfos)
 {
 	int ret;
-	struct btrfs_ioctl_search_args args;
-	struct btrfs_ioctl_search_key *sk = &args.key;
-	struct btrfs_ioctl_search_header *sh;
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	unsigned long off = 0;
 	int i;
 
 	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
 
 	/*
 	 * there may be more than one ROOT_ITEM key if there are
@@ -160,17 +161,17 @@ static int load_chunk_info(int fd, struct array *chunkinfos)
 	sk->tree_id = BTRFS_CHUNK_TREE_OBJECTID;
 
 	sk->min_objectid = 0;
-	sk->max_objectid = (u64)-1;
-	sk->max_type = 0;
 	sk->min_type = (u8)-1;
 	sk->min_offset = 0;
+	sk->max_objectid = (u64)-1;
+	sk->max_type = 0;
 	sk->max_offset = (u64)-1;
 	sk->min_transid = 0;
 	sk->max_transid = (u64)-1;
 	sk->nr_items = 4096;
 
 	while (1) {
-		ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
+		ret = btrfs_tree_search_ioctl(fd, &args);
 		if (ret < 0) {
 			if (errno == EPERM)
 				return -errno;
@@ -185,21 +186,21 @@ static int load_chunk_info(int fd, struct array *chunkinfos)
 		off = 0;
 		for (i = 0; i < sk->nr_items; i++) {
 			struct btrfs_chunk *item;
-			sh = (struct btrfs_ioctl_search_header *)(args.buf +
-								  off);
+			struct btrfs_ioctl_search_header sh;
 
-			off += sizeof(*sh);
-			item = (struct btrfs_chunk *)(args.buf + off);
+			memcpy(&sh, btrfs_tree_search_data(&args, off), sizeof(sh));
+			off += sizeof(sh);
+			item = btrfs_tree_search_data(&args, off);
 
 			ret = add_info_to_list(chunkinfos, item);
 			if (ret)
 				return 1;
 
-			off += btrfs_search_header_len(sh);
+			off += sh.len;
 
-			sk->min_objectid = btrfs_search_header_objectid(sh);
-			sk->min_type = btrfs_search_header_type(sh);
-			sk->min_offset = btrfs_search_header_offset(sh)+1;
+			sk->min_objectid = sh.objectid;
+			sk->min_type = sh.type;
+			sk->min_offset = sh.offset + 1;
 
 		}
 		if (!sk->min_offset)	/* overflow */
@@ -478,6 +479,8 @@ static int print_filesystem_usage_overall(int fd, const struct array *chunkinfos
 	bool mixed = false;
 	struct statvfs statvfs_buf;
 	struct btrfs_ioctl_feature_flags feature_flags;
+	bool raid56 = false;
+	bool unreliable_allocated = false;
 
 	sargs = load_space_info(fd, path);
 	if (!sargs) {
@@ -518,8 +521,10 @@ static int print_filesystem_usage_overall(int fd, const struct array *chunkinfos
 		 * computed separately. Setting ratio to 0 will not account
 		 * the chunks in this loop.
 		 */
-		if (flags & BTRFS_BLOCK_GROUP_RAID56_MASK)
+		if (flags & BTRFS_BLOCK_GROUP_RAID56_MASK) {
 			ratio = 0;
+			raid56 = true;
+		}
 
 		if (ratio > max_data_ratio)
 			max_data_ratio = ratio;
@@ -608,6 +613,18 @@ static int print_filesystem_usage_overall(int fd, const struct array *chunkinfos
 		warning("cannot get space info with statvfs() on '%s': %m", path);
 		memset(&statvfs_buf, 0, sizeof(statvfs_buf));
 		ret = 0;
+	}
+
+	/*
+	 * If we don't have any chunk information (e.g. due to missing
+	 * privileges) and there's a raid56 profile, the computation of
+	 * "unallocated", "data/metadata ratio", "free estimated" are wrong.
+	 */
+	unreliable_allocated = (raid56 && chunkinfos->length == 0);
+	if (unreliable_allocated) {
+		warning("radid56 found, we cannots compute some values, run as root if needed");
+		ret = 1;
+		goto exit;
 	}
 
 	pr_verbose(LOG_DEFAULT, "Overall:\n");
@@ -1216,11 +1233,10 @@ static int cmd_filesystem_usage(const struct cmd_struct *cmd,
 
 	for (i = optind; i < argc; i++) {
 		int fd;
-		DIR *dirstream = NULL;
 		struct array chunkinfos = { 0 };
 		struct array devinfos = { 0 };
 
-		fd = btrfs_open_dir(argv[i], &dirstream, 1);
+		fd = btrfs_open_dir(argv[i]);
 		if (fd < 0) {
 			ret = 1;
 			goto out;
@@ -1240,7 +1256,7 @@ static int cmd_filesystem_usage(const struct cmd_struct *cmd,
 		ret = print_filesystem_usage_by_chunk(fd, &chunkinfos,
 				&devinfos, argv[i], unit_mode, tabular);
 cleanup:
-		close_file_or_dir(fd, dirstream);
+		close(fd);
 		array_free_elements(&chunkinfos);
 		array_free(&chunkinfos);
 		array_free_elements(&devinfos);
@@ -1302,10 +1318,19 @@ void print_device_chunks(const struct device_info *devinfo,
 		allocated += size;
 
 	}
-	pr_verbose(LOG_DEFAULT, "   Unallocated: %*s%10s\n",
-		(int)(20 - strlen("Unallocated")), "",
-		pretty_size_mode(devinfo->size - allocated,
-			unit_mode | UNITS_NEGATIVE));
+
+	/*
+	 * If chunkinfos is empty, we cannot compute the unallocated size, so
+	 * don't print incorrect data.
+	 */
+	if (chunkinfos->length == 0)
+		pr_verbose(LOG_DEFAULT, "   Unallocated: %*s%10s\n",
+			   (int)(20 - strlen("Unallocated")), "", "N/A");
+	else
+		pr_verbose(LOG_DEFAULT, "   Unallocated: %*s%10s\n",
+			   (int)(20 - strlen("Unallocated")), "",
+			   pretty_size_mode(devinfo->size - allocated,
+					    unit_mode | UNITS_NEGATIVE));
 }
 
 void print_device_sizes(const struct device_info *devinfo, unsigned unit_mode)

@@ -15,7 +15,6 @@
  */
 
 #include "kerncompat.h"
-#include <assert.h>
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
@@ -73,16 +72,27 @@ static int check_csum_change_requreiment(struct btrfs_fs_info *fs_info, u16 new_
 	key.type = BTRFS_DEV_REPLACE_KEY;
 	key.offset = 0;
 	ret = btrfs_search_slot(NULL, dev_root, &key, &path, 0, 0);
-	btrfs_release_path(&path);
 	if (ret < 0) {
+		btrfs_release_path(&path);
 		errno = -ret;
-		error("failed to check the dev-reaplce status: %m");
+		error("failed to check the dev-replace status: %m");
 		return ret;
 	}
 	if (ret == 0) {
-		error("running dev-replace detected, please finish or cancel it.");
-		return -EINVAL;
+		struct btrfs_dev_replace_item *ptr;
+		u64 state;
+
+		ptr = btrfs_item_ptr(path.nodes[0], path.slots[0], struct btrfs_dev_replace_item);
+		state = btrfs_dev_replace_replace_state(path.nodes[0], ptr);
+		if (state == BTRFS_IOCTL_DEV_REPLACE_STATE_STARTED ||
+		    state == BTRFS_IOCTL_DEV_REPLACE_STATE_SUSPENDED) {
+			btrfs_release_path(&path);
+			error(
+	"running/suspended dev-replace detected, please finish or cancel it");
+			return -EINVAL;
+		}
 	}
+	btrfs_release_path(&path);
 
 	if (fs_info->csum_type == new_csum_type) {
 		error("the fs is already using csum type %s (%u)",
@@ -106,7 +116,7 @@ static int get_last_csum_bytenr(struct btrfs_fs_info *fs_info, u64 *result)
 	ret = btrfs_search_slot(NULL, csum_root, &key, &path, 0, 0);
 	if (ret < 0)
 		return ret;
-	assert(ret > 0);
+	UASSERT(ret > 0);
 	ret = btrfs_previous_item(csum_root, &path, BTRFS_EXTENT_CSUM_OBJECTID,
 				  BTRFS_EXTENT_CSUM_KEY);
 	if (ret < 0)
@@ -213,14 +223,25 @@ out:
  * item.
  */
 #define CSUM_CHANGE_BYTES_THRESHOLD	(SZ_2M)
+
+static unsigned int calc_csum_change_nr_items(struct btrfs_fs_info *fs_info,
+					      u16 new_csum_type)
+{
+	const u32 new_csum_size = btrfs_csum_type_size(new_csum_type);
+	const u32 csum_item_size = CSUM_CHANGE_BYTES_THRESHOLD /
+				   fs_info->sectorsize * new_csum_size;
+
+	return round_up(csum_item_size, fs_info->nodesize) / fs_info->nodesize * 2;
+}
+
 static int generate_new_data_csums_range(struct btrfs_fs_info *fs_info, u64 start,
 					 u16 new_csum_type)
 {
+	const unsigned int nr_items = calc_csum_change_nr_items(fs_info, new_csum_type);
 	struct btrfs_root *csum_root = btrfs_csum_root(fs_info, 0);
 	struct btrfs_trans_handle *trans;
 	struct btrfs_path path = { 0 };
 	struct btrfs_key key;
-	const u32 new_csum_size = btrfs_csum_type_size(new_csum_type);
 	void *csum_buffer;
 	u64 converted_bytes = 0;
 	u64 last_csum;
@@ -237,9 +258,7 @@ static int generate_new_data_csums_range(struct btrfs_fs_info *fs_info, u64 star
 	if (!csum_buffer)
 		return -ENOMEM;
 
-	trans = btrfs_start_transaction(csum_root,
-			CSUM_CHANGE_BYTES_THRESHOLD / fs_info->sectorsize *
-			new_csum_size);
+	trans = btrfs_start_transaction(csum_root, nr_items);
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
 		errno = -ret;
@@ -273,7 +292,7 @@ static int generate_new_data_csums_range(struct btrfs_fs_info *fs_info, u64 star
 			}
 		}
 		btrfs_item_key_to_cpu(path.nodes[0], &key, path.slots[0]);
-		assert(key.offset >= cur);
+		UASSERT(key.offset >= cur);
 		item_size = btrfs_item_size(path.nodes[0], path.slots[0]);
 
 		csum_start = key.offset;
@@ -295,9 +314,7 @@ static int generate_new_data_csums_range(struct btrfs_fs_info *fs_info, u64 star
 				return -EUCLEAN;
 			if (ret < 0)
 				goto out;
-			trans = btrfs_start_transaction(csum_root,
-					CSUM_CHANGE_BYTES_THRESHOLD /
-					fs_info->sectorsize * new_csum_size);
+			trans = btrfs_start_transaction(csum_root, nr_items);
 			if (IS_ERR(trans)) {
 				ret = PTR_ERR(trans);
 				goto out;
@@ -353,30 +370,56 @@ static int generate_new_data_csums(struct btrfs_fs_info *fs_info, u16 new_csum_t
 	return generate_new_data_csums_range(fs_info, 0, new_csum_type);
 }
 
+/* After deleting/modifying this many leaves, commit a transaction. */
+#define CSUM_CHANGE_LEAVES_THRESHOLD	32
+
 static int delete_old_data_csums(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_root *csum_root = btrfs_csum_root(fs_info, 0);
-	struct btrfs_trans_handle *trans;
+	struct btrfs_trans_handle *trans = 0;
 	struct btrfs_path path = { 0 };
 	struct btrfs_key last_key;
+	unsigned int deleted_leaves = 0;
 	int ret;
 
 	last_key.objectid = BTRFS_EXTENT_CSUM_OBJECTID;
 	last_key.type = BTRFS_EXTENT_CSUM_KEY;
 	last_key.offset = (u64)-1;
 
-	trans = btrfs_start_transaction(csum_root, 1);
-	if (IS_ERR(trans)) {
-		ret = PTR_ERR(trans);
-		errno = -ret;
-		error("failed to start transaction to delete old data csums: %m");
-		return ret;
-	}
 	while (true) {
 		int start_slot;
 		int nr;
 
+		if (deleted_leaves >= CSUM_CHANGE_LEAVES_THRESHOLD) {
+			UASSERT(trans);
+			ret = btrfs_commit_transaction(trans, csum_root);
+			if (ret < 0) {
+				errno = -ret;
+				error_msg(ERROR_MSG_COMMIT_TRANS,
+					  "deleting old data csums: %m");
+				return ret;
+			}
+			trans = NULL;
+			deleted_leaves = 0;
+		}
+		if (!trans) {
+			trans = btrfs_start_transaction(csum_root, 1);
+			if (IS_ERR(trans)) {
+				ret = PTR_ERR(trans);
+				errno = -ret;
+				error_msg(ERROR_MSG_START_TRANS,
+					  "deleting old data csums: %m");
+				return ret;
+			}
+		}
 		ret = btrfs_search_slot(trans, csum_root, &last_key, &path, -1, 1);
+		if (ret < 0) {
+			errno = -ret;
+			error("failed to search the last old csum item: %m");
+			btrfs_abort_transaction(trans, ret);
+			return ret;
+		}
+		UASSERT(ret > 0);
 
 		nr = btrfs_header_nritems(path.nodes[0]);
 		/* No item left (empty csum tree), exit. */
@@ -403,6 +446,7 @@ static int delete_old_data_csums(struct btrfs_fs_info *fs_info)
 			break;
 		}
 		btrfs_release_path(&path);
+		deleted_leaves++;
 	}
 	btrfs_release_path(&path);
 	if (ret < 0)
@@ -420,9 +464,10 @@ static int delete_old_data_csums(struct btrfs_fs_info *fs_info)
 static int change_csum_objectids(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_root *csum_root = btrfs_csum_root(fs_info, 0);
-	struct btrfs_trans_handle *trans;
+	struct btrfs_trans_handle *trans = NULL;
 	struct btrfs_path path = { 0 };
 	struct btrfs_key last_key;
+	unsigned int changed_leaves = 0;
 	u64 super_flags;
 	int ret = 0;
 
@@ -430,21 +475,36 @@ static int change_csum_objectids(struct btrfs_fs_info *fs_info)
 	last_key.type = BTRFS_EXTENT_CSUM_KEY;
 	last_key.offset = (u64)-1;
 
-	trans = btrfs_start_transaction(csum_root, 1);
-	if (IS_ERR(trans)) {
-		ret = PTR_ERR(trans);
-		errno = -ret;
-		error("failed to start transaction to change csum objectids: %m");
-		return ret;
-	}
 	while (true) {
 		struct btrfs_key found_key;
 		int nr;
 
+		if (changed_leaves >= CSUM_CHANGE_LEAVES_THRESHOLD) {
+			UASSERT(trans);
+			ret = btrfs_commit_transaction(trans, csum_root);
+			if (ret < 0) {
+				errno = -ret;
+				error_msg(ERROR_MSG_COMMIT_TRANS,
+					  "changing data csum objectid: %m");
+				return ret;
+			}
+			trans = NULL;
+			changed_leaves = 0;
+		}
+		if (!trans) {
+			trans = btrfs_start_transaction(csum_root, 1);
+			if (IS_ERR(trans)) {
+				ret = PTR_ERR(trans);
+				errno = -ret;
+				error_msg(ERROR_MSG_START_TRANS,
+					  "changing data csum objectid: %m");
+				return ret;
+			}
+		}
 		ret = btrfs_search_slot(trans, csum_root, &last_key, &path, 0, 1);
 		if (ret < 0)
 			goto out;
-		assert(ret > 0);
+		UASSERT(ret > 0);
 
 		nr = btrfs_header_nritems(path.nodes[0]);
 		/* No item left (empty csum tree), exit. */
@@ -456,7 +516,7 @@ static int change_csum_objectids(struct btrfs_fs_info *fs_info)
 
 		/* All csum items should be new csums. */
 		btrfs_item_key_to_cpu(path.nodes[0], &found_key, 0);
-		assert(found_key.objectid == BTRFS_CSUM_CHANGE_OBJECTID);
+		UASSERT(found_key.objectid == BTRFS_CSUM_CHANGE_OBJECTID);
 
 		/*
 		 * Start changing the objectids, since EXTENT_CSUM (-10) is
@@ -584,7 +644,7 @@ static int change_meta_csums(struct btrfs_fs_info *fs_info, u16 new_csum_type)
 		error("failed to get the first tree block of extent tree: %m");
 		return ret;
 	}
-	assert(ret > 0);
+	UASSERT(ret > 0);
 	while (true) {
 		btrfs_item_key_to_cpu(path.nodes[0], &key, path.slots[0]);
 		if (key.type != BTRFS_EXTENT_ITEM_KEY &&
@@ -743,7 +803,7 @@ static int get_csum_items_range(struct btrfs_fs_info *fs_info,
 		error("failed to search csum tree: %m");
 		return ret;
 	}
-	assert(ret > 0);
+	UASSERT(ret > 0);
 	ret = btrfs_previous_item(csum_root, &path, objectid,
 				  BTRFS_EXTENT_CSUM_KEY);
 	if (ret < 0) {
@@ -972,7 +1032,7 @@ static int resume_csum_change(struct btrfs_fs_info *fs_info, u16 new_csum_type)
 		error("failed to locate the csum change item: %m");
 		return ret;
 	}
-	assert(ret > 0);
+	UASSERT(ret > 0);
 	ret = btrfs_previous_item(tree_root, &path, BTRFS_CSUM_CHANGE_OBJECTID,
 				  BTRFS_TEMPORARY_ITEM_KEY);
 	if (ret > 0)

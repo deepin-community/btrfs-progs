@@ -4,16 +4,21 @@ Status
 Overview
 --------
 
-For a list of features by their introduction, please see `Changes (feature/version) <Feature-by-version>`__.
+For a list of features by the kernel version of their introduction, please see
+:doc:`/Feature-by-version`.
 
-The table below aims to serve as an overview for the stability status of
-the features BTRFS supports. While a feature may be functionally safe
-and reliable, it does not necessarily mean that its useful, for example
-in meeting your performance expectations for your specific workload.
+The table below is an overview of the stability status of
+the features that BTRFS supports. While a feature may be functionally safe
+and reliable, it does not necessarily mean that it is
+suitable for all use cases or workloads, for example performance.
 Combination of features can vary in performance, the table does not
 cover all possibilities.
 
-**The table is based on the latest released linux kernel: 6.6**
+**The table is based on the latest released linux kernel: 6.13**
+
+Since kernel version 6.12 there's a config option *CONFIG_BTRFS_EXPERIMENTAL*
+that enables features that are in development and do not have stabilized
+interface or have known problems. See the :ref:`list below<status-experimental-features>`.
 
 The columns for each feature reflect the status of the implementation
 in following ways:
@@ -59,7 +64,7 @@ in following ways:
      - :statusmok:`mostly OK`
      -
      - extents get unshared (see below)
-   * - :ref:`Autodefrag<mount-option-autodefrag>`
+   * - :docref:`Autodefrag <Administration:mount-option-autodefrag>`
      - :statusok:`OK`
      -
      -
@@ -99,7 +104,7 @@ in following ways:
      - :statusmok:`mostly OK`
      - mostly OK
      -
-   * - :ref:`Degraded mount<mount-option-degraded>`
+   * - :docref:`Degraded mount <Administration:mount-option-degraded>`
      - :statusok:`OK`
      - n/a
      -
@@ -107,6 +112,10 @@ in following ways:
      - :statusok:`OK`
      - OK
      - balance + qgroups can be slow when there are many snapshots
+   * - Dynamic block group reclaim
+     - TBD
+     - TBD
+     - Tunable thresholds for automatic background block group reclaim.
    * - :doc:`Send<Send-receive>`
      - :statusok:`OK`
      - OK
@@ -123,10 +132,10 @@ in following ways:
      - :statusok:`OK`
      - OK
      -
-   * - Temporary UUID
-     - 6.7
-     - 6.7
-     -
+   * - Temporary FSID
+     - 6.8
+     - 6.8
+     - Single devices with same FSID can be mounted repeatedly, getting a temporary UUID.
    * - :doc:`Seeding<Seeding-device>`
      - :statusok:`OK`
      - OK
@@ -135,10 +144,10 @@ in following ways:
      - :statusmok:`mostly OK`
      - mostly OK
      - qgroups with many snapshots slows down balance
-   * - :doc:`Quotas, simple qgroups<Qgroups>`
-     - 6.7
-     - 6.7
-     - simplified qgroup accounting, better performance
+   * - :doc:`Squota, simplified qgroups<Qgroups>`
+     - 6.8
+     - 6.8
+     - simplified qgroup accounting, better performance, specific use case
    * - :doc:`Swapfile<Swapfile>`
      - :statusok:`OK`
      - n/a
@@ -147,15 +156,20 @@ in following ways:
      - :statusok:`OK`
      - OK
      -
+   * - Encoded io read/write
+     - :statusok:`OK`
+     - OK
+     - Special *ioctls* to read or write file extent data directly, the raw
+       compressed bytes in particular.
    * - :doc:`Subpage block size<Subpage>`
-     - :statusmok:`mostly OK`
-     - mostly OK
-     - Also see table below for more detailed compatibility.
+     - :statusok:`OK`
+     - OK
+     - Also see :ref:`table below<status-subpage-block-size>` for compatibility.
    * - :doc:`Zoned mode<Zoned-mode>`
      - :statusmok:`mostly OK`
      - mostly OK
-     - Not yet feature complete but moderately stable, also see table below
-       for more detailed compatibility.
+     - Not yet feature complete but moderately stable, also see :ref:`table below<status-zoned>`
+       for compatibility.
 
 Block group profiles
 ^^^^^^^^^^^^^^^^^^^^
@@ -221,27 +235,32 @@ converted later).
    * - :ref:`extended-refs<mkfs-feature-extended-refs>`
      - :statusok:`OK`
      - OK
-     -
+     - mkfs.btrfs default since 3.12
    * - :ref:`skinny-metadata<mkfs-feature-skinny-metadata>`
      - :statusok:`OK`
      - OK
-     -
+     - mkfs.btrfs default since 3.18
    * - :ref:`no-holes<mkfs-feature-no-holes>`
      - :statusok:`OK`
      - OK
-     -
+     - mkfs.btrfs default since 5.15
    * - :ref:`Free space tree<mkfs-feature-free-space-tree>`
      - :statusok:`OK`
      - OK
-     -
+     - mkfs.btrfs default since 5.15
    * - :ref:`Block group tree<mkfs-feature-block-group-tree>`
      - :statusok:`OK`
      - OK
      -
    * - :ref:`Raid stripe tree<mkfs-feature-raid-stripe-tree>`
+     - :statusmok:`mostly OK`
+     - OK
+     - not all profiles are supported and RST is behind
+       CONFIG_BTRFS_DEBUG/CONFIG_BTRFS_EXPERIMENTAL build option
+   * - :doc:`Squota<Qgroups>`
      - :statusok:`OK`
      - OK
-     -
+     - Simplified tracking needs on-disk format update, but may work in a limited way without it.
 
 Interoperability
 ^^^^^^^^^^^^^^^^
@@ -267,7 +286,7 @@ Integration with other Linux features or external systems.
    * - :ref:`io_uring<interop-io-uring>`
      - :statusok:`OK`
      - OK
-     -
+     - Can be combined with *Encoded read/write ioctls*.
    * - :ref:`fsverity<interop-fsverity>`
      - :statusok:`OK`
      - OK
@@ -295,7 +314,8 @@ Subpage block size
 
 Most commonly used page sizes are 4KiB, 16KiB and 64KiB. All combinations with
 a 4KiB sector size filesystems are supported. Some features are not compatible
-with subpage or require another feature to work:
+with subpage or require another feature to work. Since btrfs-progs 6.7 the default
+sector size is 4KiB as this allows cross-architecture compatibility.
 
 .. list-table::
    :header-rows: 1
@@ -317,6 +337,7 @@ with subpage or require another feature to work:
      - The list of supported sector sizes on a given version can be found
        in file :file:`/sys/fs/btrfs/features/supported_sectorsizes`
 
+.. _status-zoned:
 
 Zoned mode
 ----------
@@ -375,10 +396,13 @@ are unaffected by the zoned device constraints.
      - requires `raid-stripe-tree`
    * - RAID56
      - not implemented
-     - will be supported once raid-stripe-tree support is implemented
+     - Will be supported once raid-stripe-tree support is implemented
    * - discard
      - not implemented
      - May not be required at all due to automatic zone reclaim
+   * - subpage blocksize
+     - not implemented
+     - Missing support for compressed data
    * - fsverity
      - TBD
      -
@@ -447,3 +471,43 @@ Newly introduced features build on top of the above and could add
 specific structures. If a backward compatibility is not possible to
 maintain, a bit in the filesystem superblock denotes that and the level
 of incompatibility (full, read-only mount possible).
+
+.. _status-experimental-features:
+
+Experimental features
+---------------------
+
+Until kernel 6.12 the *CONFIG_OPTION_DEBUG* was used to hide features that
+still need some work and should not be exposed to users in general. With
+the increasing number of such features or functionality this started to conflict
+with regular debugging features. Currently the following is behind
+the experimental option. Use with caution and if you find problems or have
+feedback please report that to the mailing list.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feature
+     - Version
+     - Description
+   * - Raid stripe tree
+     - ...
+     - The RIAD5/6 block group is still not implemented and on-disk format
+       is not finalized (last change was in 6.12).
+   * - Send stream protocol v3
+     - ...
+     - The fs-verity stream command is implemented. More updates to the
+       protocol specification are pending.
+   * - Checksum offload mode
+     - ...
+     - Fast devices with a combination of block group profiles benefits from
+       calculating checksums at the time of IO submission, while other
+       combinations benefit from offloading that to the worker threads.
+       A sysfs tunable is exported to switch that.
+   * - Read balancing
+     - 6.13
+     - Spread IO read requests across available devices. A tunable is provided
+       in sysfs.
+   * - Extent tree v2
+     - ...
+     - Incomplete implementation.

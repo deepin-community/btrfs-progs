@@ -17,6 +17,8 @@
 #ifndef __BTRFS_TUNE_H__
 #define __BTRFS_TUNE_H__
 
+#include "kerncompat.h"
+#include <stdbool.h>
 #include <uuid/uuid.h>
 
 struct btrfs_root;
@@ -33,5 +35,6 @@ int convert_to_extent_tree(struct btrfs_fs_info *fs_info);
 int btrfs_change_csum_type(struct btrfs_fs_info *fs_info, u16 new_csum_type);
 
 int enable_quota(struct btrfs_fs_info *fs_info, bool simple);
+int remove_squota(struct btrfs_fs_info *fs_info);
 
 #endif

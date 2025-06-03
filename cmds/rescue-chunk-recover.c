@@ -144,7 +144,11 @@ again:
 	rec->offsets[0] = offset;
 	rec->nmirrors++;
 	ret = insert_cache_extent(eb_cache, &rec->cache);
-	BUG_ON(ret);
+	if (ret < 0) {
+		errno = -ret;
+		error("cannot insert extent to cache start %llu size %llu: %m",
+		      rec->cache.start, rec->cache.size);
+	}
 out:
 	return ret;
 free_out:
@@ -269,7 +273,11 @@ again:
 	}
 
 	ret = insert_block_group_record(bg_cache, rec);
-	BUG_ON(ret);
+	if (ret < 0) {
+		errno = -ret;
+		error("cannot insert qgroup record %llu: %m", rec->cache.start);
+		goto free_out;
+	}
 out:
 	return ret;
 free_out:
@@ -313,7 +321,11 @@ again:
 		goto again;
 	}
 	ret = insert_cache_extent(chunk_cache, &rec->cache);
-	BUG_ON(ret);
+	if (ret < 0) {
+		errno = -ret;
+		error("cannot insert extent to cache start %llu size %llu: %m",
+		      rec->cache.start, rec->cache.size);
+	}
 out:
 	return ret;
 free_out:
@@ -359,7 +371,11 @@ again:
 	}
 
 	ret = insert_device_extent_record(devext_cache, rec);
-	BUG_ON(ret);
+	if (ret < 0) {
+		errno = -ret;
+		error("cannot insert device extent record to cache start %llu size %llu: %m",
+		      rec->cache.start, rec->cache.size);
+	}
 out:
 	return ret;
 free_out:
@@ -576,8 +592,8 @@ static int check_chunk_by_metadata(struct recover_control *rc,
 		stripe = &chunk->stripes[i];
 
 		key.objectid = stripe->devid;
-		key.offset = stripe->offset;
 		key.type = BTRFS_DEV_EXTENT_KEY;
+		key.offset = stripe->offset;
 
 		ret = btrfs_search_slot(NULL, dev_root, &key, &path, 0, 0);
 		if (ret < 0) {
@@ -1000,8 +1016,8 @@ static int block_group_remove_all_extent_items(struct btrfs_trans_handle *trans,
 	root = btrfs_extent_root(fs_info, start);
 
 	key.objectid = start;
-	key.offset = 0;
 	key.type = BTRFS_EXTENT_ITEM_KEY;
+	key.offset = 0;
 again:
 	ret = btrfs_search_slot(trans, root, &key, &path, -1, 1);
 	if (ret < 0)
@@ -1957,7 +1973,7 @@ static int fill_chunk_up(struct chunk_record *chunk, struct list_head *devexts,
 	return ret;
 }
 
-#define EQUAL_STRIPE (1 << 0)
+#define EQUAL_STRIPE (1U << 0)
 
 static int rebuild_raid_data_chunk_stripes(struct recover_control *rc,
 					   struct btrfs_root *root,
@@ -2216,13 +2232,13 @@ static int btrfs_recover_chunks(struct recover_control *rc)
 		chunk->sub_stripes = btrfs_bg_type_to_sub_stripes(bg->flags);
 
 		ret = insert_cache_extent(&rc->chunk, &chunk->cache);
-		if (ret == -EEXIST) {
-			error("duplicate entry in cache start %llu size %llu",
+		if (ret < 0) {
+			errno = -ret;
+			error("cannot insert extent to cache start %llu size %llu",
 					chunk->cache.start, chunk->cache.size);
 			free(chunk);
 			return ret;
 		}
-		BUG_ON(ret);
 
 		list_del_init(&bg->list);
 		if (!nstripes) {

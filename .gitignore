@@ -74,10 +74,12 @@
 !.editorconfig
 !.github
 !.readthedocs.yaml
+!.codespellrc
 
 /ci/images/*/devel.tar.gz
 
 /Documentation/Makefile
 /Documentation/_build
+/Documentation/contents.rst
 
 *.patch

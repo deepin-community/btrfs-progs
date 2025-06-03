@@ -29,7 +29,7 @@ OPTIONS
 
 -b|--byte-count <size>
         Specify the size of each device as seen by the filesystem. If not set,
-        the entire device size is used. The total filesystem size will be sum
+        the entire device size is used. The total filesystem size will be the sum
         of all device sizes, for a single device filesystem the option
         effectively specifies the size of the filesystem.
 
@@ -122,10 +122,22 @@ OPTIONS
 -s|--sectorsize <size>
         Specify the sectorsize, the minimum data block allocation unit.
 
-        The default value is the page size and is autodetected. If the sectorsize
-        differs from the page size, the created filesystem may not be mountable by the
-        running kernel. Therefore it is not recommended to use this option unless you
-        are going to mount it on a system with the appropriate page size.
+        .. note::
+                Versions prior to 6.7 set the sectorsize matching the host CPU
+                page size, starting in 6.7 this is 4KiB for cross-architecture
+                compatibility. Please read more about the :doc:`subpage block size support<Subpage>`
+                and :ref:`its status<status-subpage-block-size>`.
+
+        By default, the value is 4KiB, but it can be manually set to match the
+        system page size (e.g. using command :command:`getconf PAGE_SIZE`).
+        However, if the sector size is different from the page
+        size, the resulting filesystem may not be mountable by the current
+        kernel, apart from the default 4KiB. Hence, using this option is not
+        advised unless you intend to mount it on a system with the suitable
+        page size.
+
+        In experimental build the size 2K (2048) is also allowed and needs
+        kernel that also allows that value, then it works in the subpage mode.
 
 -L|--label <string>
         Specify a label for the filesystem. The *string* should be less than 256
@@ -140,10 +152,66 @@ OPTIONS
         Populate the toplevel subvolume with files from *rootdir*.  This does not
         require root permissions to write the new files or to mount the filesystem.
 
+        Directories can be created as subvolumes, see also option *--subvol*.
+        Hardlinks are detected and created in the filesystem image.
+
         .. note::
                 This option may enlarge the image or file to ensure it's big enough to
                 contain the files from *rootdir*. Since version 4.14.1 the filesystem size is
                 not minimized. Please see option *--shrink* if you need that functionality.
+
+--compress <algo>[:<level>]
+        Try to compress files when using *--rootdir*.  Supported values for *algo* are
+        *no* (the default), *zstd*, *lzo* or *zlib*.  The optional value *level* is a
+        compression level, 1..15 for *zstd*, 1..9 for *zlib*.
+
+        It is recommended to use the highest level to achieve maximum space savings.
+        Compression at mkfs time is not as constrained as in kernel where it's
+        desirable to use less CPU load. Otherwise the default level is 3.
+
+        As with the kernel, :command:`mkfs.btrfs` won't write compressed extents when
+        they would be larger than the uncompressed versions, and will set file attribute
+        *NOCOMPRESS* if its beginning is found to be incompressible.
+
+        .. note::
+                The support for ZSTD and LZO is a compile-time option, please check
+                the output of :command:`mkfs.btrfs --version` for the actual support.
+
+-u|--subvol <type>:<subdir>
+        Specify that *subdir* is to be created as a subvolume rather than a regular
+        directory.  The option *--rootdir* must also be specified, and *subdir* must be an
+        existing subdirectory within it.  This option can be specified multiple times.
+
+        The *type* is an optional additional modifier. Valid choices are:
+
+        * *default*: create as default subvolume
+        * *ro*: create as read-only subvolume
+        * *rw*: create as read-write subvolume (the default)
+        * *default-ro*: create as read-only default subvolume
+
+        Only one of *default* and *default-ro* may be specified.
+
+        If you wish to create a subvolume with a name containing a colon and you don't
+        want this to be parsed as containing a modifier, you can prefix the path with :file:`./`:
+
+        .. code-block:: bash
+
+                $ mkfs.btrfs --rootdir dir --subvol ./ro:subdir /dev/loop0
+
+        If there are hardlinks inside *rootdir* and *subdir* will split the
+        subvolumes, like the following case:
+
+        .. code-block:: none
+
+		rootdir/
+		|- hardlink1
+		|- hardlink2
+		|- subdir/  <- will be a subvolume
+		   |- hardlink3
+
+        In that case we cannot create :file:`hardlink3` as hardlinks of
+        :file:`hardlink1` and :file:`hardlink2` because :file:`hardlink3` will
+        be inside a new subvolume.
 
 --shrink
         Shrink the filesystem to its minimal size, only works with *--rootdir* option.
@@ -193,13 +261,13 @@ OPTIONS
         Increase verbosity level, default is 1.
 
 -V|--version
-        Print the :command:`mkfs.btrfs` version and exit.
+        Print the :command:`mkfs.btrfs` version, builtin features and exit.
 
 --help
         Print help.
 
--l|--leafsize <size>
-        Removed in 6.0, used to be alias for *--nodesize*.
+DEPRECATED OPTIONS
+------------------
 
 -R|--runtime-features <feature1>[,<feature2>...]
         Removed in 6.3, was used to specify features not affecting on-disk format.
@@ -336,14 +404,20 @@ block-group-tree
 .. _mkfs-feature-raid-stripe-tree:
 
 raid-stripe-tree
-        (kernel support since 6.7)
+        (kernel support since 6.7, CONFIG_BTRFS_DEBUG/CONFIG_BTRFS_EXPERIMENTAL)
 
-        New tree for logical file extent mapping where the physical mapping
-        may not match on multiple devices. this is now used in zoned mode to
+        Separate tree for logical file extent mapping where the physical mapping
+        may not match on multiple devices. This is now used in zoned mode to
         implement RAID0/RAID1* profiles, but can be used in non-zoned mode as
         well. The support for RAID56 is in development and will eventually
         fix the problems with the current implementation. This is a backward
         incompatible feature and has to be enabled at mkfs time.
+
+        .. note::
+                Due to the status of implementation it is enabled only in
+                builds with CONFIG_BTRFS_DEBUG/CONFIG_BTRFS_EXPERIMENTAL.
+                Support by the kernel module can be found in the sysfs feature
+                list.
 
 squota
 	(kernel support since 6.7)
@@ -542,7 +616,7 @@ hopefully not destroying both copies of particular data in case of DUP.
 
 The wear levelling techniques can also lead to reduced redundancy, even if the
 device does not do any deduplication. The controllers may put data written in
-a short timespan into the same physical storage unit (cell, block etc). In case
+a short time span into the same physical storage unit (cell, block etc). In case
 this unit dies, both copies are lost. BTRFS does not add any artificial delay
 between metadata writes.
 
@@ -606,4 +680,4 @@ SEE ALSO
 :doc:`btrfs-man5`,
 :doc:`btrfs`,
 :doc:`btrfs-balance`,
-``wipefs(8)``
+:manref:`wipefs(8)`

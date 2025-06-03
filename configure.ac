@@ -17,14 +17,14 @@ BTRFS_VERSION_PATCHLEVEL=`echo "${BTRFS_VERSION_PLAIN#v*}" | awk -F. '{print $3}
 dnl libbtrfs .so version
 LIBBTRFS_MAJOR=0
 LIBBTRFS_MINOR=1
-LIBBTRFS_PATCHLEVEL=2
+LIBBTRFS_PATCHLEVEL=4
 
 dnl libbtrfsutil .so version
 BTRFS_UTIL_VERSION_MAJOR=`sed -rn 's/^\#define BTRFS_UTIL_VERSION_MAJOR ([0-9])+$/\1/p' libbtrfsutil/btrfsutil.h`
 BTRFS_UTIL_VERSION_MINOR=`sed -rn 's/^\#define BTRFS_UTIL_VERSION_MINOR ([0-9])+$/\1/p' libbtrfsutil/btrfsutil.h`
 BTRFS_UTIL_VERSION_PATCH=`sed -rn 's/^\#define BTRFS_UTIL_VERSION_PATCH ([0-9])+$/\1/p' libbtrfsutil/btrfsutil.h`
 
-CFLAGS=${CFLAGS:-"-g -O1 -Wall -D_FORTIFY_SOURCE=2"}
+CFLAGS=${CFLAGS:-"-g -O2 -Wall -D_FORTIFY_SOURCE=2"}
 AC_SUBST([CFLAGS])
 
 AC_PREREQ([2.60])
@@ -45,25 +45,23 @@ AC_C_CONST
 AC_C_VOLATILE
 AC_C_BIGENDIAN
 
-if test "x$target_cpu" == 'xx86_64'; then
+AS_IF([test "x$target_cpu" = 'xx86_64'], [
+	AX_CHECK_COMPILE_FLAG([-msse2], [HAVE_CFLAG_msse2=1], [HAVE_CFLAG_msse2=0])
+	AC_SUBST([HAVE_CFLAG_msse2])
+	AC_DEFINE_UNQUOTED([HAVE_CFLAG_msse2], [$HAVE_CFLAG_msse2], [Compiler supports -msse2])
 
-AX_CHECK_COMPILE_FLAG([-msse2], [HAVE_CFLAG_msse2=1], [HAVE_CFLAG_msse2=0])
-AC_SUBST([HAVE_CFLAG_msse2])
-AC_DEFINE_UNQUOTED([HAVE_CFLAG_msse2], [$HAVE_CFLAG_msse2], [Compiler supports -msse2])
+	AX_CHECK_COMPILE_FLAG([-msse4.1], [HAVE_CFLAG_msse41=1], [HAVE_CFLAG_msse41=0])
+	AC_SUBST([HAVE_CFLAG_msse41])
+	AC_DEFINE_UNQUOTED([HAVE_CFLAG_msse41], [$HAVE_CFLAG_msse41], [Compiler supports -msse4.1])
 
-AX_CHECK_COMPILE_FLAG([-msse4.1], [HAVE_CFLAG_msse41=1], [HAVE_CFLAG_msse41=0])
-AC_SUBST([HAVE_CFLAG_msse41])
-AC_DEFINE_UNQUOTED([HAVE_CFLAG_msse41], [$HAVE_CFLAG_msse41], [Compiler supports -msse4.1])
+	AX_CHECK_COMPILE_FLAG([-mavx2], [HAVE_CFLAG_mavx2=1], [HAVE_CFLAG_mavx2=0])
+	AC_SUBST([HAVE_CFLAG_mavx2])
+	AC_DEFINE_UNQUOTED([HAVE_CFLAG_mavx2], [$HAVE_CFLAG_mavx2], [Compiler supports -mavx2])
 
-AX_CHECK_COMPILE_FLAG([-mavx2], [HAVE_CFLAG_mavx2=1], [HAVE_CFLAG_mavx2=0])
-AC_SUBST([HAVE_CFLAG_mavx2])
-AC_DEFINE_UNQUOTED([HAVE_CFLAG_mavx2], [$HAVE_CFLAG_mavx2], [Compiler supports -mavx2])
-
-AX_CHECK_COMPILE_FLAG([-msha], [HAVE_CFLAG_msha=1], [HAVE_CFLAG_msha=0])
-AC_SUBST([HAVE_CFLAG_msha])
-AC_DEFINE_UNQUOTED([HAVE_CFLAG_msha], [$HAVE_CFLAG_msha], [Compiler supports -msha])
-
-fi
+	AX_CHECK_COMPILE_FLAG([-msha], [HAVE_CFLAG_msha=1], [HAVE_CFLAG_msha=0])
+	AC_SUBST([HAVE_CFLAG_msha])
+	AC_DEFINE_UNQUOTED([HAVE_CFLAG_msha], [$HAVE_CFLAG_msha], [Compiler supports -msha])
+], [])
 
 AX_CHECK_COMPILE_FLAG([-std=gnu11], [],
 	[AC_MSG_ERROR([std=gnu11 compiler required])])
@@ -76,14 +74,6 @@ AC_CHECK_TOOL([AR], [ar])
 AC_PATH_PROG([RM], [rm], [rm])
 AC_PATH_PROG([RMDIR], [rmdir], [rmdir])
 
-
-AC_CHECK_FUNCS([openat], [],
-	[AC_MSG_ERROR([cannot find openat() function])])
-
-AC_CHECK_FUNCS([reallocarray])
-
-AC_CHECK_FUNCS([clock_gettime])
-
 AX_CHECK_DEFINE([features.h],[__GLIBC__],[HAVE_GLIBC=1],[HAVE_GLIBC=0])
 AC_SUBST([HAVE_GLIBC])
 
@@ -92,10 +82,95 @@ AX_GCC_BUILTIN([__builtin_sub_overflow])
 AX_GCC_BUILTIN([__builtin_mul_overflow])
 AX_GCC_BUILTIN([__builtin_cpu_supports__pclmul])
 
+AC_CHECK_HEADERS([fcntl.h])
+AC_CHECK_HEADERS([inttypes.h])
+AC_CHECK_HEADERS([malloc.h])
+AC_CHECK_HEADERS([mntent.h])
+AC_CHECK_HEADERS([stdint.h])
+AC_CHECK_HEADERS([strings.h])
+AC_CHECK_HEADERS([sys/file.h])
+AC_CHECK_HEADERS([sys/ioctl.h])
+AC_CHECK_HEADERS([sys/param.h])
+AC_CHECK_HEADERS([sys/socket.h])
+AC_CHECK_HEADERS([sys/statfs.h])
+AC_CHECK_HEADERS([sys/statvfs.h])
+AC_CHECK_HEADERS([sys/time.h])
+AC_CHECK_HEADERS([unistd.h])
+AC_CHECK_HEADER_STDBOOL
+
 AC_CHECK_HEADERS([linux/perf_event.h])
 AC_CHECK_HEADERS([linux/hw_breakpoint.h])
 AC_CHECK_HEADERS([linux/fsverity.h])
+
+AC_CHECK_MEMBERS([struct stat.st_blksize])
+AC_CHECK_MEMBERS([struct stat.st_rdev])
+
+AC_TYPE_INT32_T
+AC_TYPE_INT64_T
+AC_TYPE_INT8_T
+AC_TYPE_MODE_T
+AC_TYPE_OFF_T
+AC_TYPE_PID_T
+AC_TYPE_SIZE_T
+AC_TYPE_SSIZE_T
+AC_TYPE_UID_T
+AC_TYPE_UINT16_T
+AC_TYPE_UINT32_T
+AC_TYPE_UINT64_T
+AC_TYPE_UINT8_T
+
+dnl Required functions
+AC_FUNC_CHOWN
+AC_FUNC_ERROR_AT_LINE
+AC_FUNC_FORK
+AC_FUNC_GETMNTENT
+AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
+AC_FUNC_MALLOC
+AC_FUNC_MMAP
+AC_FUNC_REALLOC
+
+AC_CHECK_FUNCS([fchdir], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([fdatasync], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([ftruncate], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([getcwd], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([getmntent], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([getpagesize], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([gettimeofday], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([lchown], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([localtime_r], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([memchr], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([memmove], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([memset], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([mkdir], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([mkfifo], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([munmap], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([openat], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([realpath], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([regcomp], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([rmdir], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([select], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([socket], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strcasecmp], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strchr], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strdup], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strerror], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strncasecmp], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strndup], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strrchr], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strstr], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strtol], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strtoul], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([strtoull], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([sysinfo], [], [AC_MSG_ERROR([cannot find required function])])
+AC_CHECK_FUNCS([uname], [], [AC_MSG_ERROR([cannot find required function])])
+
+dnl Check for printf.h functions.
 AC_CHECK_HEADERS([printf.h])
+AC_CHECK_FUNCS([register_printf_specifier])
+AC_CHECK_FUNCS([register_printf_modifier])
+
+dnl Optional (tests)
+AC_CHECK_FUNCS([clock_gettime])
 
 if grep -q 'HAVE_LINUX_FSVERITY_H.*1' confdefs.h; then
 	have_fsverity='yes'
@@ -272,9 +347,9 @@ elif test "$with_crypto" = "libkcapi"; then
 	cryptoproviderversion=`${PKG_CONFIG} libkcapi --modversion`
 elif test "$with_crypto" = "botan"; then
 	cryptoprovider="botan"
-	PKG_CHECK_MODULES(BOTAN, [botan-2 >= 2.19.0])
+	PKG_CHECK_MODULES(BOTAN, [botan-3 >= 3.0.0])
 	CRYPTOPROVIDER_BOTAN=1
-	cryptoproviderversion=`${PKG_CONFIG} botan-2 --modversion`
+	cryptoproviderversion=`${PKG_CONFIG} botan-3 --modversion`
 elif test "$with_crypto" = "openssl"; then
 	cryptoprovider="openssl"
 	PKG_CHECK_MODULES(OPENSSL, [libcrypto >= 3.2.0])
@@ -312,9 +387,10 @@ AS_IF([test "x$have_ext4_epoch_mask_define" = xno], [
         [
             AC_DEFINE([HAVE_EXT4_EPOCH_MASK_DEFINE], [1], [Define to 1 if ext2_inode_large includes i_atime_extra])
             AC_DEFINE([EXT4_EPOCH_BITS], [2],[for encode and decode tv_nsec in ext2 inode])
-            AC_DEFINE([EXT4_EPOCH_MASK], [((1 << EXT4_EPOCH_BITS) - 1)], [For encode and decode tv_nsec info in ext2 inode])
+            AC_DEFINE([EXT4_EPOCH_MASK], [((1U << EXT4_EPOCH_BITS) - 1)], [For encode and decode tv_nsec info in ext2 inode])
             AC_DEFINE([EXT4_NSEC_MASK],  [(~0UL << EXT4_EPOCH_BITS)], [For encode and decode tv_nsec info in ext2 inode])
-            AC_DEFINE([inode_includes(size, field)],[m4_normalize[(size >= (sizeof(((struct ext2_inode_large *)0)->field) + offsetof(struct ext2_inode_large, field)))]],
+	    # Use name from 1.47.1, backward compatibility is handled in convert/source-ext2.c
+            AC_DEFINE([ext2fs_inode_includes(size, field)],[m4_normalize[(size >= (sizeof(((struct ext2_inode_large *)0)->field) + offsetof(struct ext2_inode_large, field)))]],
                 [For encode and decode tv_nsec info in ext2 inode])
         ],
         [AC_MSG_WARN([It seems that ext2_inode_large don't includes tv_nsec related info, probably old e2fsprogs, no 64bit time precision of converted images])],
@@ -378,7 +454,7 @@ PKG_CHECK_MODULES(ZLIB, [zlib])
 PKG_STATIC(ZLIB_LIBS_STATIC, [zlib])
 
 AC_ARG_ENABLE([zstd],
-	AS_HELP_STRING([--disable-zstd], [build without zstd support for restore and receive (default: enabled)]),
+	AS_HELP_STRING([--disable-zstd], [build without zstd compression support (btrfs-restore, btrfs-receive, mkfs.btrfs) (default: enabled)]),
 	[], [enable_zstd=yes]
 )
 
@@ -389,6 +465,27 @@ fi
 
 AS_IF([test "x$enable_zstd" = xyes], [COMPRESSION_ZSTD=1], [COMPRESSION_ZSTD=0])
 AC_SUBST(COMPRESSION_ZSTD)
+
+AC_ARG_ENABLE([lzo],
+	AS_HELP_STRING([--disable-lzo], [build without lzo compression support (btrfs-restore, btrfs-receive, mkfs.btrfs) (default: enabled)]),
+	[], [enable_lzo=yes]
+)
+
+if test "x$enable_lzo" = xyes; then
+	dnl lzo library does not provide pkg-config, use classic way
+	AC_CHECK_LIB([lzo2], [lzo_version], [
+		LZO2_LIBS="-llzo2"
+		LZO2_CFLAGS=""
+		LZO2_LIBS_STATIC="-llzo2"],[
+		AC_MSG_ERROR([cannot find lzo2 library])
+	])
+	AC_SUBST([LZO2_LIBS])
+	AC_SUBST([LZO2_LIBS_STATIC])
+	AC_SUBST([LZO2_CFLAGS])
+fi
+
+AS_IF([test "x$enable_lzo" = xyes], [COMPRESSION_LZO=1], [COMPRESSION_LZO=0])
+AC_SUBST(COMPRESSION_LZO)
 
 AC_ARG_ENABLE([libudev],
       AS_HELP_STRING([--disable-libudev], [build without libudev support (for multipath)]),
@@ -437,27 +534,6 @@ if ${PKG_CONFIG} udev --atleast-version 190; then
 fi
 AC_SUBST(UDEVDIR)
 
-AC_ARG_ENABLE([lzo],
-	AS_HELP_STRING([--disable-lzo], [build without lzo support for restore and receive (default: enabled)]),
-	[], [enable_lzo=yes]
-)
-
-if test "x$enable_lzo" = xyes; then
-	dnl lzo library does not provide pkg-config, use classic way
-	AC_CHECK_LIB([lzo2], [lzo_version], [
-		LZO2_LIBS="-llzo2"
-		LZO2_CFLAGS=""
-		LZO2_LIBS_STATIC="-llzo2"],[
-		AC_MSG_ERROR([cannot find lzo2 library])
-	])
-	AC_SUBST([LZO2_LIBS])
-	AC_SUBST([LZO2_LIBS_STATIC])
-	AC_SUBST([LZO2_CFLAGS])
-fi
-
-AS_IF([test "x$enable_lzo" = xyes], [COMPRESSION_LZO=1], [COMPRESSION_LZO=0])
-AC_SUBST(COMPRESSION_LZO)
-
 dnl call PKG_INSTALLDIR from pkg.m4 to set pkgconfigdir
 m4_ifdef([PKG_INSTALLDIR], [PKG_INSTALLDIR], [AC_MSG_ERROR([please install pkgconf])])
 
@@ -482,6 +558,7 @@ Makefile.inc
 Documentation/Makefile
 libbtrfs/version.h
 libbtrfsutil/libbtrfsutil.pc
+libbtrfsutil/python/version.py
 ])
 
 AC_OUTPUT

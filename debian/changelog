@@ -1,3 +1,61 @@
+btrfs-progs (6.14-1deepin1) unstable; urgency=medium
+
+  * Reapply deepin's changes.
+
+ -- WangYuli <wangyuli@uniontech.com>  Tue, 3 Jun 2025 21:16:28 +0800
+
+btrfs-progs (6.14-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Nicholas D Steeves <sten@debian.org>  Thu, 17 Apr 2025 17:19:49 -0400
+
+btrfs-progs (6.12-1) unstable; urgency=medium
+
+  * Salvage package (Closes: #1088329).
+  * New upstream release (Closes: #1074237, #1060380).
+  * Migrate from obsolete pkg-config to pkgconf.
+  * Update symbols.
+  * Add myself to d/copyright.
+  * Add missing copyright and BSD-2-clause license for xxHash (this is a
+    technical RC issue for license-compliance in the binary packages).
+  * Move VCS back to Salsa (Debian group, which was historically
+    collab-maint).
+  * Drop the libext2fs hack (unneeded with this upstream version).
+  * Revert "Bump dependency on libext2fs-dev"; it's unneeded and unnecessarily
+    complicates backporting.
+  * Drop "single-debian-patch" source option, because it makes the Archive and
+    source package view unnecessarily opaque.
+  * Restore d/copyright record of the IETF Trust's assets; they're licensed as
+    TLP-4.
+  * Document STRATO AG's copyright.
+  * Do complete copyright review because our d/copyright failed to document
+    more than 10 upstream-documented contributors as well a number of missing
+    licenses.
+  * Ignore lintian's "E: btrfs-progs-udeb udeb: aliased-location" as a matter
+    of team solidarity
+    https://lists.debian.org/debian-boot/2024/12/msg00121.html
+  * Declare Standards-Version 4.7.0 (no changes required).
+
+ -- Nicholas D Steeves <sten@debian.org>  Fri, 20 Dec 2024 16:03:14 -0500
+
+btrfs-progs (6.6.3-1.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Switch Build-Depends from udev to systemd-dev (Closes: #1065385)
+  * Install files into UsrMerged layout (DEP17 M2) (Closes: #1073073)
+
+  [ Peter Michael Green ]
+  * Change inode_includes to ext2fs_inode_includes (Closes: #1071297)
+  * Bump dependency on libext2fs-dev.
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Wed, 12 Jun 2024 21:22:17 +0200
+
+btrfs-progs (6.6.3-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Rename libraries for 64-bit time_t transition.  Closes: #1062030
+
 btrfs-progs (6.6.3-1deepin2) unstable; urgency=medium
 
   * not scan if no btrfs in initramfs to improve boot performance.

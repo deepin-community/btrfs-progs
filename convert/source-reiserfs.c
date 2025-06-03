@@ -364,7 +364,7 @@ static int convert_direct(struct btrfs_trans_handle *trans,
 	if (ret)
 		return ret;
 
-	return btrfs_record_file_extent(trans, root, objectid, inode, offset,
+	return btrfs_convert_file_extent(trans, root, objectid, inode, offset,
 					key.objectid, sectorsize);
 }
 
@@ -384,7 +384,8 @@ static int reiserfs_convert_tail(struct btrfs_trans_handle *trans,
 				      length, offset, convert_flags);
 
 	ret = btrfs_insert_inline_extent(trans, root, objectid,
-					 offset, body, length);
+					 offset, body, length,
+					 BTRFS_COMPRESS_NONE, length);
 	if (ret)
 		return ret;
 
@@ -537,9 +538,16 @@ static int reiserfs_copy_symlink(struct btrfs_trans_handle *trans,
 	symlink = tp_item_body(&path);
 	len = get_ih_item_len(tp_item_head(&path));
 
+	if (len > btrfs_symlink_max_size(trans->fs_info)) {
+		error("symlink too large, has %u max %u",
+		      len, btrfs_symlink_max_size(trans->fs_info));
+		ret = -ENAMETOOLONG;
+		goto fail;
+	}
 	ret = btrfs_insert_inline_extent(trans, root, objectid, 0,
-					 symlink, len + 1);
-	btrfs_set_stack_inode_nbytes(btrfs_inode, len + 1);
+					 symlink, len, BTRFS_COMPRESS_NONE,
+					 len);
+	btrfs_set_stack_inode_nbytes(btrfs_inode, len);
 fail:
 	pathrelse(&path);
 	return ret;

@@ -56,7 +56,7 @@ as a reply to the mailinglist after you've reviewed a patch. See below.
 Reviewed-by:
 ^^^^^^^^^^^^
 
-The patch has been reviewed and the singed person is putting his hand into
+The patch has been reviewed and the signed person is putting his hand into
 fire. If there's a bug found in this patch, the person is usually a good
 candidate for a CC: of the bugreport.
 
@@ -64,7 +64,7 @@ candidate for a CC: of the bugreport.
 
 **Do**: talk to the maintainer if he forgot to add this tag to the final patch.
 Reviews do take time and the patches land in various branches early after
-they're sent to the mailingslist for testing, but the reviews are always
+they're sent to the mailinglist for testing, but the reviews are always
 welcome.
 
 **Do**: collect the Reviewed-by tags for patches that get resent unchanged e.g.
@@ -157,7 +157,7 @@ Controversial changes
 This happens, not every patch gets merged. In the worst case there are not even
 any comments under the patch and it's silently ignored. This depends on many
 factors, most notably \*cough*time*cough*. Examining potential drawbacks or
-forseeing disasters is not an easy job.
+foreseeing disasters is not an easy job.
 
 Let's be more positive, you manage to attract the attention of some developer
 and he says, he does not like the approach of the patch(es).  Better than
@@ -178,7 +178,7 @@ For the next iteration, add a short description of the changes made, under the
 first **---** (triple dash) marker in the patch. For example (see also Example
 3):
 
-.. code-block::
+.. code-block:: none
 
    ---
    V3: renamed variable
@@ -236,7 +236,7 @@ Good practices, contribution hints
 -  be patient if your patch is not accepted immediately, try to send a gentle
    ping if there's a significant time without any action
 -  if you want to start contributing but are not sure about how to do that,
-   lurk in the mailingist or on the IRC channel
+   lurk in the mailinglist or on the IRC channel
 -  every patch should implement one thing -- this is vaguely defined, you may
    receive comments about patch splitting or merging with other
 -  every patch must be compilable when applied, possibly with all related
@@ -360,10 +360,7 @@ of the above. Rather focus on design or potential uses and other impact.
 Kernel patches
 ^^^^^^^^^^^^^^
 
-If you think you're able to provide the expected quality of patches and are
-familiar with a bit more advanced git use, ask the maintainers. If you're a
-long-term developer, the maintainers can also ask you to start the pull-based
-workflow. The main point for the workflow is to make maintainers' life easier.
+Workflow is described at https://github.com/btrfs/btrfs-workflow .
 
 Suggested branch names for patchsets for current development cycle:
 
@@ -454,7 +451,7 @@ copyright holders of changes in a given file. The code is usually heavily
 changed over time in smaller portions, slowly morphing into something that does
 not resemble the original code anymore though it shares a lot of the core ideas
 and implemented logic.  A copyright notice by a company that does not exist
-anymore from 10 years ago is a clear example of uselesness for the developers.
+anymore from 10 years ago is a clear example of uselessness for the developers.
 
 When code is moved verbatim from a file to another file, in the new file it
 appears to be contributed by a single author while it is in most cases code
@@ -664,8 +661,8 @@ and having your name in the git history.
 References
 ----------
 
--  `Kernel maintainersip: an oral
-   tradition <https://events.linuxfoundation.org/sites/events/files/slides/clement-kernel-maintainership-oral-tradition.pdf>`__
+-  `Kernel maintainership: an oral
+   tradition <https://bootlin.com/pub/conferences/2015/elce/clement-kernel-maintainership-oral-tradition/clement-kernel-maintainership-oral-tradition.pdf>`__
    (pdf) a nice presentation from ELCE 2015 what does it mean to be a
    maintainer and what the developers can expect.
 -  https://www.kernel.org/doc/html/latest/process/submitting-patches.html

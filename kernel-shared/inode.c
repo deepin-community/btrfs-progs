@@ -33,15 +33,14 @@
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/transaction.h"
 #include "kernel-shared/disk-io.h"
-#include "common/messages.h"
 #include "common/internal.h"
 
 /*
  * Find a free inode index for later btrfs_add_link().
  * Currently just search from the largest dir_index and +1.
  */
-static int btrfs_find_free_dir_index(struct btrfs_root *root, u64 dir_ino,
-				     u64 *ret_ino)
+int btrfs_find_free_dir_index(struct btrfs_root *root, u64 dir_ino,
+			      u64 *ret_ino)
 {
 	struct btrfs_path *path;
 	struct btrfs_key key;
@@ -93,8 +92,8 @@ out:
 }
 
 /* Check the dir_item/index conflicts before insert */
-int check_dir_conflict(struct btrfs_root *root, char *name, int namelen,
-		       u64 dir, u64 index)
+int btrfs_check_dir_conflict(struct btrfs_root *root, const char *name,
+			     int namelen, u64 dir, u64 index)
 {
 	struct btrfs_path *path;
 	struct btrfs_key key;
@@ -167,7 +166,7 @@ out:
  * Currently only supports adding link from an inode to another inode.
  */
 int btrfs_add_link(struct btrfs_trans_handle *trans, struct btrfs_root *root,
-		   u64 ino, u64 parent_ino, char *name, int namelen,
+		   u64 ino, u64 parent_ino, const char *name, int namelen,
 		   u8 type, u64 *index, int add_backref, int ignore_existed)
 {
 	struct btrfs_path *path;
@@ -190,7 +189,7 @@ int btrfs_add_link(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 			goto out;
 	}
 
-	ret = check_dir_conflict(root, name, namelen, parent_ino, ret_index);
+	ret = btrfs_check_dir_conflict(root, name, namelen, parent_ino, ret_index);
 	if (ret < 0 && !(ignore_existed && ret == -EEXIST))
 		goto out;
 
@@ -582,136 +581,6 @@ out:
 	return ret;
 }
 
-struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root,
-				  const char *base, u64 root_objectid,
-				  bool convert)
-{
-	struct btrfs_trans_handle *trans;
-	struct btrfs_fs_info *fs_info = root->fs_info;
-	struct btrfs_root *tree_root = fs_info->tree_root;
-	struct btrfs_root *new_root = NULL;
-	struct btrfs_path path = { 0 };
-	struct btrfs_inode_item *inode_item;
-	struct extent_buffer *leaf;
-	struct btrfs_key key;
-	u64 dirid = btrfs_root_dirid(&root->root_item);
-	u64 index = 2;
-	char buf[BTRFS_NAME_LEN + 1]; /* for snprintf null */
-	int len;
-	int i;
-	int ret;
-
-	len = strlen(base);
-	if (len == 0 || len > BTRFS_NAME_LEN)
-		return NULL;
-
-	key.objectid = dirid;
-	key.type = BTRFS_DIR_INDEX_KEY;
-	key.offset = (u64)-1;
-
-	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
-	if (ret <= 0) {
-		error("search for DIR_INDEX dirid %llu failed: %d",
-				(unsigned long long)dirid, ret);
-		goto fail;
-	}
-
-	if (path.slots[0] > 0) {
-		path.slots[0]--;
-		btrfs_item_key_to_cpu(path.nodes[0], &key, path.slots[0]);
-		if (key.objectid == dirid && key.type == BTRFS_DIR_INDEX_KEY)
-			index = key.offset + 1;
-	}
-	btrfs_release_path(&path);
-
-	trans = btrfs_start_transaction(root, 1);
-	if (IS_ERR(trans)) {
-		ret = PTR_ERR(trans);
-		errno = -ret;
-		error_msg(ERROR_MSG_START_TRANS, "%m");
-		goto fail;
-	}
-
-	key.objectid = dirid;
-	key.offset = 0;
-	key.type =  BTRFS_INODE_ITEM_KEY;
-
-	ret = btrfs_lookup_inode(trans, root, &path, &key, 1);
-	if (ret) {
-		error("search for INODE_ITEM %llu failed: %d",
-				(unsigned long long)dirid, ret);
-		goto fail;
-	}
-	leaf = path.nodes[0];
-	inode_item = btrfs_item_ptr(leaf, path.slots[0],
-				    struct btrfs_inode_item);
-
-	key.objectid = root_objectid;
-	key.offset = (u64)-1;
-	key.type = BTRFS_ROOT_ITEM_KEY;
-
-	memcpy(buf, base, len);
-	if (convert) {
-		for (i = 0; i < 1024; i++) {
-			ret = btrfs_insert_dir_item(trans, root, buf, len,
-					dirid, &key, BTRFS_FT_DIR, index);
-			if (ret != -EEXIST)
-				break;
-			len = snprintf(buf, ARRAY_SIZE(buf), "%s%d", base, i);
-			if (len < 1 || len > BTRFS_NAME_LEN) {
-				ret = -EINVAL;
-				break;
-			}
-		}
-	} else {
-		ret = btrfs_insert_dir_item(trans, root, buf, len, dirid, &key,
-					    BTRFS_FT_DIR, index);
-	}
-	if (ret)
-		goto fail;
-
-	btrfs_set_inode_size(leaf, inode_item, len * 2 +
-			     btrfs_inode_size(leaf, inode_item));
-	btrfs_mark_buffer_dirty(leaf);
-	btrfs_release_path(&path);
-
-	/* add the backref first */
-	ret = btrfs_add_root_ref(trans, tree_root, root_objectid,
-				 BTRFS_ROOT_BACKREF_KEY,
-				 root->root_key.objectid,
-				 dirid, index, buf, len);
-	if (ret) {
-		error("unable to add root backref for %llu: %d",
-				root->root_key.objectid, ret);
-		goto fail;
-	}
-
-	/* now add the forward ref */
-	ret = btrfs_add_root_ref(trans, tree_root, root->root_key.objectid,
-				 BTRFS_ROOT_REF_KEY, root_objectid,
-				 dirid, index, buf, len);
-	if (ret) {
-		error("unable to add root ref for %llu: %d",
-				root->root_key.objectid, ret);
-		goto fail;
-	}
-
-	ret = btrfs_commit_transaction(trans, root);
-	if (ret) {
-		errno = -ret;
-		error_msg(ERROR_MSG_COMMIT_TRANS, "%m");
-		goto fail;
-	}
-
-	new_root = btrfs_read_fs_root(fs_info, &key);
-	if (IS_ERR(new_root)) {
-		error("unable to fs read root: %lu", PTR_ERR(new_root));
-		new_root = NULL;
-	}
-fail:
-	return new_root;
-}
-
 /*
  * Walk the tree of allocated inodes and find a hole.
  */
@@ -737,8 +606,8 @@ int btrfs_find_free_objectid(struct btrfs_trans_handle *trans,
 	search_start = max((unsigned long long)search_start,
 				BTRFS_FIRST_FREE_OBJECTID);
 	search_key.objectid = search_start;
-	search_key.offset = 0;
 	search_key.type = 0;
+	search_key.offset = 0;
 
 	start_found = 0;
 	ret = btrfs_search_slot(trans, root, &search_key, path, 0, 0);

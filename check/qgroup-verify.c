@@ -960,9 +960,9 @@ loop:
 	 * items. The 2nd pass picks up relation items and glues them to their
 	 * respective count structures.
 	 */
-	key.offset = 0;
 	key.objectid = search_relations ? 0 : BTRFS_QGROUP_RELATION_KEY;
 	key.type = 0;
+	key.offset = 0;
 
 	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
 	if (ret < 0) {
@@ -1052,7 +1052,7 @@ static int simple_quota_account_extent(struct btrfs_fs_info *info,
 	u64 generation;
 	int type;
 	u64 root;
-	struct ulist *roots = ulist_alloc(0);
+	struct ulist roots;
 	int ret;
 	struct extent_buffer *node_eb;
 
@@ -1084,9 +1084,10 @@ static int simple_quota_account_extent(struct btrfs_fs_info *info,
 	if (!is_fstree(root))
 		return 0;
 
-	ulist_add(roots, root, 0, 0);
-	ret = account_one_extent(roots, bytenr, num_bytes);
-	ulist_free(roots);
+	ulist_init(&roots);
+	ulist_add(&roots, root, 0, 0);
+	ret = account_one_extent(&roots, bytenr, num_bytes);
+	ulist_release(&roots);
 	return ret;
 }
 

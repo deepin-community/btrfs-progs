@@ -111,15 +111,17 @@
 #include "common/cpu-utils.h"
 #include "common/messages.h"
 #include "common/task-utils.h"
-#include "common/path-utils.h"
 #include "common/help.h"
 #include "common/parse-utils.h"
+#include "common/string-utils.h"
 #include "common/fsfeatures.h"
 #include "common/device-scan.h"
 #include "common/box.h"
 #include "common/open-utils.h"
 #include "common/extent-tree-utils.h"
+#include "common/root-tree-utils.h"
 #include "common/clear-cache.h"
+#include "common/utils.h"
 #include "cmds/commands.h"
 #include "check/repair.h"
 #include "mkfs/common.h"
@@ -335,7 +337,7 @@ static int create_image_file_range(struct btrfs_trans_handle *trans,
 		error("remaining length not sectorsize aligned: %llu", len);
 		return -EINVAL;
 	}
-	ret = btrfs_record_file_extent(trans, root, ino, inode, bytenr,
+	ret = btrfs_convert_file_extent(trans, root, ino, inode, bytenr,
 				       disk_bytenr, len);
 	if (ret < 0)
 		return ret;
@@ -424,8 +426,8 @@ static int migrate_one_reserved_range(struct btrfs_trans_handle *trans,
 			break;
 
 		/* Now handle extent item and file extent things */
-		ret = btrfs_record_file_extent(trans, root, ino, inode, cur_off,
-					       key.objectid, key.offset);
+		ret = btrfs_convert_file_extent(trans, root, ino, inode, cur_off,
+					        key.objectid, key.offset);
 		if (ret < 0)
 			break;
 		/* Finally, insert csum items */
@@ -436,7 +438,7 @@ static int migrate_one_reserved_range(struct btrfs_trans_handle *trans,
 		/* Don't forget to insert hole */
 		hole_len = cur_off - hole_start;
 		if (hole_len) {
-			ret = btrfs_record_file_extent(trans, root, ino, inode,
+			ret = btrfs_convert_file_extent(trans, root, ino, inode,
 					hole_start, 0, hole_len);
 			if (ret < 0)
 				break;
@@ -453,7 +455,7 @@ static int migrate_one_reserved_range(struct btrfs_trans_handle *trans,
 	 *                   | Hole |
 	 */
 	if (range_end(range) - hole_start > 0)
-		ret = btrfs_record_file_extent(trans, root, ino, inode,
+		ret = btrfs_convert_file_extent(trans, root, ino, inode,
 				hole_start, 0, range_end(range) - hole_start);
 	return ret;
 }
@@ -915,44 +917,6 @@ out:
 	return ret;
 }
 
-static int create_subvol(struct btrfs_trans_handle *trans,
-			 struct btrfs_root *root, u64 root_objectid)
-{
-	struct extent_buffer *tmp;
-	struct btrfs_root *new_root;
-	struct btrfs_key key;
-	struct btrfs_root_item root_item;
-	int ret;
-
-	ret = btrfs_copy_root(trans, root, root->node, &tmp,
-			      root_objectid);
-	if (ret)
-		return ret;
-
-	memcpy(&root_item, &root->root_item, sizeof(root_item));
-	btrfs_set_root_bytenr(&root_item, tmp->start);
-	btrfs_set_root_level(&root_item, btrfs_header_level(tmp));
-	btrfs_set_root_generation(&root_item, trans->transid);
-	free_extent_buffer(tmp);
-
-	key.objectid = root_objectid;
-	key.type = BTRFS_ROOT_ITEM_KEY;
-	key.offset = trans->transid;
-	ret = btrfs_insert_root(trans, root->fs_info->tree_root,
-				&key, &root_item);
-
-	key.offset = (u64)-1;
-	new_root = btrfs_read_fs_root(root->fs_info, &key);
-	if (!new_root || IS_ERR(new_root)) {
-		error("unable to fs read root: %lu", PTR_ERR(new_root));
-		return PTR_ERR(new_root);
-	}
-
-	ret = btrfs_make_root_dir(trans, new_root, BTRFS_FIRST_FREE_OBJECTID);
-
-	return ret;
-}
-
 /*
  * New make_btrfs() has handle system and meta chunks quite well.
  * So only need to add remaining data chunks.
@@ -984,7 +948,8 @@ static int make_convert_data_block_groups(struct btrfs_trans_handle *trans,
 			u64 cur_backup = cur;
 
 			len = min(max_chunk_size,
-				  cache->start + cache->size - cur);
+				  round_up(cache->start + cache->size,
+					   BTRFS_STRIPE_LEN) - cur);
 			ret = btrfs_alloc_data_chunk(trans, fs_info, &cur_backup, len);
 			if (ret < 0)
 				break;
@@ -1057,13 +1022,14 @@ static int init_btrfs(struct btrfs_mkfs_config *cfg, struct btrfs_root *root,
 			     BTRFS_FIRST_FREE_OBJECTID);
 
 	/* subvol for fs image file */
-	ret = create_subvol(trans, root, CONV_IMAGE_SUBVOL_OBJECTID);
+	ret = btrfs_make_subvolume(trans, CONV_IMAGE_SUBVOL_OBJECTID, false);
 	if (ret < 0) {
 		error("failed to create subvolume image root: %d", ret);
 		goto err;
 	}
 	/* subvol for data relocation tree */
-	ret = create_subvol(trans, root, BTRFS_DATA_RELOC_TREE_OBJECTID);
+	ret = btrfs_make_subvolume(trans, BTRFS_DATA_RELOC_TREE_OBJECTID,
+				   false);
 	if (ret < 0) {
 		error("failed to create DATA_RELOC root: %d", ret);
 		goto err;
@@ -1145,6 +1111,62 @@ static int convert_open_fs(const char *devname,
 	return -1;
 }
 
+static int link_image_subvolume(struct btrfs_root *image_root, char *name)
+{
+	struct btrfs_fs_info *fs_info = image_root->fs_info;
+	struct btrfs_root *fs_root = fs_info->fs_root;
+	struct btrfs_trans_handle *trans;
+	char buf[BTRFS_NAME_LEN + 1]; /* for snprintf, null terminated. */
+	int ret;
+
+	/*
+	 * 1 root backref 1 root forward ref, 1 dir item 1 dir index,
+	 * and finally one root item.
+	 */
+	trans = btrfs_start_transaction(fs_root, 5);
+	if (IS_ERR(trans)) {
+		ret = PTR_ERR(trans);
+		errno = -ret;
+		error("failed to start transaction to link subvolume: %m");
+		return PTR_ERR(trans);
+	}
+	ret = btrfs_link_subvolume(trans, fs_root, btrfs_root_dirid(&fs_root->root_item),
+			name, strlen(name), image_root);
+	/* No filename conflicts, all done. */
+	if (!ret)
+		goto commit;
+	/* Other unexpected errors. */
+	if (ret != -EEXIST) {
+		btrfs_abort_transaction(trans, ret);
+		return ret;
+	}
+
+	/* Filename conflicts detected, try different names. */
+	for (int i = 0; i < 1024; i++) {
+		int len;
+
+		len = snprintf(buf, ARRAY_SIZE(buf), "%s%d", name, i);
+		if (len == 0 || len > BTRFS_NAME_LEN) {
+			error("failed to find an alternative name for image_root");
+			ret = -EINVAL;
+			goto abort;
+		}
+		ret = btrfs_link_subvolume(trans, fs_root,
+					   btrfs_root_dirid(&fs_root->root_item),
+					   buf, len, image_root);
+		if (!ret)
+			break;
+		if (ret != -EEXIST)
+			goto abort;
+	}
+commit:
+	ret = btrfs_commit_transaction(trans, fs_info->tree_root);
+	return ret;
+abort:
+	btrfs_abort_transaction(trans, ret);
+	return ret;
+}
+
 static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 		const char *fslabel, int progress,
 		struct btrfs_mkfs_features *features, u16 csum_type,
@@ -1179,7 +1201,7 @@ static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 
 	UASSERT(cctx.total_bytes != 0);
 	blocksize = cctx.blocksize;
-	if (blocksize < 4096) {
+	if (blocksize < BTRFS_MIN_BLOCKSIZE) {
 		error("block size is too small: %u < 4096", blocksize);
 		goto fail;
 	}
@@ -1272,8 +1294,8 @@ static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 	snprintf(subvol_name, sizeof(subvol_name), "%s_saved",
 			cctx.convert_ops->name);
 	key.objectid = CONV_IMAGE_SUBVOL_OBJECTID;
-	key.offset = (u64)-1;
 	key.type = BTRFS_ROOT_ITEM_KEY;
+	key.offset = (u64)-1;
 	image_root = btrfs_read_fs_root(root->fs_info, &key);
 	if (!image_root) {
 		error("unable to create image subvolume");
@@ -1311,17 +1333,21 @@ static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 		task_deinit(ctx.info);
 	}
 
-	image_root = btrfs_mksubvol(root, subvol_name,
-				    CONV_IMAGE_SUBVOL_OBJECTID, true);
-	if (!image_root) {
-		error("unable to link subvolume %s", subvol_name);
+	ret = link_image_subvolume(image_root, subvol_name);
+	if (ret < 0) {
+		errno = -ret;
+		error("unable to link subvolume %s: %m", subvol_name);
 		goto fail;
 	}
 
+	ret = btrfs_rebuild_uuid_tree(image_root->fs_info);
+	if (ret < 0) {
+		errno = -ret;
+		goto fail;
+	}
 	memset(root->fs_info->super_copy->label, 0, BTRFS_LABEL_SIZE);
 	if (convert_flags & CONVERT_FLAG_COPY_LABEL) {
-		__strncpy_null(root->fs_info->super_copy->label,
-				cctx.label, BTRFS_LABEL_SIZE - 1);
+		strncpy_null(root->fs_info->super_copy->label, cctx.label, BTRFS_LABEL_SIZE);
 		printf("Copy label '%s'\n", root->fs_info->super_copy->label);
 	} else if (convert_flags & CONVERT_FLAG_SET_LABEL) {
 		strcpy(root->fs_info->super_copy->label, fslabel);
@@ -1348,7 +1374,8 @@ static int do_convert(const char *devname, u32 convert_flags, u32 nodesize,
 	btrfs_sb_committed = true;
 
 	root = open_ctree_fd(fd, devname, 0,
-			     OPEN_CTREE_WRITES | OPEN_CTREE_TEMPORARY_SUPER);
+			     OPEN_CTREE_WRITES | OPEN_CTREE_TEMPORARY_SUPER |
+			     OPEN_CTREE_EXCLUSIVE);
 	if (!root) {
 		error("unable to open ctree for finalization");
 		goto fail;
@@ -1484,8 +1511,8 @@ static int check_convert_image(struct btrfs_root *image_root, u64 ino,
 	int ret;
 
 	key.objectid = ino;
-	key.offset = 0;
 	key.type = BTRFS_EXTENT_DATA_KEY;
+	key.offset = 0;
 
 	ret = btrfs_search_slot(NULL, image_root, &key, &path, 0, 0);
 	/*
@@ -1719,7 +1746,7 @@ static int do_rollback(const char *devname)
 	if (name_len > sizeof(dir_name))
 		name_len = sizeof(dir_name) - 1;
 	read_extent_buffer(path.nodes[0], dir_name, (unsigned long)(root_ref_item + 1), name_len);
-	dir_name[sizeof(dir_name) - 1] = 0;
+	dir_name[name_len] = 0;
 
 	printf("  Restoring from:  %s/%s\n", dir_name, image_name);
 
@@ -1842,6 +1869,10 @@ static const char * const convert_usage[] = {
 	OPTLINE("-O|--features LIST", "comma separated list of filesystem features"),
 	OPTLINE("--no-progress", "show only overview, not the detailed progress"),
 	"",
+	"General:",
+	OPTLINE("--version", "print the btrfs-convert version, builtin features and exit"),
+	OPTLINE("--help", "print this help and exit"),
+	"",
 	"Supported filesystems:",
 	"\text2/3/4: "
 #if BTRFSCONVERT_EXT2
@@ -1883,12 +1914,12 @@ int BOX_MAIN(convert)(int argc, char *argv[])
 
 	cpu_detect_flags();
 	hash_init_accel();
+	btrfs_config_init();
 	btrfs_assert_feature_buf_size();
-	printf("btrfs-convert from %s\n\n", PACKAGE_STRING);
 
 	while(1) {
 		enum { GETOPT_VAL_NO_PROGRESS = GETOPT_VAL_FIRST, GETOPT_VAL_CHECKSUM,
-			GETOPT_VAL_UUID };
+			GETOPT_VAL_UUID, GETOPT_VAL_VERSION };
 		static const struct option long_options[] = {
 			{ "no-progress", no_argument, NULL,
 				GETOPT_VAL_NO_PROGRESS },
@@ -1906,7 +1937,8 @@ int BOX_MAIN(convert)(int argc, char *argv[])
 			{ "copy-label", no_argument, NULL, 'L' },
 			{ "uuid", required_argument, NULL, GETOPT_VAL_UUID },
 			{ "nodesize", required_argument, NULL, 'N' },
-			{ "help", no_argument, NULL, GETOPT_VAL_HELP},
+			{ "help", no_argument, NULL, GETOPT_VAL_HELP },
+			{ "version", no_argument, NULL, GETOPT_VAL_VERSION },
 			{ NULL, 0, NULL, 0 }
 		};
 		int c = getopt_long(argc, argv, "dinN:rl:LpO:", long_options, NULL);
@@ -1924,7 +1956,7 @@ int BOX_MAIN(convert)(int argc, char *argv[])
 				packing = 0;
 				break;
 			case 'N':
-				nodesize = parse_size_from_string(optarg);
+				nodesize = arg_strtou64_with_suffix(optarg);
 				break;
 			case 'r':
 				rollback = 1;
@@ -1936,7 +1968,7 @@ int BOX_MAIN(convert)(int argc, char *argv[])
 					"label too long, trimmed to %d bytes",
 						BTRFS_LABEL_SIZE - 1);
 				}
-				__strncpy_null(fslabel, optarg, BTRFS_LABEL_SIZE - 1);
+				strncpy_null(fslabel, optarg, BTRFS_LABEL_SIZE);
 				break;
 			case 'L':
 				copylabel = CONVERT_FLAG_COPY_LABEL;
@@ -1995,14 +2027,21 @@ int BOX_MAIN(convert)(int argc, char *argv[])
 						error("invalid UUID: %s\n", optarg);
 						return 1;
 					}
-					strncpy(fsid, optarg, sizeof(fsid));
+					strncpy_null(fsid, optarg, sizeof(fsid));
 				}
 				break;
+			case GETOPT_VAL_VERSION:
+				help_builtin_features("btrfs-convert, part of ");
+				ret = 0;
+				goto success;
 			case GETOPT_VAL_HELP:
 			default:
 				usage(&convert_cmd, c != GETOPT_VAL_HELP);
 		}
 	}
+
+	printf("btrfs-convert from %s\n\n", PACKAGE_STRING);
+
 	set_argv0(argv);
 	if (check_argc_exact(argc - optind, 1)) {
 		usage(&convert_cmd, 1);
@@ -2046,5 +2085,6 @@ int BOX_MAIN(convert)(int argc, char *argv[])
 	}
 	if (ret)
 		return 1;
+success:
 	return 0;
 }

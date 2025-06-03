@@ -20,7 +20,6 @@
 #include "kerncompat.h"
 #include <stdbool.h>
 #include <unistd.h>
-#include "kernel-lib/bitops.h"
 
 struct btrfs_ioctl_dev_info_args;
 struct stat;
@@ -28,10 +27,12 @@ struct stat;
 /*
  * Options for btrfs_prepare_device
  */
-#define	PREP_DEVICE_ZERO_END	(1U << 0)
-#define	PREP_DEVICE_DISCARD	(1U << 1)
-#define	PREP_DEVICE_VERBOSE	(1U << 2)
-#define	PREP_DEVICE_ZONED	(1U << 3)
+enum {
+	PREP_DEVICE_ZERO_END	= (1U << 0),
+	PREP_DEVICE_DISCARD	= (1U << 1),
+	PREP_DEVICE_VERBOSE	= (1U << 2),
+	PREP_DEVICE_ZONED	= (1U << 3),
+};
 
 /* Placeholder to denote no results for the zone_unusable sysfs value */
 #define DEVICE_ZONE_UNUSABLE_UNKNOWN		((u64)-1)

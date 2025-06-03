@@ -1,3 +1,251 @@
+btrfs-progs-6.13 (2025-03-26)
+-----------------------------
+   * mkfs:
+      * allow --sectorsize to be 2K for testing purposes of subpage mode (needs
+        the same block size supported by kernel)
+      * fix false error when no compression is requested and lzo is not compiled in
+   * convert: support 2K block size in the source filesystem
+   * defrag: new parameter -L/--level to specify compression levels (kernel 6.15),
+     also supports the realtime levels
+   * subvol delete: show names of recursively deleted child subvolumes
+   * qgroup show: use sysfs to detect up to date consistency status
+   * zoned mode: support zone capacity tracking
+   * other:
+      * CI new and updated workflows
+      * documentation updates
+
+btrfs-progs-6.13 (2025-02-15)
+-----------------------------
+   * mkfs:
+      * new option to enable compression
+      * updated summary (subvolumes, compression)
+      * completely remove option --leafsize, deprecated long ago
+   * btrfstune: add option to remove squota
+   * scrub:
+      * start: new option --limit to set the bandwidth limit for the duration of the run
+      * status: fix printing of Rate unit suffix (SI/IEC)
+   * qgroup clean-stale: check if quotas are enabled before starting filesystem sync()
+   * print builtin features and options in --version output (mkfs, convert, image, btrfstune)
+   * build:
+      * Botan minimum version is now 3.x
+      * target to build compile_commands.json (for LSP)
+   * other:
+      * a bit more optimized crc32c code
+      * sync some headers from kernel code
+      * command help updates and fixes
+      * build warning fixes
+      * error message updates
+      * cleanups and refactoring
+      * updated tests
+      * lots of documentation updates
+
+btrfs-progs-6.12 (2024-11-29)
+-----------------------------
+   * subvolume delete: add new option to do recursive subvolume deletion (for
+     regular user delete only accessible subvolumes)
+   * mkfs:
+      * new option --subvol to create subvolumes in given paths, read-write,
+        read-only and default
+      * add hard link detection support for --rootdir option
+   * fixes:
+      * receive: message verbosity fixes
+      * check: fix false positive report of missing checksum for extent holes
+      * check: handle compressed extents when checking tree log
+      * when asking Y/N user questions, flush the terminal so the question is
+        displayed (e.g. btrfstune -S)
+   * other
+      * code refactoring, error handling
+      * python packaging fixes
+      * documentation updates
+      * new tests
+
+btrfs-progs-6.11 (2024-09-17)
+-----------------------------
+   * check:
+      * check items in tree-log
+      * detect invalid file extent items for symlinks
+      * properly detect inode cache and suggest removal by 'clear-ino-cache'
+   * convert: fix symlink length checks
+   * fi show: remove stray newline at the end of the output
+   * fixes:
+      * open devices in write-exclusive mode in most commands, prevent
+        concurrent mount by other programs
+      * rescue clear-ino-cache: fix subvolume iteration that can fail in some cases
+      * map-logical: fix first extent searching condition
+      * fi resize: warn if new size is below 256M
+   * tree-checker:
+      * slightly stricter file type validation
+      * verify device extent items
+   * other:
+      * documentation updates
+      * ship btrfs-ioctl manual page (incomplete)
+
+btrfs-progs-6.10 (2024-07-30)
+-----------------------------
+   * inspect:
+      * list-chunks: new command to print information about chunks (i.e.
+        the physical chunks as stored on devices), sortable; requires root as
+        it's using SEARCH_TREE ioctl
+      * tree-stats:
+        * new option -t to print only the given tree
+        * add long options for size units
+   * filesystem df: with increased verbosity print per-type information from sysfs
+   * version: print a line with built-in features or options (+FEATURE1 -FEATURE2)
+   * image: document option -s and its potential problems
+   * fixes:
+      * scrub status: user selected base for Rate values
+      * receive: escape special characters in paths and xattrs
+      * dump-tree: escape special characters in paths and xattrs
+      * image: sanitizing filenames did not work properly in all cases
+      * convert: fix displayed restored image path on rollback
+      * tune change csum: do conversion in smaller batches
+   * other:
+      * CI workflows updates (sanitizers, code spelling, manual page preview)
+      * build fixes for uClibc
+      * build fix for python 3.13
+      * documentation updates
+
+btrfs-progs-6.10.1 (2024-08-15)
+"""""""""""""""""""""""""""""""
+   * mkfs: rework --rootdir traversal, skip hardlinks and create new inodes
+     instead, also warn about them, this did not work as expected and will be
+     fixed in the future
+   * receive: search in older trees for UUIDs when detecting clone sources
+   * libbtrfsutil: bindings available at https://pypi.org/project/btrfsutil
+   * libbtrfs:
+      * patchlevel version update 0.1.4
+      * cleanup in headers, removed unused definitions, no functional changes
+      * don't ship list.h and rbtree.h
+   * other:
+      * documentation updates
+
+btrfs-progs-6.9 (2024-06-07)
+----------------------------
+   * mkfs:
+      * if --force used, don't continue if the mount status cannot be
+        determined (e.g. due to permissions)
+      * fix minimum size calculation on zoned devices, make it work with option -b
+   * check:
+      * option --clear-ino-cache removed (functionality still provided in
+        'rescue' command group)
+      * detect and repair wrong file extent item ram_bytes value
+   * qgroup clear-stale:
+      * sync the filesystem before search to read the up to date state
+      * handle cases where qgroup cannot be deleted due to uncleaned subvolume
+        or when squota is enabled
+   * qgroup show: display status of qgroup regarding the cleaning of the
+     subvolume or if it's squota
+   * receive: fix stream parsing on strict alignment hosts (e.g. ARM v5 or v6)
+   * tune change-csum: fix check of dev-replace status item, continue if no
+     dev-replace in progress
+   * dump-tree: print contents of dev-replace status item
+   * convert: fix extent iteration to handle prealloc/unwritten extents
+   * libbtrfsutil:
+      * patchlevel version update 1.3.1
+      * fix potentially unaligned access to send stream
+      * create library links to all version levels
+   * libbtrfs:
+      * patchlevel version update 0.1.3
+      * fix potentially unaligned access to send stream
+      * create library links to all version levels
+   * build:
+      * fix compatibility with e2fsprogs 1.47.1
+      * fix header file dependency tracking
+      * -O2 by default
+   * other:
+      * new and updated tests
+      * ASAN and UBSAN test coverage in CI
+      * documentation updates
+
+btrfs-progs-6.9.1 (2024-06-24)
+""""""""""""""""""""""""""""""
+   * fix detection of intermediate super block flags (e.g. csum change and
+     other conversions)
+   * raid-stripe-tree support (still experimental):
+      * moved under experimental build flags (mkfs, convert)
+      * format change, removed encoding type; backward incompatible
+   * receive dump: escape special chars in xattr names and values, and clone
+     source path
+   * tune change csum: fix reservation size when starting a transaction
+   * other:
+      * new and updated tests
+      * updated CI images, new reference build targets
+      * cleanups and refactoring
+
+btrfs-progs-6.9.2 (2024-06-27)
+""""""""""""""""""""""""""""""
+   * subvol list: fix accidental trimming of subvolume name
+   * check: revert checking file extent item 'ram_bytes'
+   * libbtrfsutil:
+      * patchlevel version update 1.3.2
+      * fix accidentally closing fd passed to subvolume iterator
+
+btrfs-progs-6.8 (2024-03-26)
+----------------------------
+   * fix --enqueue option timeout handling
+   * subvolume: remove support for undocumented options -c and -x,
+     functionality disabled in kernel
+   * libbtrfsutil:
+      * version 0.1.3, backward compatible
+      * add aliases for all existing functions with unified naming scheme
+      * updated header definitions for recently added kernel features
+   * send: v3 supported in experimental mode
+   * other:
+      * docs: manual page references, graphs, enhancements, clarifications
+      * error handling fixes
+      * cleanups and refactoring
+
+btrfs-progs-6.8.1 (2024-05-02)
+""""""""""""""""""""""""""""""
+   * mkfs: fix writing on zoned device when block-group-tree is selected
+   * tune: fix writing on zoned device with option --convert-to-block-group-tree
+   * check:
+      * more progress and error messages
+      * unify handling of unknown command line options with other commands
+   * subvolume delete: remove options --delete-qgroup and --no-delete-qgroup
+     (added in 6.6.3), qgroup deletion does not always work due to delayed
+     background processing of subvolume or set value in
+     sysfs:ggroup/drop_subtree_threshold
+   * other:
+      * misc refactoring
+      * error handling fixes reported by gcc -fanalyzer
+      * documentation updates
+      * new and updated tests
+
+btrfs-progs-6.7 (2024-01-22)
+----------------------------
+   * mkfs: make 4k sectorsize default, recommended minimum kernel for that is
+     6.1 and requires subpage support on architectures with page size > 4k
+   * subvolume create: return correct error code when a target already exists
+   * tree-checker: dump tree block on error (btrfs-convert, ...)
+   * scrub limit: fix reporting of a limit set while there's none
+   * fi usage: fix reporting of unallocated data or raid56 profile without root
+     privs due to lack of that information
+   * convert:
+      * align data block group lengths to 64K
+      * fix conversion of a large filesystem when there are partial inode items
+        present due to caching
+   * other:
+      * build fixes
+      * updated documentation
+      * new and updated tests
+
+btrfs-progs-6.7.1 (2024-02-14)
+""""""""""""""""""""""""""""""
+   * convert: raid-stripe-tree can be now enabled for the target filesystem
+   * mkfs:
+      * handle lifetime of open file descriptors so it does not trigger udev
+        that could miss to create the UUID symlinks in /dev
+      * update warning when CPU page size does not match sector size
+      * merge features in summary, no more distinction of incompat and runtime
+        to match the semantics of option -O
+   * fi show: fix recognizing raw device mapper paths
+   * other:
+      * CI updates, build images updates
+      * minor cleanups
+      * minor sync with kernel
+      * documentation updates, fix links to labels in included directories
+
 btrfs-progs-6.6 (2023-11-03)
 ----------------------------
    * new global option --dry-run, now implemented for 'subvolume delete'
@@ -12,13 +260,13 @@ btrfs-progs-6.6 (2023-11-03)
      future)
    * dump-tree: output sequence number for inline refs
    * fixes:
-     * fi resize: fallback to lowest devid when 1 does not exist, previously the
-       command would fail with "No such device"
-     * fi usage: fix "devices 0 != 1" message and broken output on multi-device
-       filesystem
-     * open files in non-blocking mode when reading fsid, this could hang when
-       trying to open fifo files or some special character devices, was observed
-       with 'prop set/get'
+      * fi resize: fallback to lowest devid when 1 does not exist, previously the
+        command would fail with "No such device"
+      * fi usage: fix "devices 0 != 1" message and broken output on multi-device
+        filesystem
+      * open files in non-blocking mode when reading fsid, this could hang when
+        trying to open fifo files or some special character devices, was observed
+        with 'prop set/get'
    * experimental:
       * mkfs: parametric zone size for emulated zoned mode
    * other:
@@ -163,8 +411,8 @@ btrfs-progs-6.3.1 (2023-05-29)
 """"""""""""""""""""""""""""""
    * convert: fix checksum of a block relocated from 0-1M range
    * qgroup show: fix formatting of limit values in json output
-   * receive: report paret subovl UUID on errors
-   * btrfsune: new option --convert-to-free-space-tree to convert from
+   * receive: report parent subvol UUID on errors
+   * btrfstune: new option --convert-to-free-space-tree to convert from
      block-group-tree back to extent tree for block group tracking
    * mkfs: make option --rootdir more verbose and report start when filling
      from the given directory starts
@@ -338,7 +586,7 @@ btrfs-progs-5.19.1 (2022-09-12)
    * fix memory leaks (extent buffer, path)
    * check: verify block device size vs item
    * rescue fix-device-size: allow to shrink device item
-   * receive: fix crash on wrong pinter free()
+   * receive: fix crash on wrong pointer free()
    * other:
       * experimental: support for block-group-tree
       * documentation updates
@@ -347,7 +595,7 @@ btrfs-progs-5.19.1 (2022-09-12)
 btrfs-progs-5.18 (2022-05-25)
 -----------------------------
    * fixes:
-      * dump-tree: don't print traling zeros in checksums
+      * dump-tree: don't print trailing zeros in checksums
       * recognize paused balance as exclusive operation state, allow to start
         device add
       * convert: properly initialize target filesystem label
@@ -393,7 +641,7 @@ btrfs-progs-5.17 (2022-04-26)
        * btrfstune: option --csum to switch checksum algorithm
    * other:
        * cleanups, refactoring
-       * update documentation build, remove asciidocs leftovers
+       * update documentation build, remove asciidoc leftovers
        * update fssum to consider xattrs
        * add fsstress
 
@@ -770,7 +1018,7 @@ btrfs-progs-5.6 (2020-04-05)
 btrfs-progs-5.6.1 (2020-05-07)
 """"""""""""""""""""""""""""""
    * print warning when multiple block group profiles exist, update 'fi usage'
-     summary, add docs to maual page explaining the situation
+     summary, add docs to manual page explaining the situation
    * build: optional support for libgcrypt or libsodium, providing hash
      implementations
    * other:
@@ -837,7 +1085,7 @@ btrfs-progs-5.2 (2019-07-05)
       * fix reading/writing of last position on resume/cancel, potentially
         skipping part of the filesystem on next resume
    * dump-tree: add new option --noscan to use only devices given on the
-     commandline
+     command line
    * all-in-one binary (busybox style) with mkfs.btrfs, btrfs-image,
      btrfs-convert, btrfstune
    * image: fix hang when there are more than 32 cpus online and compression is
@@ -1231,7 +1479,7 @@ btrfs-progs-4.11.1 (2017-06-30)
 
 btrfs-progs-4.10 (2017-03-08)
 """""""""""""""""""""""""""""
-   * send: dump output fixes: missing newlies
+   * send: dump output fixes: missing newlines
    * check: several fixes for the lowmem mode, improved error reporting
    * build
       * removed some library deps for binaries that not use them
@@ -1511,7 +1759,7 @@ btrfs-progs-4.5.2 (2016-05-02)
 
 btrfs-progs-4.5.3 (2016-05-11)
    * ioctl: fix unaligned access in buffer from TREE_SEARCH; might cause SIGBUS
-     on architectures that do not support unaligned access and do not performa
+     on architectures that do not support unaligned access and do not perform
      any fixups
    * improved validation checks of superblock and chunk-related structures
    * subvolume sync: fix handling of -s option
@@ -1562,7 +1810,7 @@ btrfs-progs-4.4 (2016-01-18)
 
   Bugfixes:
      * chunk recovery: fix floating point exception
-     * chunk recovery: endianity bugfix during rebuild
+     * chunk recovery: endianness bugfix during rebuild
      * mkfs with 64K pages and nodesize reported superblock checksum mismatch
      * check: properly reset nlink of multi-linked file
 
@@ -1673,7 +1921,7 @@ btrfs-progs-4.2.1 (2015-09-20)
 
 btrfs-progs-4.2.2 (2015-10-05)
    * filesystem label: use fallback if the label ioctl is not available
-   * convert: check nodesize constraints against commandline features (-O)
+   * convert: check nodesize constraints against command line features (-O)
    * scrub: report status 'running' until all devices are finished
    * device scanning might crash in some scenarios
    * filesystem usage: print summary for non-root users
@@ -1726,7 +1974,7 @@ btrfs-progs-4.1 (2015-06-22)
 
   New:
      * rescue zero-log
-     * btrfsune:
+     * btrfstune:
         * rewrite uuid on a filesystem image
         * new option to turn on NO_HOLES incompat feature
 
@@ -1743,7 +1991,7 @@ btrfs-progs-4.1 (2015-06-22)
      * ioctl.h synced with current kernel uapi version
      * convert: preparatory works for more filesystems (reiserfs pending)
      * use static buffers for path handling where possible
-     * add new helpers for send uilts that check memory allocations,
+     * add new helpers for send utils that check memory allocations,
        switch all users, deprecate old helpers
      * Makefile: fix build dependency generation
      * map-logical: make it work again

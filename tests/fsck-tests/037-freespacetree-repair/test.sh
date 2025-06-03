@@ -6,7 +6,7 @@
 # Note: this needs a patched kernel to exercise extents and bitmaps
 # ff51bf02d107 ("btrfs: block-group: fix free-space bitmap threshold")
 
-source "$TEST_TOP/common"
+source "$TEST_TOP/common" || exit
 
 setup_root_helper
 prepare_test_dev 256M
@@ -27,7 +27,7 @@ corrupt_fst_item()
 	local offset
 	type="$1"
 
-	if [[ $type == "bitmap" ]]; then
+	if [[ "$type" == "bitmap" ]]; then
 		type=200
 		objectid=$("$TOP/btrfs" inspect-internal dump-tree -t 10 "$TEST_DEV" | \
 			grep -o "[[:digit:]]* FREE_SPACE_BITMAP [[:digit:]]*" | \
@@ -40,7 +40,7 @@ corrupt_fst_item()
 			return 1
 		fi
 		_log "Corrupting $objectid,FREE_SPACE_BITMAP,$offset"
-	elif [[ $type == "extent" ]]; then
+	elif [[ "$type" == "extent" ]]; then
 		type=199
 		objectid=$("$TOP/btrfs" inspect-internal dump-tree -t 10 "$TEST_DEV" | \
 			grep -o "[[:digit:]]* FREE_SPACE_EXTENT [[:digit:]]*" | \
@@ -87,7 +87,7 @@ fi
 # change the freespace such that we now have at least one free_space_extent
 # object
 run_check_mount_test_dev
-rm -rf "$TEST_MNT/file.*"
+run_check $SUDO_HELPER rm -rf "$TEST_MNT/"file.*
 run_check $SUDO_HELPER fallocate -l 50m "$TEST_MNT/file"
 run_check_umount_test_dev
 

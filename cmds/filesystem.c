@@ -31,6 +31,7 @@
 #include <limits.h>
 #include <dirent.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <uuid/uuid.h>
 #include "libbtrfsutil/btrfsutil.h"
 #include "kernel-lib/list.h"
@@ -53,6 +54,8 @@
 #include "common/device-utils.h"
 #include "common/open-utils.h"
 #include "common/parse-utils.h"
+#include "common/sysfs-utils.h"
+#include "common/string-utils.h"
 #include "common/filesystem-utils.h"
 #include "common/format-output.h"
 #include "cmds/commands.h"
@@ -80,6 +83,41 @@ static const char * const cmd_filesystem_df_usage[] = {
 	NULL
 };
 
+static void print_df_by_type(int fd, unsigned int unit_mode) {
+	static const char *files[] = {
+		"bg_reclaim_threshold",
+		"bytes_may_use",
+		"bytes_pinned",
+		"bytes_readonly",
+		"bytes_reserved",
+		"bytes_used",
+		"bytes_zone_unusable",
+		"chunk_size",
+		"disk_total",
+		"disk_used",
+		"total_bytes",
+	};
+	char path[PATH_MAX] = { 0 };
+	const char *types[] = { "data", "metadata", "mixed", "system" };
+	u64 tmp;
+	int ret;
+
+	for (int ti = 0; ti < ARRAY_SIZE(types); ti++) {
+		for (int i = 0; i < ARRAY_SIZE(files); i++) {
+			path_cat3_out(path, "allocation", types[ti], files[i]);
+			ret = sysfs_read_fsid_file_u64(fd, path, &tmp);
+			if (ret < 0)
+				continue;
+			if (i == 0)
+				pr_verbose(LOG_INFO, "%c%s:\n", toupper(types[ti][0]), types[ti] + 1);
+			if (strcmp(files[i], "bg_reclaim_threshold") == 0)
+				pr_verbose(LOG_INFO, "  %-24s  %14llu%%\n", files[i], tmp);
+			else
+				pr_verbose(LOG_INFO, "  %-24s %16s\n", files[i], pretty_size_mode(tmp, unit_mode));
+		}
+	}
+}
+
 static void print_df_text(int fd, struct btrfs_ioctl_space_args *sargs, unsigned unit_mode)
 {
 	u64 i;
@@ -99,6 +137,7 @@ static void print_df_text(int fd, struct btrfs_ioctl_space_args *sargs, unsigned
 			(ok ? ", zone_unusable=" : ""),
 			(ok ? pretty_size_mode(unusable, unit_mode) : ""));
 	}
+	print_df_by_type(fd, unit_mode);
 }
 
 static const struct rowspec filesystem_df_rowspec[] = {
@@ -146,7 +185,6 @@ static int cmd_filesystem_df(const struct cmd_struct *cmd,
 	int ret;
 	int fd;
 	char *path;
-	DIR *dirstream = NULL;
 	unsigned unit_mode;
 
 	unit_mode = get_unit_mode_from_arg(&argc, argv, 1);
@@ -158,7 +196,7 @@ static int cmd_filesystem_df(const struct cmd_struct *cmd,
 
 	path = argv[optind];
 
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0)
 		return 1;
 
@@ -176,7 +214,7 @@ static int cmd_filesystem_df(const struct cmd_struct *cmd,
 	}
 
 	btrfs_warn_multiple_profiles(fd);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	return !!ret;
 }
 static DEFINE_COMMAND_WITH_FLAGS(filesystem_df, "df", CMD_FORMAT_JSON);
@@ -307,7 +345,7 @@ static void print_one_uuid(struct btrfs_fs_devices *fs_devices,
 	u64 devs_found = 0;
 	u64 total;
 
-	if (add_seen_fsid(fs_devices->fsid, seen_fsid_hash, -1, NULL))
+	if (add_seen_fsid(fs_devices->fsid, seen_fsid_hash, -1))
 		return;
 
 	uuid_unparse(fs_devices->fsid, uuidbuf);
@@ -327,7 +365,6 @@ static void print_one_uuid(struct btrfs_fs_devices *fs_devices,
 	if (devs_found < total) {
 		pr_verbose(LOG_DEFAULT, "\t*** Some devices missing\n");
 	}
-	pr_verbose(LOG_DEFAULT, "\n");
 }
 
 /* adds up all the used spaces as reported by the space info ioctl
@@ -352,7 +389,7 @@ static int print_one_fs(struct btrfs_ioctl_fs_info_args *fs_info,
 	struct btrfs_ioctl_dev_info_args *tmp_dev_info;
 	int ret;
 
-	ret = add_seen_fsid(fs_info->fsid, seen_fsid_hash, -1, NULL);
+	ret = add_seen_fsid(fs_info->fsid, seen_fsid_hash, -1);
 	if (ret == -EEXIST)
 		return 0;
 	else if (ret)
@@ -393,7 +430,6 @@ static int print_one_fs(struct btrfs_ioctl_fs_info_args *fs_info,
 		free(canonical_path);
 	}
 
-	pr_verbose(LOG_DEFAULT, "\n");
 	return 0;
 }
 
@@ -443,6 +479,10 @@ static int btrfs_scan_kernel(void *search, unsigned unit_mode)
 
 		fd = open(mnt->mnt_dir, O_RDONLY);
 		if ((fd != -1) && !get_df(fd, &space_info_arg)) {
+			/* Put space between filesystem entries for readability. */
+			if (found != 0)
+				pr_verbose(LOG_DEFAULT, "\n");
+
 			print_one_fs(&fs_info_arg, dev_info_arg,
 				     space_info_arg, label, unit_mode);
 			free(space_info_arg);
@@ -708,6 +748,7 @@ static int cmd_filesystem_show(const struct cmd_struct *cmd,
 	struct btrfs_fs_devices *fs_devices;
 	struct btrfs_root *root = NULL;
 	char *search = NULL;
+	char *canon_path = NULL;
 	int ret;
 	/* default, search both kernel and udev */
 	int where = -1;
@@ -718,6 +759,7 @@ static int cmd_filesystem_show(const struct cmd_struct *cmd,
 	char uuid_buf[BTRFS_UUID_UNPARSED_SIZE];
 	unsigned unit_mode;
 	int found = 0;
+	bool needs_newline = false;
 
 	unit_mode = get_unit_mode_from_arg(&argc, argv, 0);
 
@@ -789,8 +831,15 @@ static int cmd_filesystem_show(const struct cmd_struct *cmd,
 		}
 	}
 
-	if (where == BTRFS_SCAN_LBLKID)
+	if (where == BTRFS_SCAN_LBLKID) {
+		/*
+		 * Blkid needs canonicalized paths, eg. when the /dev/dm-0 is
+		 * passed on command line.
+		 */
+		canon_path = path_canonicalize(search);
+		search = canon_path;
 		goto devs_only;
+	}
 
 	/* show mounted btrfs */
 	ret = btrfs_scan_kernel(search, unit_mode);
@@ -798,6 +847,12 @@ static int cmd_filesystem_show(const struct cmd_struct *cmd,
 		/* since search is found we are done */
 		goto out;
 	}
+
+	/*
+	 * The above call will return 0 if it found anything, in those cases we
+	 * need an extra newline below.
+	 */
+	needs_newline = !ret;
 
 	/* shows mounted only */
 	if (where == BTRFS_SCAN_MOUNTED)
@@ -836,8 +891,14 @@ devs_only:
 		goto out;
 	}
 
-	list_for_each_entry(fs_devices, &all_uuids, fs_list)
+	list_for_each_entry(fs_devices, &all_uuids, fs_list) {
+		/* Put space between filesystem entries for readability. */
+		if (needs_newline)
+			pr_verbose(LOG_DEFAULT, "\n");
+
 		print_one_uuid(fs_devices, unit_mode);
+		needs_newline = true;
+	}
 
 	if (search && !found) {
 		error("not a valid btrfs filesystem: %s", search);
@@ -849,6 +910,7 @@ devs_only:
 		free_fs_devices(fs_devices);
 	}
 out:
+	free(canon_path);
 	if (root)
 		close_ctree(root);
 	free_seen_fsid(seen_fsid_hash);
@@ -872,7 +934,7 @@ static int cmd_filesystem_sync(const struct cmd_struct *cmd,
 	if (check_argc_exact(argc - optind, 1))
 		return 1;
 
-	err = btrfs_util_sync(argv[optind]);
+	err = btrfs_util_fs_sync(argv[optind]);
 	if (err) {
 		error_btrfs_util(err);
 		return 1;
@@ -900,6 +962,7 @@ static const char * const cmd_filesystem_defrag_usage[] = {
 	"",
 	OPTLINE("-r", "defragment files recursively"),
 	OPTLINE("-c[zlib,lzo,zstd]", "compress the file while defragmenting, optional parameter (no space in between)"),
+	OPTLINE("-L|--level level", "use given compression level if enabled (zlib: 1..9, zstd: -15..15, and 0 selects the default level)"),
 	OPTLINE("-f", "flush data to disk immediately after defragmenting"),
 	OPTLINE("-s start", "defragment only from byte onward"),
 	OPTLINE("-l len", "defragment only up to len bytes"),
@@ -1004,7 +1067,7 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 	bool recursive = false;
 	int ret = 0;
 	int compress_type = BTRFS_COMPRESS_NONE;
-	DIR *dirstream;
+	int compress_level = 0;
 
 	/*
 	 * Kernel 4.19+ supports defragmention of files open read-only,
@@ -1035,17 +1098,17 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 		bconf.verbose++;
 
 	defrag_global_errors = 0;
-	defrag_global_errors = 0;
 	optind = 0;
 	while(1) {
 		enum { GETOPT_VAL_STEP = GETOPT_VAL_FIRST };
 		static const struct option long_options[] = {
+			{ "level", required_argument, NULL, 'L' },
 			{ "step", required_argument, NULL, GETOPT_VAL_STEP },
 			{ NULL, 0, NULL, 0 }
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "vrc::fs:l:t:", long_options, NULL);
+		c = getopt_long(argc, argv, "vrc::L:fs:l:t:", long_options, NULL);
 		if (c < 0)
 			break;
 
@@ -1054,6 +1117,18 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 			compress_type = BTRFS_COMPRESS_ZLIB;
 			if (optarg)
 				compress_type = parse_compress_type_arg(optarg);
+			break;
+		case 'L':
+			/*
+			 * Do not enforce any limits here, kernel will do itself
+			 * based on what's supported by the running version.
+			 * Just clip to the s8 type of the API.
+			 */
+			compress_level = atoi(optarg);
+			if (compress_level < -128)
+				compress_level = -128;
+			else if (compress_level > 127)
+				compress_level = 127;
 			break;
 		case 'f':
 			flush = true;
@@ -1065,13 +1140,13 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 				bconf_be_verbose();
 			break;
 		case 's':
-			start = parse_size_from_string(optarg);
+			start = arg_strtou64_with_suffix(optarg);
 			break;
 		case 'l':
-			len = parse_size_from_string(optarg);
+			len = arg_strtou64_with_suffix(optarg);
 			break;
 		case 't':
-			thresh = parse_size_from_string(optarg);
+			thresh = arg_strtou64_with_suffix(optarg);
 			if (thresh > (u32)-1) {
 				warning(
 			    "target extent size %llu too big, trimmed to %u",
@@ -1083,7 +1158,7 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 			recursive = true;
 			break;
 		case GETOPT_VAL_STEP:
-			defrag_global_step = parse_size_from_string(optarg);
+			defrag_global_step = arg_strtou64_with_suffix(optarg);
 			if (defrag_global_step < SZ_256K) {
 				warning("step %llu too small, adjusting to 256KiB\n",
 					   defrag_global_step);
@@ -1104,7 +1179,12 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 	defrag_global_range.extent_thresh = (u32)thresh;
 	if (compress_type) {
 		defrag_global_range.flags |= BTRFS_DEFRAG_RANGE_COMPRESS;
-		defrag_global_range.compress_type = compress_type;
+		if (compress_level) {
+			defrag_global_range.flags |= BTRFS_DEFRAG_RANGE_COMPRESS_LEVEL;
+			defrag_global_range.compress.type = compress_type;
+			defrag_global_range.compress.level= compress_level;
+		} else
+			defrag_global_range.compress_type = compress_type;
 	}
 	if (flush)
 		defrag_global_range.flags |= BTRFS_DEFRAG_RANGE_START_IO;
@@ -1142,11 +1222,9 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 		struct stat st;
 		int defrag_err = 0;
 
-		dirstream = NULL;
-		fd = open_file_or_dir3(argv[i], &dirstream, defrag_open_mode);
+		fd = btrfs_open_path(argv[i], defrag_open_mode == O_RDWR, false);
 		if (fd < 0) {
-			error("cannot open %s: %m", argv[i]);
-			ret = -errno;
+			ret = fd;
 			goto next;
 		}
 
@@ -1177,7 +1255,7 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 				error(
 "defrag range ioctl not supported in this kernel version, 2.6.33 and newer is required");
 				defrag_global_errors++;
-				close_file_or_dir(fd, dirstream);
+				close(fd);
 				break;
 			}
 			if (ret) {
@@ -1189,7 +1267,7 @@ static int cmd_filesystem_defrag(const struct cmd_struct *cmd,
 next:
 		if (ret)
 			defrag_global_errors++;
-		close_file_or_dir(fd, dirstream);
+		close(fd);
 	}
 
 	if (defrag_global_errors)
@@ -1210,7 +1288,8 @@ static const char * const cmd_filesystem_resize_usage[] = {
 	NULL
 };
 
-static int check_resize_args(const char *amount, const char *path, u64 *devid_ret) {
+static int check_resize_args(const char *amount, const char *path, u64 *devid_ret)
+{
 	struct btrfs_ioctl_fs_info_args fi_args;
 	struct btrfs_ioctl_dev_info_args *di_args = NULL;
 	int ret, i, dev_idx = -1;
@@ -1287,7 +1366,7 @@ static int check_resize_args(const char *amount, const char *path, u64 *devid_re
 		goto out;
 	} else if (!devstr && devid == 1 && dev_idx < 0) {
 		/*
-		 * No device specified, assuming implicit 1 but it doess not
+		 * No device specified, assuming implicit 1 but it does not
 		 * exist. Use minimum device as fallback.
 		 */
 		warning("no devid specified means devid 1 which does not exist, using\n"
@@ -1312,8 +1391,8 @@ static int check_resize_args(const char *amount, const char *path, u64 *devid_re
 			mod = 1;
 			sizestr++;
 		}
-		diff = parse_size_from_string(sizestr);
-		if (!diff) {
+		ret = parse_u64_with_suffix(sizestr, &diff);
+		if (ret < 0) {
 			error("failed to parse size %s", sizestr);
 			ret = 1;
 			goto out;
@@ -1343,6 +1422,10 @@ static int check_resize_args(const char *amount, const char *path, u64 *devid_re
 		}
 		new_size = round_down(new_size, fi_args.sectorsize);
 		res_str = pretty_size_mode(new_size, UNITS_DEFAULT);
+
+		if (new_size < 256 * SZ_1M)
+   warning("the new size %lld (%s) is < 256MiB, this may be rejected by kernel",
+			new_size, pretty_size_mode(new_size, UNITS_DEFAULT));
 	}
 
 	pr_verbose(LOG_DEFAULT, "Resize device id %lld (%s) from %s to %s\n", devid,
@@ -1361,7 +1444,6 @@ static int cmd_filesystem_resize(const struct cmd_struct *cmd,
 	struct btrfs_ioctl_vol_args	args;
 	int	fd, res, len, e;
 	char	*amount, *path;
-	DIR	*dirstream = NULL;
 	u64 devid;
 	int ret;
 	bool enqueue = false;
@@ -1399,10 +1481,10 @@ static int cmd_filesystem_resize(const struct cmd_struct *cmd,
 
 	cancel = (strcmp("cancel", amount) == 0);
 
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0) {
 		/* The path is a directory */
-		if (fd == -3) {
+		if (fd == -ENOTDIR) {
 			error(
 		"resize works on mounted filesystems and accepts only\n"
 		"directories as argument. Passing file containing a btrfs image\n"
@@ -1422,21 +1504,21 @@ static int cmd_filesystem_resize(const struct cmd_struct *cmd,
 			if (ret < 0)
 				error(
 			"unable to check status of exclusive operation: %m");
-			close_file_or_dir(fd, dirstream);
+			close(fd);
 			return 1;
 		}
 	}
 
 	ret = check_resize_args(amount, path, &devid);
 	if (ret != 0) {
-		close_file_or_dir(fd, dirstream);
+		close(fd);
 		return 1;
 	}
 
 	memset(&args, 0, sizeof(args));
 	if (devid == (u64)-1) {
 		/* Ok to copy the string verbatim. */
-		strncpy_null(args.name, amount);
+		strncpy_null(args.name, amount, sizeof(args.name));
 	} else {
 		/* The implicit devid 1 needs to be adjusted. */
 		snprintf(args.name, sizeof(args.name) - 1, "%llu:%s", devid, amount);
@@ -1444,7 +1526,7 @@ static int cmd_filesystem_resize(const struct cmd_struct *cmd,
 	pr_verbose(LOG_VERBOSE, "adjust resize argument to: %s\n", args.name);
 	res = ioctl(fd, BTRFS_IOC_RESIZE, &args);
 	e = errno;
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	if( res < 0 ){
 		switch (e) {
 		case EFBIG:
@@ -1605,7 +1687,7 @@ static int cmd_filesystem_mkswapfile(const struct cmd_struct *cmd, int argc, cha
 
 		switch (c) {
 		case 's':
-			size = parse_size_from_string(optarg);
+			size = arg_strtou64_with_suffix(optarg);
 			/* Minimum limit reported by mkswap */
 			if (size < 40 * SZ_1K) {
 				error("swapfile needs to be at least 40 KiB");

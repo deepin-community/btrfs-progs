@@ -40,6 +40,7 @@
 #include "common/string-utils.h"
 #include "common/utils.h"
 #include "common/format-output.h"
+#include "common/tree-search.h"
 #include "cmds/commands.h"
 #include "cmds/subvolume.h"
 
@@ -546,8 +547,7 @@ static int update_root(struct rb_root *root_lookup,
 			error_msg(ERROR_MSG_MEMORY, NULL);
 			exit(1);
 		}
-		strncpy(ri->name, name, name_len);
-		ri->name[name_len] = 0;
+		strncpy_null(ri->name, name, name_len + 1);
 	}
 	if (ref_tree)
 		ri->ref_tree = ref_tree;
@@ -618,8 +618,7 @@ static int add_root(struct rb_root *root_lookup,
 			error_msg(ERROR_MSG_MEMORY, NULL);
 			exit(1);
 		}
-		strncpy(ri->name, name, name_len);
-		ri->name[name_len] = 0;
+		strncpy_null(ri->name, name, name_len + 1);
 	}
 	if (ref_tree)
 		ri->ref_tree = ref_tree;
@@ -817,9 +816,8 @@ static int lookup_ino_path(int fd, struct root_info *ri)
 static int list_subvol_search(int fd, struct rb_root *root_lookup)
 {
 	int ret;
-	struct btrfs_ioctl_search_args args;
-	struct btrfs_ioctl_search_key *sk = &args.key;
-	struct btrfs_ioctl_search_header sh;
+	struct btrfs_tree_search_args args;
+	struct btrfs_ioctl_search_key *sk;
 	struct btrfs_root_ref *ref;
 	struct btrfs_root_item *ri;
 	unsigned long off;
@@ -832,8 +830,9 @@ static int list_subvol_search(int fd, struct rb_root *root_lookup)
 	int i;
 
 	root_lookup->rb_node = NULL;
-	memset(&args, 0, sizeof(args));
 
+	memset(&args, 0, sizeof(args));
+	sk = btrfs_tree_search_sk(&args);
 	sk->tree_id = BTRFS_ROOT_TREE_OBJECTID;
 	/* Search both live and deleted subvolumes */
 	sk->min_type = BTRFS_ROOT_ITEM_KEY;
@@ -845,7 +844,7 @@ static int list_subvol_search(int fd, struct rb_root *root_lookup)
 
 	while(1) {
 		sk->nr_items = 4096;
-		ret = ioctl(fd, BTRFS_IOC_TREE_SEARCH, &args);
+		ret = btrfs_tree_search_ioctl(fd, &args);
 		if (ret < 0)
 			return ret;
 		if (sk->nr_items == 0)
@@ -858,10 +857,12 @@ static int list_subvol_search(int fd, struct rb_root *root_lookup)
 		 * read the root_ref item it contains
 		 */
 		for (i = 0; i < sk->nr_items; i++) {
-			memcpy(&sh, args.buf + off, sizeof(sh));
+			struct btrfs_ioctl_search_header sh;
+
+			memcpy(&sh, btrfs_tree_search_data(&args, off), sizeof(sh));
 			off += sizeof(sh);
 			if (sh.type == BTRFS_ROOT_BACKREF_KEY) {
-				ref = (struct btrfs_root_ref *)(args.buf + off);
+				ref = btrfs_tree_search_data(&args, off);
 				name_len = btrfs_stack_root_ref_name_len(ref);
 				name = (char *)(ref + 1);
 				dir_id = btrfs_stack_root_ref_dirid(ref);
@@ -877,7 +878,7 @@ static int list_subvol_search(int fd, struct rb_root *root_lookup)
 				u8 puuid[BTRFS_UUID_SIZE];
 				u8 ruuid[BTRFS_UUID_SIZE];
 
-				ri = (struct btrfs_root_item *)(args.buf + off);
+				ri = btrfs_tree_search_data(&args, off);
 				gen = btrfs_root_generation(ri);
 				flags = btrfs_root_flags(ri);
 				if(sh.len >= sizeof(struct btrfs_root_item)) {
@@ -1587,7 +1588,6 @@ static int cmd_subvolume_list(const struct cmd_struct *cmd, int argc, char **arg
 	char *subvol;
 	bool is_list_all = false;
 	bool is_only_in_path = false;
-	DIR *dirstream = NULL;
 	enum btrfs_list_layout layout = BTRFS_LIST_LAYOUT_DEFAULT;
 
 	filter_set = btrfs_list_alloc_filter_set();
@@ -1689,7 +1689,7 @@ static int cmd_subvolume_list(const struct cmd_struct *cmd, int argc, char **arg
 		goto out;
 
 	subvol = argv[optind];
-	fd = btrfs_open_dir(subvol, &dirstream, 1);
+	fd = btrfs_open_dir(subvol);
 	if (fd < 0) {
 		ret = -1;
 		error("can't access '%s'", subvol);
@@ -1729,7 +1729,7 @@ static int cmd_subvolume_list(const struct cmd_struct *cmd, int argc, char **arg
 			layout, !is_list_all && !is_only_in_path, NULL);
 
 out:
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	if (filter_set)
 		free(filter_set);
 	if (comparer_set)

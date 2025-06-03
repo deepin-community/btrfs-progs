@@ -31,6 +31,12 @@ ownership. For example a fresh snapshot shares almost all the blocks with the
 original subvolume, new writes to either subvolume will raise towards the
 exclusive limit.
 
+.. note::
+   Qgroup limit only works when qgroup is in a consistent state.
+   If some workload marks qgroup inconsistent (like assigning a qgroup to another
+   qgroup), the limit will no longer work until the inconsistent flag is cleared
+   by :command:`btrfs quota rescan`.
+
 The qgroup identifiers conform to *level/id* where level 0 is reserved to the
 qgroups associated with subvolumes. Such qgroups are created automatically.
 
@@ -152,6 +158,31 @@ show [options] <path>
         --sync
                 To retrieve information after updating the state of qgroups,
                 force sync of the filesystem identified by *path* before getting information.
+
+SPECIAL PATHS
+-------------
+For `btrfs qgroup show` subcommand, the ``path`` column may has some special
+strings:
+
+`<toplevel>`
+	The toplevel subvolume
+
+`<under deletion>`
+        The subvolume has been deleted (it's directory removed), but the
+        subvolume metadata not not yet fully cleaned.
+
+`<squota space holder>`
+	For simple quota mode only.
+	By its design, a fully deleted subvolume may still have accounting on
+	it, so even the subvolume is gone, the numbers are still here for future
+	accounting.
+
+`<stale>`
+	The qgroup has no corresponding subvolume anymore, and the qgroup
+	can be cleaned up under most cases.
+	The only exception is that, if the qgroup numbers are inconsistent and
+	the qgroup numbers are not all zeros, some older kernels may refuse to
+	delete such qgroups until a full rescan.
 
 QUOTA RESCAN
 ------------

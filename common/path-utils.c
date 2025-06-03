@@ -28,8 +28,14 @@
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
+/*
+ * For dirname() and basename(), but never use basename directly, there's
+ * path_basename() with unified GNU behaviour regardless of the includes and
+ * conditional defines. See basename(3) for more.
+ */
 #include <libgen.h>
 #include <limits.h>
+#include "common/string-utils.h"
 #include "common/path-utils.h"
 
 /*
@@ -188,10 +194,10 @@ static int is_same_blk_file(const char* a, const char* b)
 	char real_b[PATH_MAX];
 
 	if (!realpath(a, real_a))
-		strncpy_null(real_a, a);
+		strncpy_null(real_a, a, sizeof(real_a));
 
 	if (!realpath(b, real_b))
-		strncpy_null(real_b, b);
+		strncpy_null(real_b, b, sizeof(real_b));
 
 	/* Identical path? */
 	if (strcmp(real_a, real_b) == 0)
@@ -341,26 +347,6 @@ char *path_canonicalize(const char *path)
 }
 
 /*
- * __strncpy_null - strncpy with null termination
- * @dest:	the target array
- * @src:	the source string
- * @n:		maximum bytes to copy (size of *dest)
- *
- * Like strncpy, but ensures destination is null-terminated.
- *
- * Copies the string pointed to by src, including the terminating null
- * byte ('\0'), to the buffer pointed to by dest, up to a maximum
- * of n bytes.  Then ensure that dest is null-terminated.
- */
-char *__strncpy_null(char *dest, const char *src, size_t n)
-{
-	strncpy(dest, src, n);
-	if (n > 0)
-		dest[n - 1] = '\0';
-	return dest;
-}
-
-/*
  * Test if path is a directory
  * Returns:
  *   0 - path exists but it is not a directory
@@ -394,9 +380,11 @@ int path_is_dir(const char *path)
  */
 int path_is_in_dir(const char *parent, const char *path)
 {
-	char *tmp = strdup(path);
+	char tmp[PATH_MAX];
 	char *curr_dir = tmp;
 	int ret;
+
+	strncpy_null(tmp, path, sizeof(tmp));
 
 	while (strcmp(parent, curr_dir) != 0) {
 		if (strcmp(curr_dir, "/") == 0) {
@@ -408,7 +396,6 @@ int path_is_in_dir(const char *parent, const char *path)
 	ret = 1;
 
 out:
-	free(tmp);
 	return ret;
 }
 
@@ -426,7 +413,7 @@ int arg_copy_path(char *dest, const char *src, int destlen)
 	if (len >= PATH_MAX || len >= destlen)
 		return -ENAMETOOLONG;
 
-	__strncpy_null(dest, src, destlen);
+	strncpy_null(dest, src, destlen);
 
 	return 0;
 }
@@ -481,3 +468,30 @@ int test_issubvolname(const char *name)
 		strcmp(name, ".") && strcmp(name, "..");
 }
 
+/*
+ * Unified GNU semantics basename helper, never changing the argument. Always
+ * use this instead of basename().
+ */
+char *path_basename(char *path)
+{
+#if 0
+	const char *tmp = strrchr(path, '/');
+
+	/* Special case when the whole path is just "/". */
+	if (path[0] == '/' && path[1] == 0)
+		return path;
+
+	return tmp ? tmp + 1 : path;
+#else
+	return basename(path);
+#endif
+}
+
+/*
+ * Return dirname component of path, may change the argument.
+ * Own helper for parity with path_basename().
+ */
+char *path_dirname(char *path)
+{
+	return dirname(path);
+}

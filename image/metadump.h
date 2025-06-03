@@ -19,7 +19,6 @@
 
 #include "kerncompat.h"
 #include <pthread.h>
-#include "kernel-lib/rbtree.h"
 #include "kernel-lib/list.h"
 #include "kernel-lib/sizes.h"
 #include "kernel-shared/ctree.h"
@@ -44,7 +43,7 @@ struct dump_version {
 };
 
 extern const struct dump_version dump_versions[];
-const extern struct dump_version *current_version;
+extern const struct dump_version *current_version;
 
 struct async_work {
 	struct list_head list;

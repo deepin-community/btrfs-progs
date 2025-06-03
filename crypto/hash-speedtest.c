@@ -18,6 +18,7 @@
 #include <time.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <fnmatch.h>
 #if HAVE_LINUX_PERF_EVENT_H == 1 && HAVE_LINUX_HW_BREAKPOINT_H == 1
 #include <linux/perf_event.h>
 #include <linux/hw_breakpoint.h>
@@ -25,9 +26,6 @@
 #define HAVE_PERF
 #endif
 #include "crypto/hash.h"
-#include "crypto/crc32c.h"
-#include "crypto/sha.h"
-#include "crypto/blake2.h"
 #include "common/messages.h"
 #include "common/cpu-utils.h"
 
@@ -176,6 +174,7 @@ int main(int argc, char **argv) {
 	u8 hash[32];
 	int idx;
 	int iter;
+	char *filter = NULL;
 	struct contestant {
 		char name[16];
 		int (*digest)(const u8 *buf, size_t length, u8 *out);
@@ -237,11 +236,12 @@ int main(int argc, char **argv) {
 			{ "cycles", no_argument, NULL, 'c' },
 			{ "time", no_argument, NULL, 't' },
 			{ "perf", no_argument, NULL, 'p' },
+			{ "filter", required_argument, NULL, 'f' },
 			{ NULL, 0, NULL, 0}
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "ctp", long_options, NULL);
+		c = getopt_long(argc, argv, "cf:tp", long_options, NULL);
 		if (c < 0)
 			break;
 		switch (c) {
@@ -251,6 +251,11 @@ int main(int argc, char **argv) {
 				return 1;
 			}
 			units = UNITS_CYCLES;
+			break;
+		case 'f':
+			free(filter);
+			filter = strdup(optarg);
+			printf("Use filter: %s\n", filter);
 			break;
 		case 't':
 			units = UNITS_TIME;
@@ -271,7 +276,7 @@ int main(int argc, char **argv) {
 
 	if (argc - optind >= 1) {
 		iterations = atoi(argv[optind]);
-		if (iterations < 0)
+		if (iterations < 1)
 			iterations = 1;
 	}
 
@@ -296,6 +301,12 @@ int main(int argc, char **argv) {
 		/* Backend not compiled in */
 		if (c->backend == 1)
 			continue;
+
+		if (c->digest == hash_null_memcpy)
+			/* Always run NULL-MEMCPY to warm up memory. */;
+		else if (filter && fnmatch(filter, c->name, FNM_CASEFOLD) != 0)
+			continue;
+
 		printf("%14s: ", c->name);
 		fflush(stdout);
 
@@ -335,6 +346,7 @@ int main(int argc, char **argv) {
 		putchar('\n');
 	}
 	perf_finish();
+	free(filter);
 
 	return 0;
 }

@@ -12,7 +12,7 @@ DESCRIPTION
 :command:`btrfs filesystem` is used to perform several whole filesystem level tasks,
 including all the regular filesystem operations like resizing, space stats,
 label setting/getting, and defragmentation. There are other whole filesystem
-tasks like scrub or balance that are grouped in separate commands.
+tasks like scrub or balance that are grouped in separate commands (:doc:`btrfs-scrub`, :doc:`btrfs-balance`).
 
 SUBCOMMAND
 ----------
@@ -83,7 +83,7 @@ df [options] <path>
 defragment [options] <file>|<dir> [<file>|<dir>...]
         Defragment file data on a mounted filesystem. Requires kernel 2.6.33 and newer.
 
-        If *-r* is passed, files in dir will be defragmented recursively (not
+        If *-r* is passed, files in *dir* will be defragmented recursively (not
         descending to subvolumes, mount points and directory symlinks).
         The start position and the number of bytes to defragment can be specified by
         start and length using *-s* and *-l* options below.
@@ -117,6 +117,13 @@ defragment [options] <file>|<dir> [<file>|<dir>...]
                 algorithm, *zlib* (default), *lzo* or *zstd*. Currently it's not possible to select no
                 compression. See also section *EXAMPLES*.
 
+        -L|--level <level>
+                Since kernel 6.14 the compresison can also take the level parameter which will be used
+                only for the defragmentation and overrides the eventual mount option compression level.
+                Valid levels depend on the compression algorithms: *zlib*
+                1..9, *lzo* does not have any levels, *zstd* the standard levels 1..15 and also the
+                realtime -1..-15.
+
         -r
                 defragment files recursively in given directories, does not descend to
                 subvolumes or mount points
@@ -140,9 +147,10 @@ defragment [options] <file>|<dir> [<file>|<dir>...]
                 logic. Reasonable values are from tens to hundreds of megabytes.
 
         --step SIZE
-                Perform defragmention in the range in SIZE steps and flush (*-f*) after each one.
+                Perform defragmentation in the range in SIZE steps and flush (*-f*) after each one.
                 The range is default (the whole file) or given by *-s* and *-l*, split into
                 the steps or done in one go if the step is larger. Minimum range size is 256KiB.
+                With verbosity options the progress of defragmentation will be also printed.
 
         -v
                 (deprecated) alias for global *-v* option
@@ -206,7 +214,7 @@ mkswapfile [-s size] file
         activated swapfile cannot be balanced.
 
         Swapfile creation can be achieved by standalone commands too. Activation
-        needs to be done by command ``swapon(8)``. See also command
+        needs to be done by command :manref:`swapon(8)`. See also command
         :command:`btrfs inspect-internal map-swapfile`
         and the :doc:`Swapfile feature<Swapfile>` description.
 
@@ -250,15 +258,29 @@ resize [options] [<devid>:][+/-]<size>[kKmMgGtTpPeE]|[<devid>:]max <path>
 
         The resize command does not manipulate the size of underlying
         partition.  If you wish to enlarge/reduce a filesystem, you must make sure you
-        can expand the partition before enlarging the filesystem and shrink the
-        partition after reducing the size of the filesystem.  This can done using
-        ``fdisk(8)`` or ``parted(8)`` to delete the existing partition and recreate
+        expand the partition before enlarging the filesystem and shrink the
+        partition after reducing the size of the filesystem.  This can be done using
+        :manref:`fdisk(8)` or :manref:`parted(8)` to delete the existing partition and recreate
         it with the new desired size.  When recreating the partition make sure to use
         the same starting partition offset as before.
+
+        The size of the portion that the filesystem uses of an underlying device can be
+        determined via the :command:`btrfs filesystem show --raw` command on the
+        filesystem’s mount point (where it’s given for each *devid* after the string
+        `size` or via the :command:`btrfs inspect-internal dump-super` command on the
+        specific device (where it’s given as the value of `dev_item.total_bytes`, which
+        is not to be confused with `total_bytes`).
+        The value is also the address of the first byte not used by the
+        filesystem.
 
         Growing is usually instant as it only updates the size. However, shrinking could
         take a long time if there are data in the device area that's beyond the new
         end. Relocation of the data takes time.
+
+        Note that there's a lower limit on the new size (either specified
+        as an absolute size or difference) that is checked by kernel and
+        rejected eventually as invalid. Lower values will print a warning but
+        still pass the request to kernel. The currently known value is 256MiB.
 
         See also section *EXAMPLES*.
 
@@ -301,7 +323,7 @@ show [options] [<path>|<uuid>|<device>|<label>]
                 show sizes in TiB, or TB with --si
 
 sync <path>
-        Force a sync of the filesystem at *path*, similar to the ``sync(1)`` command. In
+        Force a sync of the filesystem at *path*, similar to the :manref:`sync(1)` command. In
         addition, it starts cleaning of deleted subvolumes. To wait for the subvolume
         deletion to complete use the :command:`btrfs subvolume sync` command.
 

@@ -30,6 +30,7 @@
 #include "kernel-shared/file-item.h"
 #include "common/extent-cache.h"
 #include "common/messages.h"
+#include "common/string-utils.h"
 #include "convert/common.h"
 #include "convert/source-fs.h"
 #include "convert/source-ext2.h"
@@ -61,7 +62,7 @@ static int ext2_open_fs(struct btrfs_convert_context *cctx, const char *name)
 	/*
 	 * We need to know exactly the used space, some RO compat flags like
 	 * BIGALLOC will affect how used space is present.
-	 * So we need manuall check any unsupported RO compat flags
+	 * So we need manually check any unsupported RO compat flags
 	 */
 	ro_feature = ext2_fs->super->s_feature_ro_compat;
 	if (ro_feature & ~EXT2_LIB_FEATURE_RO_COMPAT_SUPP) {
@@ -303,6 +304,83 @@ static int ext2_block_iterate_proc(ext2_filsys fs, blk_t *blocknr,
 	return 0;
 }
 
+static int iterate_one_file_extent(struct blk_iterate_data *data, u64 filepos,
+				   u64 len, u64 disk_bytenr, bool prealloced)
+{
+	const int sectorsize = data->trans->fs_info->sectorsize;
+	const int sectorbits = ilog2(sectorsize);
+	int ret;
+
+	UASSERT(len > 0);
+	for (int i = 0; i < len; i += sectorsize) {
+		/*
+		 * Just treat preallocated extent as hole.
+		 *
+		 * As there is no way to utilize the preallocated space, since
+		 * any file extent would also be shared by ext2 image.
+		 */
+		if (prealloced)
+			ret = block_iterate_proc(0, (filepos + i) >> sectorbits, data);
+		else
+			ret = block_iterate_proc((disk_bytenr + i) >> sectorbits,
+						 (filepos + i) >> sectorbits, data);
+
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
+static int iterate_file_extents(struct blk_iterate_data *data, ext2_filsys ext2fs,
+				ext2_ino_t ext2_ino, u32 convert_flags)
+{
+	ext2_extent_handle_t handle = NULL;
+	struct ext2fs_extent extent;
+	const int sectorsize = data->trans->fs_info->sectorsize;
+	const int sectorbits = ilog2(sectorsize);
+	int op = EXT2_EXTENT_ROOT;
+	errcode_t errcode;
+	int ret = 0;
+
+	errcode = ext2fs_extent_open(ext2fs, ext2_ino, &handle);
+	if (errcode) {
+		error("failed to open ext2 inode %u: %s", ext2_ino, error_message(errcode));
+		return -EIO;
+	}
+	while (1) {
+		u64 disk_bytenr;
+		u64 filepos;
+		u64 len;
+
+		errcode = ext2fs_extent_get(handle, op, &extent);
+		if (errcode == EXT2_ET_EXTENT_NO_NEXT)
+			break;
+		if (errcode) {
+			data->errcode = errcode;
+			ret = -EIO;
+			goto out;
+		}
+		op = EXT2_EXTENT_NEXT;
+
+		if (extent.e_flags & EXT2_EXTENT_FLAGS_SECOND_VISIT)
+			continue;
+		if (!(extent.e_flags & EXT2_EXTENT_FLAGS_LEAF))
+			continue;
+
+		filepos = extent.e_lblk << sectorbits;
+		len = extent.e_len << sectorbits;
+		disk_bytenr = extent.e_pblk << sectorbits;
+
+		ret = iterate_one_file_extent(data, filepos, len, disk_bytenr,
+					      extent.e_flags & EXT2_EXTENT_FLAGS_UNINIT);
+		if (ret < 0)
+			goto out;
+	}
+out:
+	ext2fs_extent_free(handle);
+	return ret;
+}
+
 /*
  * traverse file's data blocks, record these data blocks as file extents.
  */
@@ -312,27 +390,60 @@ static int ext2_create_file_extents(struct btrfs_trans_handle *trans,
 			       ext2_filsys ext2_fs, ext2_ino_t ext2_ino,
 			       u32 convert_flags)
 {
+	struct btrfs_fs_info *fs_info = trans->fs_info;
 	int ret;
 	char *buffer = NULL;
 	errcode_t err;
+	struct ext2_inode ext2_inode = { 0 };
 	u32 last_block;
 	u32 sectorsize = root->fs_info->sectorsize;
 	u64 inode_size = btrfs_stack_inode_size(btrfs_inode);
+	bool meet_inline_size_limit;
 	struct blk_iterate_data data;
+
+	if (S_ISLNK(btrfs_stack_inode_mode(btrfs_inode))) {
+		meet_inline_size_limit = inode_size <= btrfs_symlink_max_size(fs_info);
+		if (!meet_inline_size_limit) {
+			error("symlink too large for ext2 inode %u, has %llu max %u",
+			     ext2_ino, inode_size, btrfs_symlink_max_size(fs_info));
+			return -ENAMETOOLONG;
+		}
+	} else {
+		meet_inline_size_limit = inode_size <= btrfs_data_inline_max_size(fs_info);
+	}
 
 	init_blk_iterate_data(&data, trans, root, btrfs_inode, objectid,
 			convert_flags & CONVERT_FLAG_DATACSUM);
 
-	err = ext2fs_block_iterate2(ext2_fs, ext2_ino, BLOCK_FLAG_DATA_ONLY,
-				    NULL, ext2_block_iterate_proc, &data);
-	if (err)
-		goto error;
+	err = ext2fs_read_inode(ext2_fs, ext2_ino, &ext2_inode);
+	if (err) {
+		error("failed to read ext2 inode %u: %s", ext2_ino, error_message(err));
+		return -EIO;
+	}
+	/*
+	 * For inodes without extent block maps, go with the older
+	 * ext2fs_block_iterate2().
+	 * Otherwise use ext2fs_extent_*() based solution, as that can provide
+	 * UNINIT extent flags.
+	 */
+	if ((ext2_inode.i_flags & EXT4_EXTENTS_FL) == 0) {
+		err = ext2fs_block_iterate2(ext2_fs, ext2_ino,
+					    BLOCK_FLAG_DATA_ONLY, NULL,
+					    ext2_block_iterate_proc, &data);
+		if (err) {
+			error("ext2fs_block_iterate2: %s", error_message(err));
+			return -EIO;
+		}
+	} else {
+		ret = iterate_file_extents(&data, ext2_fs, ext2_ino, convert_flags);
+		if (ret < 0)
+			goto fail;
+	}
 	ret = data.errcode;
 	if (ret)
 		goto fail;
 	if ((convert_flags & CONVERT_FLAG_INLINE_DATA) && data.first_block == 0
-	    && data.num_blocks > 0 && inode_size < sectorsize
-	    && inode_size <= BTRFS_MAX_INLINE_DATA_SIZE(root->fs_info)) {
+	    && data.num_blocks > 0 && meet_inline_size_limit) {
 		u64 num_bytes = data.num_blocks * sectorsize;
 		u64 disk_bytenr = data.disk_block * sectorsize;
 		u64 nbytes;
@@ -346,7 +457,9 @@ static int ext2_create_file_extents(struct btrfs_trans_handle *trans,
 		if (num_bytes > inode_size)
 			num_bytes = inode_size;
 		ret = btrfs_insert_inline_extent(trans, root, objectid,
-						 0, buffer, num_bytes);
+						 0, buffer, num_bytes,
+						 BTRFS_COMPRESS_NONE,
+						 num_bytes);
 		if (ret)
 			goto fail;
 		nbytes = btrfs_stack_inode_nbytes(btrfs_inode) + num_bytes;
@@ -366,9 +479,6 @@ static int ext2_create_file_extents(struct btrfs_trans_handle *trans,
 fail:
 	free(buffer);
 	return ret;
-error:
-	error("ext2fs_block_iterate2: %s", error_message(err));
-	return -1;
 }
 
 static int ext2_create_symlink(struct btrfs_trans_handle *trans,
@@ -380,21 +490,27 @@ static int ext2_create_symlink(struct btrfs_trans_handle *trans,
 	int ret;
 	char *pathname;
 	u64 inode_size = btrfs_stack_inode_size(btrfs_inode);
+
 	if (ext2fs_inode_data_blocks2(ext2_fs, ext2_inode)) {
-		btrfs_set_stack_inode_size(btrfs_inode, inode_size + 1);
+		if (inode_size > btrfs_symlink_max_size(trans->fs_info)) {
+			error("symlink too large for ext2 inode %u, has %llu max %u",
+				ext2_ino, inode_size,
+				btrfs_symlink_max_size(trans->fs_info));
+			return -ENAMETOOLONG;
+		}
 		ret = ext2_create_file_extents(trans, root, objectid,
 				btrfs_inode, ext2_fs, ext2_ino,
 				CONVERT_FLAG_DATACSUM |
 				CONVERT_FLAG_INLINE_DATA);
-		btrfs_set_stack_inode_size(btrfs_inode, inode_size);
 		return ret;
 	}
 
 	pathname = (char *)&(ext2_inode->i_block[0]);
 	BUG_ON(pathname[inode_size] != 0);
 	ret = btrfs_insert_inline_extent(trans, root, objectid, 0,
-					 pathname, inode_size + 1);
-	btrfs_set_stack_inode_nbytes(btrfs_inode, inode_size + 1);
+					 pathname, inode_size,
+					 BTRFS_COMPRESS_NONE, inode_size);
+	btrfs_set_stack_inode_nbytes(btrfs_inode, inode_size);
 	return ret;
 }
 
@@ -543,7 +659,7 @@ static int ext2_copy_single_xattr(struct btrfs_trans_handle *trans,
 		data = databuf;
 		datalen = bufsize;
 	}
-	strncpy(namebuf, xattr_prefix_table[name_index], XATTR_NAME_MAX);
+	strncpy_null(namebuf, xattr_prefix_table[name_index], XATTR_NAME_MAX + 1);
 	strncat(namebuf, EXT2_EXT_ATTR_NAME(entry), entry->e_name_len);
 	if (name_len + datalen > BTRFS_LEAF_DATA_SIZE(root->fs_info) -
 	    sizeof(struct btrfs_item) - sizeof(struct btrfs_dir_item)) {
@@ -727,10 +843,17 @@ static inline void ext4_decode_extra_time(__le32 * tv_sec, __le32 * tv_nsec,
         *tv_nsec = (le32_to_cpu(extra) & EXT4_NSEC_MASK) >> EXT4_EPOCH_BITS;
 }
 
+/*
+ * In e2fsprogs < 1.47.1 it's inode_includes, from >= on it's with ext2fs_ prefix.
+ */
+#ifndef ext2fs_inode_includes
+#define ext2fs_inode_includes(size, field)	inode_includes(size, field)
+#endif
+
 #define EXT4_COPY_XTIME(xtime, dst, tv_sec, tv_nsec)					\
 do {											\
 	tv_sec = src->i_ ## xtime ;							\
-	if (inode_includes(inode_size, i_ ## xtime ## _extra)) {			\
+	if (ext2fs_inode_includes(inode_size, i_ ## xtime ## _extra)) {			\
 		tv_sec = src->i_ ## xtime ;						\
 		ext4_decode_extra_time(&tv_sec, &tv_nsec, src->i_ ## xtime ## _extra);	\
 		btrfs_set_stack_timespec_sec(&dst->xtime , tv_sec);			\
@@ -771,7 +894,7 @@ static int ext4_copy_inode_timespec_extra(struct btrfs_inode_item *dst,
 	EXT4_COPY_XTIME(ctime, dst, tv_sec, tv_nsec);
 
 	tv_sec = src->i_crtime;
-	if (inode_includes(inode_size, i_crtime_extra)) {
+	if (ext2fs_inode_includes(inode_size, i_crtime_extra)) {
 		tv_sec = src->i_crtime;
 		ext4_decode_extra_time(&tv_sec, &tv_nsec, src->i_crtime_extra);
 		btrfs_set_stack_timespec_sec(&dst->otime, tv_sec);
@@ -854,6 +977,12 @@ static int ext2_copy_single_inode(struct btrfs_trans_handle *trans,
 	int ret;
 	int s_inode_size;
 	struct btrfs_inode_item btrfs_inode;
+	struct btrfs_key inode_key;
+	struct btrfs_path path = { 0 };
+
+	inode_key.objectid = objectid;
+	inode_key.type = BTRFS_INODE_ITEM_KEY;
+	inode_key.offset = 0;
 
 	if (ext2_inode->i_links_count == 0)
 		return 0;
@@ -874,6 +1003,25 @@ static int ext2_copy_single_inode(struct btrfs_trans_handle *trans,
 		btrfs_set_stack_inode_flags(&btrfs_inode, flags);
 	}
 	ext2_convert_inode_flags(&btrfs_inode, ext2_inode);
+
+	/*
+	 * The inode may already be created (with dummy contents), in that
+	 * case we don't need to do anything yet.
+	 * The inode item would be updated at the end anyway.
+	 */
+	ret = btrfs_lookup_inode(trans, root, &path, &inode_key, 1);
+	btrfs_release_path(&path);
+	if (ret > 0) {
+		/*
+		 * No inode item yet, the inode item must be inserted before
+		 * any file extents/dir items/xattrs, or we may trigger
+		 * tree-checker. File extents/dir items/xattrs require the
+		 * previous item to have the same key objectid.
+		 */
+		ret = btrfs_insert_inode(trans, root, objectid, &btrfs_inode);
+		if (ret < 0)
+			return ret;
+	}
 
 	switch (ext2_inode->i_mode & S_IFMT) {
 	case S_IFREG:
@@ -901,7 +1049,21 @@ static int ext2_copy_single_inode(struct btrfs_trans_handle *trans,
 		if (ret)
 			return ret;
 	}
-	return btrfs_insert_inode(trans, root, objectid, &btrfs_inode);
+
+	/*
+	 * Update the inode item, as above insert never updates the inode's
+	 * nbytes and size.
+	 */
+	ret = btrfs_lookup_inode(trans, root, &path, &inode_key, 1);
+	if (ret > 0)
+		ret = -ENOENT;
+	if (ret < 0)
+		return ret;
+	write_extent_buffer(path.nodes[0], &btrfs_inode,
+			    btrfs_item_ptr_offset(path.nodes[0], path.slots[0]),
+			    sizeof(btrfs_inode));
+	btrfs_release_path(&path);
+	return 0;
 }
 
 static bool ext2_is_special_inode(ext2_filsys ext2_fs, ext2_ino_t ino)

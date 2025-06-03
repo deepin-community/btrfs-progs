@@ -178,9 +178,10 @@ out:
 	return ret;
 }
 
-static inline u32 free_space_bitmap_size(u64 size, u32 sectorsize)
+static inline u32 free_space_bitmap_size(const struct btrfs_fs_info *fs_info,
+					 u64 size)
 {
-	return DIV_ROUND_UP((u32)div_u64(size, sectorsize), BITS_PER_BYTE);
+	return DIV_ROUND_UP((u32)div_u64(size, fs_info->sectorsize), BITS_PER_BYTE);
 }
 
 static unsigned long *alloc_bitmap(u32 bitmap_size)
@@ -241,8 +242,7 @@ static int convert_free_space_to_bitmaps(struct btrfs_trans_handle *trans,
 	int done = 0, nr;
 	int ret;
 
-	bitmap_size = free_space_bitmap_size(block_group->length,
-					     fs_info->sectorsize);
+	bitmap_size = free_space_bitmap_size(fs_info, block_group->length);
 	bitmap = alloc_bitmap(bitmap_size);
 	if (!bitmap) {
 		ret = -ENOMEM;
@@ -331,8 +331,7 @@ static int convert_free_space_to_bitmaps(struct btrfs_trans_handle *trans,
 		u32 data_size;
 
 		extent_size = min(end - i, bitmap_range);
-		data_size = free_space_bitmap_size(extent_size,
-						   fs_info->sectorsize);
+		data_size = free_space_bitmap_size(fs_info, extent_size);
 
 		key.objectid = i;
 		key.type = BTRFS_FREE_SPACE_BITMAP_KEY;
@@ -379,8 +378,7 @@ static int convert_free_space_to_extents(struct btrfs_trans_handle *trans,
 	int done = 0, nr;
 	int ret;
 
-	bitmap_size = free_space_bitmap_size(block_group->start,
-					     fs_info->sectorsize);
+	bitmap_size = free_space_bitmap_size(fs_info, block_group->length);
 	bitmap = alloc_bitmap(bitmap_size);
 	if (!bitmap) {
 		ret = -ENOMEM;
@@ -423,8 +421,8 @@ static int convert_free_space_to_extents(struct btrfs_trans_handle *trans,
 						     fs_info->sectorsize *
 						     BITS_PER_BYTE);
 				bitmap_cursor = ((char *)bitmap) + bitmap_pos;
-				data_size = free_space_bitmap_size(found_key.offset,
-								   fs_info->sectorsize);
+				data_size = free_space_bitmap_size(fs_info,
+								found_key.offset);
 
 				ptr = btrfs_item_ptr_offset(leaf, path->slots[0] - 1);
 				read_extent_buffer(leaf, bitmap_cursor, ptr,
@@ -1230,44 +1228,6 @@ out:
 		btrfs_abort_transaction(trans, ret);
 	return ret;
 }
-static int clear_free_space_tree(struct btrfs_trans_handle *trans,
-				 struct btrfs_root *root)
-{
-	struct btrfs_path *path;
-	struct btrfs_key key;
-	int nr;
-	int ret;
-
-	path = btrfs_alloc_path();
-	if (!path)
-		return -ENOMEM;
-
-	key.objectid = 0;
-	key.type = 0;
-	key.offset = 0;
-
-	while (1) {
-		ret = btrfs_search_slot(trans, root, &key, path, -1, 1);
-		if (ret < 0)
-			goto out;
-
-		nr = btrfs_header_nritems(path->nodes[0]);
-		if (!nr)
-			break;
-
-		path->slots[0] = 0;
-		ret = btrfs_del_items(trans, root, path, 0, nr);
-		if (ret)
-			goto out;
-
-		btrfs_release_path(path);
-	}
-
-	ret = 0;
-out:
-	btrfs_free_path(path);
-	return ret;
-}
 
 int btrfs_clear_free_space_tree(struct btrfs_fs_info *fs_info)
 {
@@ -1290,7 +1250,7 @@ int btrfs_clear_free_space_tree(struct btrfs_fs_info *fs_info)
 
 		while (key.offset < fs_info->nr_global_roots) {
 			free_space_root = btrfs_global_root(fs_info, &key);
-			ret = clear_free_space_tree(trans, free_space_root);
+			ret = btrfs_clear_tree(trans, free_space_root);
 			if (ret)
 				goto abort;
 			key.offset++;
@@ -1301,7 +1261,7 @@ int btrfs_clear_free_space_tree(struct btrfs_fs_info *fs_info)
 			      BTRFS_FEATURE_COMPAT_RO_FREE_SPACE_TREE);
 		btrfs_set_super_compat_ro_flags(fs_info->super_copy, features);
 
-		ret = clear_free_space_tree(trans, free_space_root);
+		ret = btrfs_clear_tree(trans, free_space_root);
 		if (ret)
 			goto abort;
 
@@ -1518,7 +1478,7 @@ int btrfs_create_free_space_tree(struct btrfs_fs_info *fs_info)
 	if (IS_ERR(trans))
 		return PTR_ERR(trans);
 
-	free_space_root = btrfs_create_tree(trans, fs_info, &root_key);
+	free_space_root = btrfs_create_tree(trans, &root_key);
 	if (IS_ERR(free_space_root)) {
 		ret = PTR_ERR(free_space_root);
 		goto abort;
