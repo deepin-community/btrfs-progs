@@ -7,7 +7,7 @@ BTRFS is a modern copy on write (COW) filesystem for Linux aimed at
 implementing advanced features while also focusing on fault tolerance, repair
 and easy administration. You can read more about the features in the
 :doc:`introduction<Introduction>` or choose from the pages below. Documentation
-for for command line tools :doc:`btrfs`, :doc:`mkfs.btrfs` and others
+for command line tools :doc:`btrfs`, :doc:`mkfs.btrfs` and others
 is in the :doc:`manual pages<man-index>`.
 
 .. raw:: html
@@ -30,6 +30,7 @@ is in the :doc:`manual pages<man-index>`.
    Glossary
    INSTALL
    Source-repositories
+   Interoperability
 
 .. raw:: html
 
@@ -82,12 +83,24 @@ is in the :doc:`manual pages<man-index>`.
    dev/dev-json
    dev/dev-internal-apis
    dev/ReleaseChecklist
+   dev/GithubReviewWorkflow
+   dev/CmdLineConventions
    btrfs-ioctl
 
 
 .. raw:: html
 
    </td></tr></table>
+
+Need help?
+----------
+
+Assistance is available from the
+`#btrfs channel on Libera Chat <https://web.libera.chat/#btrfs>`__
+or the `linux-btrfs mailing list
+<https://subspace.kernel.org/vger.kernel.org.html>`__. Issues with the
+userspace btrfs tools can be reported to the `btrfs-progs issue tracker on
+GitHub <https://github.com/kdave/btrfs-progs/issues>`__.
 
 .. raw:: html
 
@@ -101,6 +114,4 @@ for missing contents.
    :maxdepth: 1
    :caption: TODO
 
-   Quick-start
-   Interoperability
    trouble-index

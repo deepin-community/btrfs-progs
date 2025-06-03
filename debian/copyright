@@ -3,18 +3,127 @@ Upstream-Contact: linux-btrfs@vger.kernel.org
 Source: https://git.kernel.org/pub/scm/linux/kernel/git/kdave/btrfs-progs.git
 
 Files: *
-Copyright: 2007-2012 Oracle <http://www.oracle.com/>
+       libbtrfsutil/btrfs.h
+       libbtrfsutil/btrfs_tree.h
+Copyright: 2007-2012, Oracle <http://www.oracle.com/>
+           2007, 2008, 2011, Red Hat.
+           2008, Morey Roof
+           2011-2013, STRATO AG
+           2012, Alexander Block.
+           2012, Intel Corporation.
+           2012, Samuel Neves <sneves@dei.uc.pt>
+           2013-2016 FUJITSU LIMITED.
+           2013-2018, SUSE.
+           2014, 2015, Facebook.
+           2017, Qu Wenruo
 License: GPL-2
 
+Files: config/*
+Copyright: 2011, Maarten Bosmans <mkbosmans@gmail.com>
+           2008, Guido U. Draheim <guidod@gmx.de>
+License: GPL-3+ with Autoconf-2.0~Archive exception
+
+Files: config/ax_gcc_builtin.m4
+Copyright: 2013, Gabriele Svelto <gabriele.svelto@gmail.com>
+License: FSFAP
+ Copying and distribution of this file, with or without modification, are
+ permitted in any medium without royalty provided the copyright notice
+ and this notice are preserved.  This file is offered as-is, without any
+ warranty.
+
+Files: crypto/crc32c.c
+       kernel-lib/interval_tree_generic.h
+Copyright: 2011-2013, STRATO AG
+           2007-2012, Oracle <http://www.oracle.com/>
+           2012, Michel Lespinasse <walken@google.com>
+License: GPL-2+
+
+Files: crypto/sha*
+Copyright: 2011, IETF Trust
+License: TLP-4
+Comment: Written and placed in the public domain by Jeffrey Walton
+ Based on code from Intel, and by Sean Gulley for the miTLS project.
+
+Files: crypto/xxhash.*
+Copyright: 2012-2021, Yann Collet
+License: BSD-2-clause
+
+Files: kernel-lib/mktables.c
+       kernel-lib/raid56.c
+Copyright: 2002-2007, H. Peter Anvin
+License: GPL-2+
+
+Files: kernel-lib/rbtree*
+Copyright: 1999, Andrea Arcangeli <andrea@suse.de>
+           2002, David Woodhouse <dwmw2@infradead.org>
+           2012, Michel Lespinasse <walken@google.com>
+License: GPL-2+
+
+Files: libbtrfs/crc32c.c
+Copyright: 2008, Austin Zhang <austin.zhang@intel.com>
+           2011-2013, STRATO AG
+           2007-2012, Oracle <http://www.oracle.com/>
+License: GPL-2+
+Comment: The year of Austin Zhang's work was established with the LKML email
+ with subject "[PATCH] Using Intel CRC32 instruction to accelerate CRC32c
+ algorithm by new crypto API -V3." <https://lwn.net/Articles/292984/>
+ 
 Files: libbtrfsutil/*
-Copyright: 2007-2012 Oracle <http://www.oracle.com/>
+Copyright: 2007-2012, Oracle <http://www.oracle.com/>
+           2018, Facebook
+           1991, 1999, Free Software Foundation, Inc.
 License: LGPL-2.1+
 
+Files: tests/fsstress.c
+Copyright: 2000-2002, Silicon Graphics, Inc.
+License: GPL-2
+
 Files: debian/*
-Copyright: 2007-2013 Daniel Baumann <daniel.baumann@progress-technologies.net>
-           2013 <luk@debian.org>
-           2013-2016 Dimitri John Ledkov <xnox@debian.org>, et al.
+Copyright: 2007-2013, Daniel Baumann <daniel.baumann@progress-technologies.net>
+           2013, Luk Claes <luk@debian.org>
+           2013-2016, Dimitri John Ledkov <xnox@debian.org, et al.>
+           2016-2024, Nicholas D Steeves <sten@debian.org>
 License: GPL-2+
+
+License: BSD-2-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+ .
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following disclaimer
+      in the documentation and/or other materials provided with the
+      distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: GPL-2
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License v2 as published by
+ the Free Software Foundation.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems the complete text of the GNU General Public License
+ is found in '/usr/share/common-licenses/GPL-2'.
 
 License: GPL-2+
  This program is free software: you can redistribute it and/or modify
@@ -30,24 +139,90 @@ License: GPL-2+
  You should have received a copy of the GNU General Public License
  along with this program. If not, see <http://www.gnu.org/licenses/>.
  .
- The complete text of the GNU General Public License
- can be found in /usr/share/common-licenses/GPL-2 file.
+ On Debian systems the complete text of the GNU General Public License
+ is found in '/usr/share/common-licenses/GPL-2'.
 
-License: GPL-2
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License v2 as published by
- the Free Software Foundation.
+License: GPL-3+ with Autoconf-2.0~Archive exception
+ '/usr/share/common-licenses/GPL-3' with
  .
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- GNU General Public License for more details.
+ Autoconf Exception
  .
- You should have received a copy of the GNU General Public License
- along with this program. If not, see <http://www.gnu.org/licenses/>.
+ As a special exception, the Free Software Foundation gives unlimited
+ permission to copy, distribute and modify the configure scripts that
+ are the output of Autoconf. You need not follow the terms of the GNU
+ General Public License when using or distributing such scripts, even
+ though portions of the text of Autoconf appear in them. The GNU
+ General Public License (GPL) does govern all other use of the
+ material that constitutes the Autoconf program.
  .
- The complete text of the GNU General Public License
- can be found in /usr/share/common-licenses/GPL-2 file.
+ Certain portions of the Autoconf source text are designed to be
+ copied (in certain cases, depending on the input) into the output of
+ Autoconf. We call these the "data" portions. The rest of the Autoconf
+ source text consists of comments plus executable code that decides
+ which of the data portions to output in any given case. We call these
+ comments and executable code the "non-data" portions. Autoconf never
+ copies any of the non-data portions into its output.
+ .
+ This special exception to the GPL applies to versions of Autoconf
+ released by the Free Software Foundation. When you make and
+ distribute a modified version of Autoconf, you may extend this
+ special exception to the GPL to apply to your modified version as
+ well, *unless* your modified version has the potential to copy into
+ its output some of the text that was the non-data portion of the
+ version that you started with. (In other words, unless your change
+ moves or copies text from the non-data portions to the data
+ portions.) If your modification has such potential, you must delete
+ any notice of this special exception to the GPL from your modified
+ version.
 
 License: LGPL-2.1+
- See /usr/share/common-licenses/LGPL-2.1.
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License as published by the
+ Free Software Foundation; version 2.1 of the License, or (at your option)
+ any later version.
+ On Debian systems the complete text of version 2.1 of the GNU Lesser
+ General Public License is found in '/usr/share/common-licenses/LGPL-2.1'.
+
+License: LGPL-3+
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License as published by the
+ Free Software Foundation; version 3 of the License, or (at
+ your option) any later version.
+ On Debian systems the complete text of version 3 of the GNU Lesser
+ General Public License is found in '/usr/share/common-licenses/LGPL-3'.
+
+License: TLP-4
+ Copyright (c) 2011 IETF Trust and the persons identified as
+ authors of the code.  All rights reserved.
+ .
+ Redistribution and use in source and binary forms, with or
+ without modification, are permitted provided that the following
+ conditions are met:
+ .
+ - Redistributions of source code must retain the above
+   copyright notice, this list of conditions and
+   the following disclaimer.
+ .
+ - Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following
+   disclaimer in the documentation and/or other materials provided
+   with the distribution.
+ .
+ - Neither the name of Internet Society, IETF or IETF Trust, nor
+   the names of specific contributors, may be used to endorse or
+   promote products derived from this software without specific
+   prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

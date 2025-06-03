@@ -35,11 +35,11 @@
 #include "common/help.h"
 #include "common/messages.h"
 #include "common/open-utils.h"
+#include "common/string-utils.h"
 #include "common/units.h"
 #include "cmds/commands.h"
 
 static int verbose = 0;
-static bool no_pretty = false;
 
 struct seek {
 	u64 distance;
@@ -315,7 +315,7 @@ static void timeval_subtract(struct timeval *result, struct timeval *x,
 }
 
 static int calc_root_size(struct btrfs_root *tree_root, struct btrfs_key *key,
-			  int find_inline)
+			  int find_inline, unsigned int unit_mode)
 {
 	struct btrfs_root *root;
 	struct btrfs_path path = { 0 };
@@ -365,7 +365,7 @@ out_print:
 		stat.total_clusters = 1;
 	}
 
-	if (no_pretty || size_fail) {
+	if (unit_mode == UNITS_RAW || size_fail) {
 		pr_verbose(LOG_DEFAULT, "\tTotal size: %llu\n", stat.total_bytes);
 		pr_verbose(LOG_DEFAULT, "\t\tInline data: %llu\n", stat.total_inline);
 		pr_verbose(LOG_DEFAULT, "\tTotal seeks: %llu\n", stat.total_seeks);
@@ -384,26 +384,25 @@ out_print:
 		pr_verbose(LOG_DEFAULT, "\tTotal read time: %d s %d us\n", (int)diff.tv_sec,
 		       (int)diff.tv_usec);
 	} else {
-		pr_verbose(LOG_DEFAULT, "\tTotal size: %s\n", pretty_size(stat.total_bytes));
-		pr_verbose(LOG_DEFAULT, "\t\tInline data: %s\n", pretty_size(stat.total_inline));
+		pr_verbose(LOG_DEFAULT, "\tTotal size: %s\n", pretty_size_mode(stat.total_bytes, unit_mode));
+		pr_verbose(LOG_DEFAULT, "\t\tInline data: %s\n", pretty_size_mode(stat.total_inline, unit_mode));
 		pr_verbose(LOG_DEFAULT, "\tTotal seeks: %llu\n", stat.total_seeks);
 		pr_verbose(LOG_DEFAULT, "\t\tForward seeks: %llu\n", stat.forward_seeks);
 		pr_verbose(LOG_DEFAULT, "\t\tBackward seeks: %llu\n", stat.backward_seeks);
 		pr_verbose(LOG_DEFAULT, "\t\tAvg seek len: %s\n", stat.total_seeks ?
-			pretty_size(stat.total_seek_len / stat.total_seeks) :
-			pretty_size(0));
+			pretty_size_mode(stat.total_seek_len / stat.total_seeks, unit_mode) :
+			pretty_size_mode(0, unit_mode));
 		print_seek_histogram(&stat);
 		pr_verbose(LOG_DEFAULT, "\tTotal clusters: %llu\n", stat.total_clusters);
 		pr_verbose(LOG_DEFAULT, "\t\tAvg cluster size: %s\n",
-				pretty_size((stat.total_cluster_size /
-						stat.total_clusters)));
+				pretty_size_mode((stat.total_cluster_size /
+						  stat.total_clusters), unit_mode));
 		pr_verbose(LOG_DEFAULT, "\t\tMin cluster size: %s\n",
-				pretty_size(stat.min_cluster_size));
+				pretty_size_mode(stat.min_cluster_size, unit_mode));
 		pr_verbose(LOG_DEFAULT, "\t\tMax cluster size: %s\n",
-				pretty_size(stat.max_cluster_size));
+				pretty_size_mode(stat.max_cluster_size, unit_mode));
 		pr_verbose(LOG_DEFAULT, "\tTotal disk spread: %s\n",
-				pretty_size(stat.highest_bytenr -
-					stat.lowest_bytenr));
+				pretty_size_mode(stat.highest_bytenr - stat.lowest_bytenr, unit_mode));
 		pr_verbose(LOG_DEFAULT, "\tTotal read time: %d s %d us\n", (int)diff.tv_sec,
 		       (int)diff.tv_usec);
 	}
@@ -441,6 +440,8 @@ static const char * const cmd_inspect_tree_stats_usage[] = {
 	"Print various stats for trees",
 	"",
 	OPTLINE("-b", "raw numbers in bytes"),
+	HELPINFO_UNITS_LONG,
+	OPTLINE("-t <rootid>", "print only tree with the given rootid"),
 	NULL
 };
 
@@ -449,17 +450,28 @@ static int cmd_inspect_tree_stats(const struct cmd_struct *cmd,
 {
 	struct btrfs_key key = { .type = BTRFS_ROOT_ITEM_KEY };
 	struct btrfs_root *root;
+	unsigned int unit_mode = UNITS_DEFAULT;
 	int opt;
 	int ret = 0;
+	u64 tree_id = 0;
+
+	unit_mode = get_unit_mode_from_arg(&argc, argv, 0);
 
 	optind = 0;
-	while ((opt = getopt(argc, argv, "vb")) != -1) {
+	while ((opt = getopt(argc, argv, "vbt:")) != -1) {
 		switch (opt) {
 		case 'v':
 			verbose++;
 			break;
 		case 'b':
-			no_pretty = true;
+			unit_mode = UNITS_RAW;
+			break;
+		case 't':
+			tree_id = arg_strtou64(optarg);
+			if (!tree_id) {
+				error("unrecognized tree id: %s", optarg);
+				exit(1);
+			}
 			break;
 		default:
 			usage_unknown_option(cmd, argv);
@@ -485,28 +497,36 @@ static int cmd_inspect_tree_stats(const struct cmd_struct *cmd,
 		exit(1);
 	}
 
+	if (tree_id) {
+		pr_verbose(LOG_DEFAULT, "Calculating size of tree (%llu)\n", tree_id);
+		key.objectid = tree_id;
+		key.offset = (u64)-1;
+		ret = calc_root_size(root, &key, 1, unit_mode);
+		goto out;
+	}
+
 	pr_verbose(LOG_DEFAULT, "Calculating size of root tree\n");
 	key.objectid = BTRFS_ROOT_TREE_OBJECTID;
-	ret = calc_root_size(root, &key, 0);
+	ret = calc_root_size(root, &key, 0, unit_mode);
 	if (ret)
 		goto out;
 
 	pr_verbose(LOG_DEFAULT, "Calculating size of extent tree\n");
 	key.objectid = BTRFS_EXTENT_TREE_OBJECTID;
-	ret = calc_root_size(root, &key, 0);
+	ret = calc_root_size(root, &key, 0, unit_mode);
 	if (ret)
 		goto out;
 
 	pr_verbose(LOG_DEFAULT, "Calculating size of csum tree\n");
 	key.objectid = BTRFS_CSUM_TREE_OBJECTID;
-	ret = calc_root_size(root, &key, 0);
+	ret = calc_root_size(root, &key, 0, unit_mode);
 	if (ret)
 		goto out;
 
 	key.objectid = BTRFS_FS_TREE_OBJECTID;
 	key.offset = (u64)-1;
 	pr_verbose(LOG_DEFAULT, "Calculating size of fs tree\n");
-	ret = calc_root_size(root, &key, 1);
+	ret = calc_root_size(root, &key, 1, unit_mode);
 	if (ret)
 		goto out;
 out:

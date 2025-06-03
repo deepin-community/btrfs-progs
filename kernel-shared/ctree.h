@@ -23,7 +23,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "kernel-lib/list.h"
-#include "kernel-lib/bitops.h"
 #include "kernel-lib/rbtree_types.h"
 #include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/uapi/btrfs_tree.h"
@@ -59,20 +58,16 @@ static inline unsigned long btrfs_chunk_item_size(int num_stripes)
 		sizeof(struct btrfs_stripe) * (num_stripes - 1);
 }
 
-#define BTRFS_SUPER_FLAG_CHANGING_DATA_CSUM	(1ULL << 36)
-#define BTRFS_SUPER_FLAG_CHANGING_META_CSUM	(1ULL << 37)
-
-/*
- * The fs is undergoing block group tree feature change.
- * If no BLOCK_GROUP_TREE compat ro flag, it's changing from regular
- * bg item in extent tree to new bg tree.
- */
-#define BTRFS_SUPER_FLAG_CHANGING_BG_TREE	(1ULL << 38)
-
 static inline u32 __BTRFS_LEAF_DATA_SIZE(u32 nodesize)
 {
 	return nodesize - sizeof(struct btrfs_header);
 }
+
+#if EXPERIMENTAL
+#define BTRFS_MIN_BLOCKSIZE	(SZ_2K)
+#else
+#define BTRFS_MIN_BLOCKSIZE	(SZ_4K)
+#endif
 
 #define BTRFS_LEAF_DATA_SIZE(fs_info) (fs_info->leaf_data_size)
 
@@ -296,6 +291,8 @@ struct btrfs_block_group {
 	 */
 	u64 alloc_offset;
 	u64 write_offset;
+	u64 zone_capacity;
+	bool zone_is_active;
 
 	u64 global_root_id;
 };
@@ -378,6 +375,7 @@ struct btrfs_fs_info {
 	unsigned int allow_transid_mismatch:1;
 	unsigned int skip_leaf_item_checks:1;
 	unsigned int rebuilding_extent_tree:1;
+	unsigned int active_zone_tracking:1;
 
 	int transaction_aborted;
 
@@ -404,6 +402,15 @@ struct btrfs_fs_info {
 	u32 sectorsize;
 	u32 stripesize;
 	u32 leaf_data_size;
+
+	/*
+	 * For open_ctree_fs_info() to hold the initial fd until close.
+	 *
+	 * For writeable open_ctree_fs_info() call, we should not close
+	 * the fd until the fs_info is properly closed, or it will trigger
+	 * udev scan while our fs is not properly initialized.
+	 */
+	int initial_fd;
 	u16 csum_type;
 	u16 csum_size;
 
@@ -833,6 +840,16 @@ static inline u64 btrfs_dev_stats_value(const struct extent_buffer *eb,
 	return val;
 }
 
+static inline void btrfs_set_dev_stats_value(struct extent_buffer *eb,
+					     struct btrfs_dev_stats_item *ptr,
+					     int index, u64 val)
+{
+	write_extent_buffer(eb, &val,
+			    offsetof(struct btrfs_dev_stats_item, values) +
+			     ((unsigned long)ptr) + (index * sizeof(u64)),
+			    sizeof(val));
+}
+
 /* struct btrfs_ioctl_search_header */
 static inline u64 btrfs_search_header_transid(struct btrfs_ioctl_search_header *sh)
 {
@@ -1193,15 +1210,6 @@ int btrfs_del_inode_ref(struct btrfs_trans_handle *trans,
 			struct btrfs_root *root, const char *name, int name_len,
 			u64 ino, u64 parent_ino, u64 *index);
 
-/* uuid-tree.c, interface for mounted mounted filesystem */
-int btrfs_lookup_uuid_subvol_item(int fd, const u8 *uuid, u64 *subvol_id);
-int btrfs_lookup_uuid_received_subvol_item(int fd, const u8 *uuid,
-					   u64 *subvol_id);
-
-/* uuid-tree.c, interface for unmounte filesystem */
-int btrfs_uuid_tree_remove(struct btrfs_trans_handle *trans, u8 *uuid, u8 type,
-			   u64 subid);
-
 static inline int is_fstree(u64 rootid)
 {
 	if (rootid == BTRFS_FS_TREE_OBJECTID ||
@@ -1210,17 +1218,17 @@ static inline int is_fstree(u64 rootid)
 	return 0;
 }
 
-void btrfs_uuid_to_key(const u8 *uuid, struct btrfs_key *key);
-
 /* inode.c */
-int check_dir_conflict(struct btrfs_root *root, char *name, int namelen,
-		u64 dir, u64 index);
+int btrfs_find_free_dir_index(struct btrfs_root *root, u64 dir_ino,
+			      u64 *ret_ino);
+int btrfs_check_dir_conflict(struct btrfs_root *root, const char *name,
+			     int namelen, u64 dir, u64 index);
 int btrfs_new_inode(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		u64 ino, u32 mode);
 int btrfs_change_inode_flags(struct btrfs_trans_handle *trans,
 			     struct btrfs_root *root, u64 ino, u64 flags);
 int btrfs_add_link(struct btrfs_trans_handle *trans, struct btrfs_root *root,
-		   u64 ino, u64 parent_ino, char *name, int namelen,
+		   u64 ino, u64 parent_ino, const char *name, int namelen,
 		   u8 type, u64 *index, int add_backref, int ignore_existed);
 int btrfs_unlink(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		 u64 ino, u64 parent_ino, u64 index, const char *name,
@@ -1230,8 +1238,6 @@ int btrfs_add_orphan_item(struct btrfs_trans_handle *trans,
 			  u64 ino);
 int btrfs_mkdir(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		char *name, int namelen, u64 parent_ino, u64 *ino, int mode);
-struct btrfs_root *btrfs_mksubvol(struct btrfs_root *root, const char *base,
-				  u64 root_objectid, bool convert);
 int btrfs_find_free_objectid(struct btrfs_trans_handle *trans,
 			     struct btrfs_root *fs_root,
 			     u64 dirid, u64 *objectid);

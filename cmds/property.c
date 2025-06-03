@@ -90,7 +90,7 @@ static int prop_read_only(enum prop_object_type type,
 			error("invalid value for property: %s", value);
 			return -EINVAL;
 		}
-		err = btrfs_util_get_subvolume_read_only(object, &is_ro);
+		err = btrfs_util_subvolume_get_read_only(object, &is_ro);
 		if (err) {
 			error_btrfs_util(err);
 			return -errno;
@@ -99,7 +99,7 @@ static int prop_read_only(enum prop_object_type type,
 		if (is_ro && read_only)
 			return 0;
 
-		err = btrfs_util_subvolume_info(object, 0, &info);
+		err = btrfs_util_subvolume_get_info(object, 0, &info);
 		if (err)
 			warning("cannot read subvolume info");
 		if (is_ro && !uuid_is_null(info.received_uuid)) {
@@ -109,14 +109,16 @@ static int prop_read_only(enum prop_object_type type,
 				do_clear_received_uuid = true;
 			} else {
 				error(
-"cannot flip ro->rw with received_uuid set, use force if you really want that");
+"cannot flip ro->rw with received_uuid set, use force option -f if you really want unset the read-only status."
+" The value of received_uuid is used for incremental send, consider making a snapshot instead."
+" Read more at btrfs-subvolume(8) and Subvolume flags.");
 				return -EPERM;
 			}
 		}
 		if (!is_ro && !uuid_is_null(info.received_uuid))
 			warning("read-write subvolume with received_uuid, this is bad");
 
-		err = btrfs_util_set_subvolume_read_only(object, read_only);
+		err = btrfs_util_subvolume_set_read_only(object, read_only);
 		if (err) {
 			error_btrfs_util(err);
 			return -errno;
@@ -133,7 +135,7 @@ static int prop_read_only(enum prop_object_type type,
 				warning("failed to clear received_uuid: %m");
 		}
 	} else {
-		err = btrfs_util_get_subvolume_read_only(object, &read_only);
+		err = btrfs_util_subvolume_get_read_only(object, &read_only);
 		if (err) {
 			error_btrfs_util(err);
 			return -errno;
@@ -175,15 +177,13 @@ static int prop_compression(enum prop_object_type type,
 	int ret;
 	ssize_t sret;
 	int fd = -1;
-	DIR *dirstream = NULL;
 	char *buf = NULL;
 	char *xattr_name = NULL;
 	int open_flags = value ? O_RDWR : O_RDONLY;
 
-	fd = open_file_or_dir3(object, &dirstream, open_flags);
-	if (fd == -1) {
-		ret = -errno;
-		error("failed to open %s: %m", object);
+	fd = btrfs_open_path(object, open_flags == O_RDWR, false);
+	if (fd < 0) {
+		ret = fd;
 		goto out;
 	}
 
@@ -232,7 +232,7 @@ out:
 	free(xattr_name);
 	free(buf);
 	if (fd >= 0)
-		close_file_or_dir(fd, dirstream);
+		close(fd);
 
 	return ret;
 }
@@ -588,7 +588,7 @@ static const char * const cmd_property_get_usage[] = {
 	"A filesystem object can be the filesystem itself, a subvolume,",
 	"an inode or a device. The option -t can be used to explicitly",
 	"specify what type of object you meant. This is only needed when a",
-	"property could be set for more then one object type.",
+	"property could be set for more than one object type.",
 	"",
 	"Possible values for type are: inode, subvol, filesystem, device.",
 	"They can be abbreviated to the first letter, i/s/f/d",

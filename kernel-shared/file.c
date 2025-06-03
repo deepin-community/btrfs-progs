@@ -19,10 +19,8 @@
 #include "kerncompat.h"
 #include <errno.h>
 #include <string.h>
-#include "kernel-lib/bitops.h"
 #include "kernel-shared/accessors.h"
 #include "kernel-shared/extent_io.h"
-#include "kernel-shared/uapi/btrfs.h"
 #include "kernel-shared/uapi/btrfs_tree.h"
 #include "kernel-shared/ctree.h"
 #include "kernel-shared/compression.h"
@@ -152,6 +150,7 @@ int btrfs_punch_hole(struct btrfs_trans_handle *trans,
 		     u64 ino, u64 offset, u64 len)
 {
 	struct btrfs_path *path;
+	struct btrfs_file_extent_item stack_fi = { 0 };
 	int ret = 0;
 
 	path = btrfs_alloc_path();
@@ -166,7 +165,10 @@ int btrfs_punch_hole(struct btrfs_trans_handle *trans,
 		goto out;
 	}
 
-	ret = btrfs_insert_file_extent(trans, root, ino, offset, 0, 0, len);
+	btrfs_set_stack_file_extent_type(&stack_fi, BTRFS_FILE_EXTENT_REG);
+	btrfs_set_stack_file_extent_num_bytes(&stack_fi, len);
+	btrfs_set_stack_file_extent_ram_bytes(&stack_fi, len);
+	ret = btrfs_insert_file_extent(trans, root, ino, offset, &stack_fi);
 out:
 	btrfs_free_path(path);
 	return ret;
@@ -211,8 +213,8 @@ int btrfs_read_file(struct btrfs_root *root, u64 ino, u64 start, int len,
 	}
 
 	key.objectid = ino;
-	key.offset = start;
 	key.type = BTRFS_EXTENT_DATA_KEY;
+	key.offset = start;
 
 	ret = btrfs_search_slot(NULL, root, &key, &path, 0, 0);
 	if (ret < 0)
@@ -317,8 +319,8 @@ next:
 	if (no_holes) {
 		btrfs_release_path(&path);
 		key.objectid = ino;
-		key.offset = 0;
 		key.type = BTRFS_INODE_ITEM_KEY;
+		key.offset = 0;
 		ret = btrfs_lookup_inode(NULL, root, &path, &key, 0);
 		if (ret < 0)
 			goto out;

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Usage: $0 [--ccache] [make options]
 #
 # Test various compilation options:
@@ -7,7 +7,7 @@
 # - various configure options
 #
 # Arguments:
-# - (first arugment) --ccache - enable ccache for build which can speed up
+# - (first argument) --ccache - enable ccache for build which can speed up
 #    rebuilding same files if the options do not affect them, the ccache will
 #    be created in the toplevel git directory
 # - anything else will be passed to 'make', eg. define CC, D, V
@@ -37,13 +37,19 @@ $str"
 }
 
 buildme() {
-	make clean-all
+	buildme_common
+	buildme_common --enable-experimental
+}
 
-	./autogen.sh && CFLAGS="$CFLAGS" configure "$conf" || die "configure not working with: $@"
+buildme_common() {
+	echo "::group::$CFLAGS configure $conf $@"
+	make clean-all
+	./autogen.sh && CFLAGS="$CFLAGS" ./configure "$conf" $1 || die "configure not working with: $@"
 	$make clean
 	$make $opts $target
 	check_result "$?"
 	echo "VERDICT: $verdict"
+	echo "::endgroup::"
 }
 
 buildme_cflags() {
@@ -115,10 +121,13 @@ build_make_targets
 conf='--disable-python'
 build_make_targets
 
-conf='--with-convert=ext2'
+conf='--disable-zstd'
 build_make_targets
 
-conf='--enable-zstd'
+conf='--disable-lzo'
+build_make_targets
+
+conf='--with-convert=ext2'
 build_make_targets
 
 conf='--with-crypto=libgcrypt'

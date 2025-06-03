@@ -29,15 +29,14 @@
 #include "kernel-shared/accessors.h"
 #include "kernel-shared/disk-io.h"
 #include "kernel-shared/volumes.h"
-#include "kernel-shared/transaction.h"
 #include "kernel-shared/extent_io.h"
 #include "kernel-shared/zoned.h"
 #include "common/fsfeatures.h"
 #include "common/internal.h"
 #include "common/messages.h"
-#include "common/path-utils.h"
 #include "common/device-utils.h"
 #include "common/open-utils.h"
+#include "common/string-utils.h"
 #include "mkfs/common.h"
 
 static u64 reference_root_table[] = {
@@ -128,11 +127,13 @@ static int btrfs_create_tree_root(int fd, struct btrfs_mkfs_config *cfg,
 			memcpy(root_item.uuid, uuid, BTRFS_UUID_SIZE);
 			btrfs_set_stack_timespec_sec(&root_item.otime, now);
 			btrfs_set_stack_timespec_sec(&root_item.ctime, now);
+			btrfs_set_stack_inode_flags(inode_item, BTRFS_INODE_ROOT_ITEM_INIT);
 		} else {
 			memset(uuid, 0, BTRFS_UUID_SIZE);
 			memcpy(root_item.uuid, uuid, BTRFS_UUID_SIZE);
 			btrfs_set_stack_timespec_sec(&root_item.otime, 0);
 			btrfs_set_stack_timespec_sec(&root_item.ctime, 0);
+			btrfs_set_stack_inode_flags(inode_item, 0);
 		}
 		write_extent_buffer(buf, &root_item,
 			btrfs_item_ptr_offset(buf, nritems),
@@ -249,8 +250,8 @@ static int create_block_group_tree(int fd, struct btrfs_mkfs_config *cfg,
 	btrfs_set_header_nritems(buf, 1);
 	csum_tree_block_size(buf, btrfs_csum_type_size(cfg->csum_type), 0,
 			     cfg->csum_type);
-	ret = pwrite(fd, buf->data, cfg->nodesize,
-		     cfg->blocks[MKFS_BLOCK_GROUP_TREE]);
+	ret = btrfs_pwrite(fd, buf->data, cfg->nodesize,
+			   cfg->blocks[MKFS_BLOCK_GROUP_TREE], cfg->zone_size);
 	if (ret != cfg->nodesize)
 		return ret < 0 ? -errno : -EIO;
 	return 0;
@@ -368,6 +369,7 @@ int make_btrfs(int fd, struct btrfs_mkfs_config *cfg)
 	struct btrfs_chunk *chunk;
 	struct btrfs_dev_item *dev_item;
 	struct btrfs_dev_extent *dev_extent;
+	struct btrfs_dev_stats_item *dev_stats;
 	enum btrfs_mkfs_block blocks[MKFS_BLOCK_COUNT];
 	u8 chunk_tree_uuid[BTRFS_UUID_SIZE];
 	u8 *ptr;
@@ -476,7 +478,7 @@ int make_btrfs(int fd, struct btrfs_mkfs_config *cfg)
 		btrfs_set_super_nr_global_roots(&super, 1);
 
 	if (cfg->label)
-		__strncpy_null(super.label, cfg->label, BTRFS_LABEL_SIZE - 1);
+		strncpy_null(super.label, cfg->label, BTRFS_LABEL_SIZE);
 
 	/* create the tree of root objects */
 	memset(buf->data, 0, cfg->nodesize);
@@ -672,8 +674,25 @@ int make_btrfs(int fd, struct btrfs_mkfs_config *cfg)
 	memset(buf->data + sizeof(struct btrfs_header), 0,
 		cfg->nodesize - sizeof(struct btrfs_header));
 	nritems = 0;
-	itemoff = cfg->leaf_data_size - sizeof(struct btrfs_dev_extent);
+	itemoff = cfg->leaf_data_size;
 
+	/* Add a DEV_STATS item for device 1. */
+	itemoff -= sizeof(struct btrfs_dev_stats_item);
+	btrfs_set_disk_key_objectid(&disk_key, BTRFS_DEV_STATS_OBJECTID);
+	btrfs_set_disk_key_type(&disk_key, BTRFS_PERSISTENT_ITEM_KEY);
+	btrfs_set_disk_key_offset(&disk_key, 1);
+	btrfs_set_item_key(buf, &disk_key, nritems);
+	btrfs_set_item_offset(buf, nritems, itemoff);
+	btrfs_set_item_size(buf, nritems, sizeof(struct btrfs_dev_stats_item));
+	dev_stats = btrfs_item_ptr(buf, nritems, struct btrfs_dev_stats_item);
+
+	for (i = 0; i < BTRFS_DEV_STAT_VALUES_MAX; i++)
+		btrfs_set_dev_stats_value(buf, dev_stats, i, 0);
+
+	nritems++;
+
+	/* Add the DEV_EXTENT item for the system chunk. */
+	itemoff -= sizeof(struct btrfs_dev_extent);
 	btrfs_set_disk_key_objectid(&disk_key, 1);
 	btrfs_set_disk_key_offset(&disk_key, system_group_offset);
 	btrfs_set_disk_key_type(&disk_key, BTRFS_DEV_EXTENT_KEY);
@@ -757,45 +776,6 @@ out:
 	return ret;
 }
 
-int btrfs_make_root_dir(struct btrfs_trans_handle *trans,
-			struct btrfs_root *root, u64 objectid)
-{
-	int ret;
-	struct btrfs_inode_item inode_item;
-	time_t now = time(NULL);
-
-	memset(&inode_item, 0, sizeof(inode_item));
-	btrfs_set_stack_inode_generation(&inode_item, trans->transid);
-	btrfs_set_stack_inode_size(&inode_item, 0);
-	btrfs_set_stack_inode_nlink(&inode_item, 1);
-	btrfs_set_stack_inode_nbytes(&inode_item, root->fs_info->nodesize);
-	btrfs_set_stack_inode_mode(&inode_item, S_IFDIR | 0755);
-	btrfs_set_stack_timespec_sec(&inode_item.atime, now);
-	btrfs_set_stack_timespec_nsec(&inode_item.atime, 0);
-	btrfs_set_stack_timespec_sec(&inode_item.ctime, now);
-	btrfs_set_stack_timespec_nsec(&inode_item.ctime, 0);
-	btrfs_set_stack_timespec_sec(&inode_item.mtime, now);
-	btrfs_set_stack_timespec_nsec(&inode_item.mtime, 0);
-	btrfs_set_stack_timespec_sec(&inode_item.otime, now);
-	btrfs_set_stack_timespec_nsec(&inode_item.otime, 0);
-
-	if (root->fs_info->tree_root == root)
-		btrfs_set_super_root_dir(root->fs_info->super_copy, objectid);
-
-	ret = btrfs_insert_inode(trans, root, objectid, &inode_item);
-	if (ret)
-		goto error;
-
-	ret = btrfs_insert_inode_ref(trans, root, "..", 2, objectid, objectid, 0);
-	if (ret)
-		goto error;
-
-	btrfs_set_root_dirid(&root->root_item, objectid);
-	ret = 0;
-error:
-	return ret;
-}
-
 /*
  * Btrfs minimum size calculation is complicated, it should include at least:
  * 1. system group size
@@ -811,12 +791,56 @@ static u64 btrfs_min_global_blk_rsv_size(u32 nodesize)
 	return (u64)nodesize << 10;
 }
 
-u64 btrfs_min_dev_size(u32 nodesize, int mixed, u64 meta_profile,
+u64 btrfs_min_dev_size(u32 nodesize, bool mixed, u64 zone_size, u64 meta_profile,
 		       u64 data_profile)
 {
 	u64 reserved = 0;
 	u64 meta_size;
 	u64 data_size;
+	u64 dev_stripes;
+
+	if (zone_size) {
+		/* 2 zones for the primary superblock. */
+		reserved += 2 * zone_size;
+
+		/*
+		 * 1 zone each for the initial SINGLE system, SINGLE metadata,
+		 * and SINGLE data block group.
+		 */
+		reserved += 3 * zone_size;
+
+		/*
+		 * On non-SINGLE profile, we need to add real system and
+		 * metadata block group. And, we also need to add a space for a
+		 * tree-log block group.
+		 *
+		 * SINGLE profile can reuse the initial block groups and only
+		 * need to add a tree-log block group
+		 */
+		dev_stripes = ((meta_profile & BTRFS_BLOCK_GROUP_DUP) ? 2 : 1);
+		if (meta_profile & BTRFS_BLOCK_GROUP_PROFILE_MASK)
+			meta_size = 3 * dev_stripes * zone_size;
+		else
+			meta_size = dev_stripes * zone_size;
+		reserved += meta_size;
+
+		/*
+		 * On non-SINGLE profile, we need to add real data block group.
+		 * And, we also need to add a space for a data relocation block
+		 * group.
+		 *
+		 * SINGLE profile can reuse the initial block groups and only
+		 * need to add a data relocation block group.
+		 */
+		dev_stripes = (data_profile & BTRFS_BLOCK_GROUP_DUP) ? 2 : 1;
+		if (data_profile & BTRFS_BLOCK_GROUP_PROFILE_MASK)
+			data_size = 2 * dev_stripes * zone_size;
+		else
+			data_size = dev_stripes * zone_size;
+		reserved += data_size;
+
+		return reserved;
+	}
 
 	if (mixed)
 		return 2 * (BTRFS_MKFS_SYSTEM_GROUP_SIZE +
@@ -854,22 +878,18 @@ u64 btrfs_min_dev_size(u32 nodesize, int mixed, u64 meta_profile,
 	 *
 	 * And use the stripe size to calculate its physical used space.
 	 */
+	dev_stripes = ((meta_profile & BTRFS_BLOCK_GROUP_DUP) ? 2 : 1);
 	if (meta_profile & BTRFS_BLOCK_GROUP_PROFILE_MASK)
-		meta_size = SZ_8M + SZ_32M;
+		meta_size = dev_stripes * (SZ_8M + SZ_32M);
 	else
-		meta_size = SZ_8M + SZ_8M;
-	/* For DUP/metadata,  2 stripes on one disk */
-	if (meta_profile & BTRFS_BLOCK_GROUP_DUP)
-		meta_size *= 2;
+		meta_size = dev_stripes * (SZ_8M + SZ_8M);
 	reserved += meta_size;
 
+	dev_stripes = ((data_profile & BTRFS_BLOCK_GROUP_DUP) ? 2 : 1);
 	if (data_profile & BTRFS_BLOCK_GROUP_PROFILE_MASK)
-		data_size = SZ_64M;
+		data_size = dev_stripes * SZ_64M;
 	else
-		data_size = SZ_8M;
-	/* For DUP/data,  2 stripes on one disk */
-	if (data_profile & BTRFS_BLOCK_GROUP_DUP)
-		data_size *= 2;
+		data_size = dev_stripes * SZ_8M;
 	reserved += data_size;
 
 	return reserved;
@@ -1129,6 +1149,11 @@ bool test_status_for_mkfs(const char *file, bool force_overwrite)
 	ret = check_mounted(file);
 	if (ret < 0) {
 		errno = -ret;
+		if (force_overwrite) {
+			warning("forced overwrite but cannot check mount status of %s: %m",
+				file);
+			return false;
+		}
 		error("cannot check mount status of %s: %m", file);
 		return true;
 	}

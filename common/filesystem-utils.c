@@ -28,6 +28,7 @@
 #include "common/filesystem-utils.h"
 #include "common/messages.h"
 #include "common/open-utils.h"
+#include "common/string-utils.h"
 #include "common/path-utils.h"
 
 /*
@@ -93,13 +94,17 @@ static int set_label_unmounted(const char *dev, const char *label)
 	/* Open the super_block at the default location
 	 * and as read-write.
 	 */
-	root = open_ctree(dev, 0, OPEN_CTREE_WRITES);
+	root = open_ctree(dev, 0, OPEN_CTREE_WRITES |
+				  OPEN_CTREE_EXCLUSIVE);
 	if (!root) /* errors are printed by open_ctree() */
 		return -1;
 
 	trans = btrfs_start_transaction(root, 1);
-	BUG_ON(IS_ERR(trans));
-	__strncpy_null(root->fs_info->super_copy->label, label, BTRFS_LABEL_SIZE - 1);
+	if (IS_ERR(trans)) {
+		error_msg(ERROR_MSG_START_TRANS, "set label");
+		return PTR_ERR(trans);
+	}
+	strncpy_null(root->fs_info->super_copy->label, label, BTRFS_LABEL_SIZE);
 
 	btrfs_commit_transaction(trans, root);
 
@@ -120,7 +125,7 @@ static int set_label_mounted(const char *mount_path, const char *labelp)
 	}
 
 	memset(label, 0, sizeof(label));
-	__strncpy_null(label, labelp, BTRFS_LABEL_SIZE - 1);
+	strncpy_null(label, labelp, BTRFS_LABEL_SIZE);
 	if (ioctl(fd, BTRFS_IOC_SET_FSLABEL, label) < 0) {
 		error("unable to set label of %s: %m", mount_path);
 		close(fd);
@@ -149,8 +154,7 @@ int get_label_unmounted(const char *dev, char *label)
 	if(!root)
 		return -1;
 
-	__strncpy_null(label, root->fs_info->super_copy->label,
-			BTRFS_LABEL_SIZE - 1);
+	strncpy_null(label, root->fs_info->super_copy->label, BTRFS_LABEL_SIZE);
 
 	/* Now we close it since we are done. */
 	close_ctree(root);
@@ -184,7 +188,7 @@ int get_label_mounted(const char *mount_path, char *labelp)
 		return ret;
 	}
 
-	__strncpy_null(labelp, label, BTRFS_LABEL_SIZE - 1);
+	strncpy_null(labelp, label, BTRFS_LABEL_SIZE);
 	close(fd);
 	return 0;
 }

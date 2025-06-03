@@ -50,11 +50,9 @@
 #include "common/open-utils.h"
 #include "common/units.h"
 #include "common/device-utils.h"
-#include "common/parse-utils.h"
 #include "common/sysfs-utils.h"
 #include "common/string-table.h"
 #include "common/string-utils.h"
-#include "common/parse-utils.h"
 #include "common/help.h"
 #include "cmds/commands.h"
 
@@ -99,6 +97,7 @@ struct scrub_progress {
 	pthread_mutex_t progress_mutex;
 	int ioprio_class;
 	int ioprio_classdata;
+	u64 old_limit;
 	u64 limit;
 };
 
@@ -205,9 +204,10 @@ static void print_scrub_summary(struct btrfs_scrub_progress *p, struct scrub_sta
 		pr_verbose(LOG_DEFAULT, "Total to scrub:   %s\n",
 			pretty_size_mode(bytes_total, unit_mode));
 	}
+
 	/*
 	 * Rate and size units are disproportionate so they are affected only
-	 * by --raw, otherwise it's human readable
+	 * by --raw, otherwise it's human readable (respecting the SI or IEC mode).
 	 */
 	if (unit_mode == UNITS_RAW) {
 		pr_verbose(LOG_DEFAULT, "Rate:             %s/s",
@@ -219,11 +219,16 @@ static void print_scrub_summary(struct btrfs_scrub_progress *p, struct scrub_sta
 			pr_verbose(LOG_DEFAULT, " (some device limits set)");
 		pr_verbose(LOG_DEFAULT, "\n");
 	} else {
+		unsigned int mode = UNITS_HUMAN_DECIMAL;
+
+		if (unit_mode & UNITS_BINARY)
+			mode = UNITS_HUMAN_BINARY;
+
 		pr_verbose(LOG_DEFAULT, "Rate:             %s/s",
-			pretty_size(bytes_per_sec));
+			pretty_size_mode(bytes_per_sec, mode));
 		if (limit > 1)
 			pr_verbose(LOG_DEFAULT, " (limit %s/s)",
-				   pretty_size(limit));
+				   pretty_size_mode(limit, mode));
 		else if (limit == 1)
 			pr_verbose(LOG_DEFAULT, " (some device limits set)");
 		pr_verbose(LOG_DEFAULT, "\n");
@@ -387,7 +392,7 @@ static void print_fs_stat(struct scrub_fs_stat *fs_stat, int raw, u64 bytes_tota
 		 * Limit for the whole filesystem stats does not make sense,
 		 * but if there's any device with a limit then print it.
 		 */
-		if (nr_devices != 1)
+		if (nr_devices != 1 && limit)
 			limit = 1;
 		print_scrub_summary(&fs_stat->p, &fs_stat->s, bytes_total, limit);
 	}
@@ -1232,7 +1237,6 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	int fdres = -1;
 	int ret;
 	pid_t pid;
-	int c;
 	int i;
 	int err = 0;
 	int e_uncorrectable = 0;
@@ -1242,7 +1246,6 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	bool do_background = true;
 	bool do_wait = false;
 	bool do_print = false;
-	int do_quiet = !bconf.verbose; /*Read the global quiet option if set*/
 	bool do_record = true;
 	bool readonly = false;
 	bool do_stats_per_dev = false;
@@ -1262,18 +1265,28 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	pthread_t t_prog;
 	struct scrub_file_record **past_scrubs = NULL;
 	struct scrub_file_record *last_scrub = NULL;
-	char *datafile = strdup(SCRUB_DATA_FILE);
+	char datafile[] = SCRUB_DATA_FILE;
 	char fsid[BTRFS_UUID_UNPARSED_SIZE];
 	char sock_path[PATH_MAX] = "";
 	struct scrub_progress_cycle spc;
 	pthread_mutex_t spc_write_mutex = PTHREAD_MUTEX_INITIALIZER;
 	void *terr;
+	u64 throughput_limit = 0;
 	u64 devid;
-	DIR *dirstream = NULL;
 	bool force = false;
 	bool nothing_to_resume = false;
 
-	while ((c = getopt(argc, argv, "BdqrRc:n:f")) != -1) {
+	while (1) {
+		int c;
+		enum { GETOPT_VAL_LIMIT = GETOPT_VAL_FIRST };
+		static const struct option long_options[] = {
+			{"limit", required_argument, NULL, GETOPT_VAL_LIMIT},
+			{ NULL, 0, NULL, 0 }
+		};
+
+		c = getopt_long(argc, argv, "BdqrRc:n:f", long_options, NULL);
+		if (c < 0)
+			break;
 		switch (c) {
 		case 'B':
 			do_background = false;
@@ -1285,7 +1298,6 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 			break;
 		case 'q':
 			bconf_be_quiet();
-			do_quiet = !bconf.verbose;
 			break;
 		case 'r':
 			readonly = true;
@@ -1302,6 +1314,9 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 		case 'f':
 			force = true;
 			break;
+		case GETOPT_VAL_LIMIT:
+			throughput_limit = arg_strtou64_with_suffix(optarg);
+			break;
 		default:
 			usage_unknown_option(cmd, argv);
 		}
@@ -1313,33 +1328,30 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 		return 1;
 
 	spc.progress = NULL;
-	if (do_quiet && do_print)
+	if (bconf.verbose == BTRFS_BCONF_QUIET && do_print)
 		do_print = false;
 
 	if (mkdir_p(datafile)) {
-		warning_on(!do_quiet,
-    "cannot create scrub data file, mkdir %s failed: %m. Status recording disabled",
+		warning("cannot create scrub data file, mkdir %s failed: %m, status recording disabled",
 			datafile);
 		do_record = false;
 	}
-	free(datafile);
 
 	path = argv[optind];
 
-	fdmnt = open_path_or_dev_mnt(path, &dirstream, !do_quiet);
+	fdmnt = btrfs_open_mnt(path);
 	if (fdmnt < 0)
 		return 1;
 
 	ret = get_fs_info(path, &fi_args, &di_args);
 	if (ret) {
 		errno = -ret;
-		error_on(!do_quiet,
-			"getting dev info for scrub failed: %m");
+		error("getting dev info for scrub failed: %m");
 		err = 1;
 		goto out;
 	}
 	if (!fi_args.num_devices) {
-		error_on(!do_quiet, "no devices found");
+		error("no devices found");
 		err = 1;
 		goto out;
 	}
@@ -1348,12 +1360,12 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	fdres = scrub_open_file_r(SCRUB_DATA_FILE, fsid);
 	if (fdres < 0 && fdres != -ENOENT) {
 		errno = -fdres;
-		warning_on(!do_quiet, "failed to open status file: %m");
+		warning("failed to open status file: %m");
 	} else if (fdres >= 0) {
-		past_scrubs = scrub_read_file(fdres, !do_quiet);
+		past_scrubs = scrub_read_file(fdres, 1);
 		if (IS_ERR(past_scrubs)) {
 			errno = -PTR_ERR(past_scrubs);
-			warning_on(!do_quiet, "failed to read status file: %m");
+			warning("failed to read status file: %m");
 		}
 		close(fdres);
 	}
@@ -1377,8 +1389,7 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	 * single devices, there is no reason to prevent this.
 	 */
 	if (!force && is_scrub_running_on_fs(&fi_args, di_args, past_scrubs)) {
-		error_on(!do_quiet,
-			"Scrub is already running.\n"
+		error(  "Scrub is already running.\n"
 			"To cancel use 'btrfs scrub cancel %s'.\n"
 			"To see the status use 'btrfs scrub status [-d] %s'",
 			path, path);
@@ -1391,17 +1402,24 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	spc.progress = calloc(fi_args.num_devices * 2, sizeof(*spc.progress));
 
 	if (!t_devs || !sp || !spc.progress) {
-		error_on(!do_quiet, "scrub failed: %m");
+		error("scrub failed: %m");
 		err = 1;
 		goto out;
 	}
 
 	for (i = 0; i < fi_args.num_devices; ++i) {
 		devid = di_args[i].devid;
+		sp[i].old_limit = read_scrub_device_limit(fdmnt, devid);
+		ret = write_scrub_device_limit(fdmnt, devid, throughput_limit);
+		if (ret < 0) {
+			errno = -ret;
+			warning("failed to set scrub throughput limit on devid %llu: %m",
+				devid);
+		}
 		ret = pthread_mutex_init(&sp[i].progress_mutex, NULL);
 		if (ret) {
 			errno = ret;
-			error_on(!do_quiet, "pthread_mutex_init failed: %m");
+			error("pthread_mutex_init failed: %m");
 			err = 1;
 			goto out;
 		}
@@ -1444,7 +1462,7 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 					sock_path, sizeof(sock_path));
 		/* ignore EOVERFLOW, try using a shorter path for the socket */
 		addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-		strncpy(addr.sun_path, sock_path, sizeof(addr.sun_path) - 1);
+		strncpy_null(addr.sun_path, sock_path, sizeof(addr.sun_path));
 		ret = bind(prg_fd, (struct sockaddr *)&addr, sizeof(addr));
 		if (ret != -1 || errno != EADDRINUSE)
 			break;
@@ -1469,8 +1487,7 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	if (ret != -1)
 		ret = listen(prg_fd, 100);
 	if (ret == -1) {
-		warning_on(!do_quiet,
-   "failed to open the progress status socket at %s: %m. Progress cannot be queried",
+		warning("failed to open the progress status socket at %s: %m, progress cannot be queried",
 			sock_path[0] ? sock_path :
 			SCRUB_PROGRESS_SOCKET_PATH);
 		if (prg_fd != -1) {
@@ -1487,8 +1504,7 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 					   fi_args.num_devices);
 		if (ret) {
 			errno = -ret;
-			warning_on(!do_quiet,
-   "failed to write the progress status file: %m. Status recording disabled");
+			warning("failed to write the progress status file: %m, status recording disabled");
 			do_record = false;
 		}
 	}
@@ -1496,7 +1512,7 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 	if (do_background) {
 		pid = fork();
 		if (pid == -1) {
-			error_on(!do_quiet, "cannot scrub, fork failed: %m");
+			error("cannot scrub, fork failed: %m");
 			err = 1;
 			goto out;
 		}
@@ -1514,14 +1530,13 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 			}
 			ret = wait(&stat);
 			if (ret != pid) {
-				error_on(!do_quiet, "wait failed (ret=%d): %m",
-					ret);
+				error("wait failed (ret=%d): %m", ret);
 				err = 1;
 				goto out;
 			}
 			if (!WIFEXITED(stat) || WEXITSTATUS(stat)) {
-				error_on(!do_quiet, "scrub process failed");
 				err = WIFEXITED(stat) ? WEXITSTATUS(stat) : -1;
+				error("scrub process failed with error %d", err);
 				goto out;
 			}
 			err = 0;
@@ -1580,6 +1595,14 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 
 	err = 0;
 	for (i = 0; i < fi_args.num_devices; ++i) {
+		/* Revert to the older scrub limit. */
+		ret = write_scrub_device_limit(fdmnt, di_args[i].devid, sp[i].old_limit);
+		if (ret < 0) {
+			errno = -ret;
+			warning("failed to reset scrub throughput limit on devid %llu: %m",
+				di_args[i].devid);
+		}
+
 		if (sp[i].skip)
 			continue;
 		devid = di_args[i].devid;
@@ -1634,8 +1657,10 @@ static int scrub_start(const struct cmd_struct *cmd, int argc, char **argv,
 			struct btrfs_scrub_progress *cur_progress =
 						&sp[i].scrub_args.progress;
 
-			/* Save last limit only, works for single device filesystem. */
-			limit = sp[i].limit;
+			/* On a multi-device filesystem, keep the lowest limit only. */
+			if (!limit || (sp[i].limit && sp[i].limit < limit))
+				limit = sp[i].limit;
+
 			if (do_stats_per_dev) {
 				print_scrub_dev(&di_args[i],
 						cur_progress,
@@ -1696,19 +1721,18 @@ out:
 		if (sock_path[0])
 			unlink(sock_path);
 	}
-	close_file_or_dir(fdmnt, dirstream);
+	close(fdmnt);
 
 	if (err)
 		return 1;
 	if (nothing_to_resume)
 		return 2;
 	if (e_uncorrectable) {
-		error_on(!do_quiet, "there are uncorrectable errors");
+		error("there are %d uncorrectable errors", e_uncorrectable);
 		return 3;
 	}
 	if (e_correctable)
-		warning_on(!do_quiet,
-			"errors detected during scrubbing, corrected");
+		warning("errors detected during scrubbing, %d corrected", e_correctable);
 
 	return 0;
 }
@@ -1724,6 +1748,7 @@ static const char * const cmd_scrub_start_usage[] = {
 	OPTLINE("-c", "set ioprio class (see ionice(1) manpage)"),
 	OPTLINE("-n", "set ioprio classdata (see ionice(1) manpage)"),
 	OPTLINE("-f", "force starting new scrub even if a scrub is already running this is useful when scrub stats record file is damaged"),
+	OPTLINE("--limit", "set the throughput limit for each device"),
 	OPTLINE("-q", "deprecated, alias for global -q option"),
 	HELPINFO_INSERT_GLOBALS,
 	HELPINFO_INSERT_QUIET,
@@ -1749,7 +1774,6 @@ static int cmd_scrub_cancel(const struct cmd_struct *cmd, int argc, char **argv)
 	char *path;
 	int ret;
 	int fdmnt = -1;
-	DIR *dirstream = NULL;
 
 	clean_args_no_options(cmd, argc, argv);
 
@@ -1758,7 +1782,7 @@ static int cmd_scrub_cancel(const struct cmd_struct *cmd, int argc, char **argv)
 
 	path = argv[optind];
 
-	fdmnt = open_path_or_dev_mnt(path, &dirstream, 1);
+	fdmnt = btrfs_open_mnt(path);
 	if (fdmnt < 0) {
 		ret = 1;
 		goto out;
@@ -1780,7 +1804,7 @@ static int cmd_scrub_cancel(const struct cmd_struct *cmd, int argc, char **argv)
 	pr_verbose(LOG_DEFAULT, "scrub cancelled\n");
 
 out:
-	close_file_or_dir(fdmnt, dirstream);
+	close(fdmnt);
 	return ret;
 }
 static DEFINE_SIMPLE_COMMAND(scrub_cancel, "cancel");
@@ -1839,7 +1863,6 @@ static int cmd_scrub_status(const struct cmd_struct *cmd, int argc, char **argv)
 	char fsid[BTRFS_UUID_UNPARSED_SIZE];
 	int fdres = -1;
 	int err = 0;
-	DIR *dirstream = NULL;
 
 	unit_mode = get_unit_mode_from_arg(&argc, argv, 0);
 
@@ -1862,7 +1885,7 @@ static int cmd_scrub_status(const struct cmd_struct *cmd, int argc, char **argv)
 
 	path = argv[optind];
 
-	fdmnt = open_path_or_dev_mnt(path, &dirstream, 1);
+	fdmnt = btrfs_open_mnt(path);
 	if (fdmnt < 0)
 		return 1;
 
@@ -1947,8 +1970,10 @@ static int cmd_scrub_status(const struct cmd_struct *cmd, int argc, char **argv)
 		init_fs_stat(&fs_stat);
 		fs_stat.s.in_progress = in_progress;
 		for (i = 0; i < fi_args.num_devices; ++i) {
-			/* Save the last limit only, works for a single device filesystem. */
-			limit = read_scrub_device_limit(fdmnt, di_args[i].devid);
+			/* On a multi-device filesystem, keep the lowest limit only. */
+			u64 this_limit = read_scrub_device_limit(fdmnt, di_args[i].devid);
+			if (!limit || (this_limit && this_limit < limit))
+				limit = this_limit;
 
 			last_scrub = last_dev_scrub(past_scrubs,
 							di_args[i].devid);
@@ -1974,7 +1999,7 @@ out:
 	free(si_args);
 	if (fdres > -1)
 		close(fdres);
-	close_file_or_dir(fdmnt, dirstream);
+	close(fdmnt);
 
 	return !!err;
 }
@@ -1998,7 +2023,6 @@ static int cmd_scrub_limit(const struct cmd_struct *cmd, int argc, char **argv)
 	struct string_table *table = NULL;
 	int ret;
 	int fd = -1;
-	DIR *dirstream = NULL;
 	int cols, idx;
 	u64 opt_devid = 0;
 	bool devid_set = false;
@@ -2031,7 +2055,7 @@ static int cmd_scrub_limit(const struct cmd_struct *cmd, int argc, char **argv)
 			devid_set = true;
 			break;
 		case 'l':
-			opt_limit = parse_size_from_string(optarg);
+			opt_limit = arg_strtou64_with_suffix(optarg);
 			limit_set = true;
 			break;
 		default:
@@ -2059,7 +2083,7 @@ static int cmd_scrub_limit(const struct cmd_struct *cmd, int argc, char **argv)
 		return 1;
 	}
 
-	fd = open_file_or_dir(argv[optind], &dirstream);
+	fd = btrfs_open_file_or_dir(argv[optind]);
 	if (fd < 0)
 		return 1;
 
@@ -2181,7 +2205,7 @@ static int cmd_scrub_limit(const struct cmd_struct *cmd, int argc, char **argv)
 out:
 	if (table)
 		table_free(table);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 
 	return !!ret;
 }

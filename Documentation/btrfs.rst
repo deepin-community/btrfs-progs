@@ -4,7 +4,7 @@ btrfs(8)
 SYNOPSIS
 --------
 
-**btrfs** [global] <group> [<group>...] <command> [<args>]
+**btrfs** [global options] <group> [<group>...] <command> [options] [<args>]
 
 DESCRIPTION
 -----------
@@ -37,17 +37,23 @@ If the command name is ambiguous, the list of conflicting options is
 printed.
 
 *Sizes*, both upon input and output, can be expressed in either SI or IEC-I
-units (see `numfmt(1) <https://www.man7.org/linux/man-pages/man1/numfmt.1.html>`_)
+units (see :manref:`numfmt(1)`)
 with the suffix `B` appended.
 All numbers will be formatted according to the rules of the `C` locale
-(ignoring the shell locale, see `locale(7) <https://man7.org/linux/man-pages/man7/locale.7.html>`_).
+(ignoring the shell locale, see :manref:`locale(7)`).
 
 For an overview of a given command use :command:`btrfs command --help`
-or :command:`btrfs [command...] --help --full` to print all available options.
+or :command:`btrfs [command...] help --full` to print all available options
+for all commands.
 
 There are global options that are passed between *btrfs* and the *group* name
 and affect behaviour not specific to the command, e.g. verbosity or the type
-of the output.
+of the output:
+
+.. code-block:: bash
+
+        btrfs -q subvolume create ...
+        btrfs --dry-run subvolume create ...
 
 --format <format>
         if supported by the command, print subcommand output in that format (text, json)

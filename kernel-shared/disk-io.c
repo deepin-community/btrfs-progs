@@ -673,28 +673,28 @@ insert:
 	return root;
 }
 
-static int btrfs_global_roots_compare_keys(struct rb_node *node,
-					   void *data)
+static int btrfs_global_roots_compare_keys(const struct rb_node *node,
+					   const void *data)
 {
-	struct btrfs_key *key = (struct btrfs_key *)data;
-	struct btrfs_root *root;
+	const struct btrfs_key *key = (struct btrfs_key *)data;
+	const struct btrfs_root *root;
 
 	root = rb_entry(node, struct btrfs_root, rb_node);
 	return btrfs_comp_cpu_keys(key, &root->root_key);
 }
 
-static int btrfs_global_roots_compare(struct rb_node *node1,
-				      struct rb_node *node2)
+static int btrfs_global_roots_compare(const struct rb_node *node1,
+				      const struct rb_node *node2)
 {
-	struct btrfs_root *root = rb_entry(node2, struct btrfs_root, rb_node);
+	const struct btrfs_root *root = rb_entry(node2, struct btrfs_root, rb_node);
 	return btrfs_global_roots_compare_keys(node1, &root->root_key);
 }
 
-static int btrfs_fs_roots_compare_objectids(struct rb_node *node,
-					    void *data)
+static int btrfs_fs_roots_compare_objectids(const struct rb_node *node,
+					    const void *data)
 {
-	u64 objectid = *((u64 *)data);
-	struct btrfs_root *root;
+	u64 objectid = *((const u64 *)data);
+	const struct btrfs_root *root;
 
 	root = rb_entry(node, struct btrfs_root, rb_node);
 	if (objectid > root->objectid)
@@ -705,12 +705,12 @@ static int btrfs_fs_roots_compare_objectids(struct rb_node *node,
 		return 0;
 }
 
-int btrfs_fs_roots_compare_roots(struct rb_node *node1, struct rb_node *node2)
+int btrfs_fs_roots_compare_roots(const struct rb_node *node1, const struct rb_node *node2)
 {
-	struct btrfs_root *root;
+	const struct btrfs_root *root;
 
 	root = rb_entry(node2, struct btrfs_root, rb_node);
-	return btrfs_fs_roots_compare_objectids(node1, (void *)&root->objectid);
+	return btrfs_fs_roots_compare_objectids(node1, &root->objectid);
 }
 
 int btrfs_global_root_insert(struct btrfs_fs_info *fs_info,
@@ -913,6 +913,7 @@ struct btrfs_fs_info *btrfs_new_fs_info(int writable, u64 sb_bytenr)
 	fs_info->metadata_alloc_profile = (u64)-1;
 	fs_info->system_alloc_profile = fs_info->metadata_alloc_profile;
 	fs_info->nr_global_roots = 1;
+	fs_info->initial_fd = -1;
 
 	return fs_info;
 
@@ -1690,7 +1691,10 @@ struct btrfs_fs_info *open_ctree_fs_info(struct open_ctree_args *oca)
 		return NULL;
 	}
 	info = __open_ctree_fd(fp, oca);
-	close(fp);
+	if (info)
+		info->initial_fd = fp;
+	else
+		close(fp);
 	return info;
 }
 
@@ -1812,13 +1816,10 @@ int btrfs_check_super(struct btrfs_super_block *sb, unsigned sbflags)
 		error("nodesize unaligned: %u", btrfs_super_nodesize(sb));
 		goto error_out;
 	}
-	if (btrfs_super_sectorsize(sb) < 4096) {
-		error("sectorsize too small: %u < 4096",
-			btrfs_super_sectorsize(sb));
-		goto error_out;
-	}
-	if (!IS_ALIGNED(btrfs_super_sectorsize(sb), 4096)) {
-		error("sectorsize unaligned: %u", btrfs_super_sectorsize(sb));
+	if (!is_power_of_2(btrfs_super_sectorsize(sb)) ||
+	    btrfs_super_sectorsize(sb) < BTRFS_MIN_BLOCKSIZE ||
+	    btrfs_super_sectorsize(sb) > BTRFS_MAX_METADATA_BLOCKSIZE) {
+		error("invalid sectorsize: %u", btrfs_super_sectorsize(sb));
 		goto error_out;
 	}
 	if (btrfs_super_total_bytes(sb) == 0) {
@@ -2297,6 +2298,8 @@ skip_commit:
 
 	btrfs_release_all_roots(fs_info);
 	ret = btrfs_close_devices(fs_info->fs_devices);
+	if (fs_info->initial_fd >= 0)
+		close(fs_info->initial_fd);
 	btrfs_cleanup_all_caches(fs_info);
 	btrfs_free_fs_info(fs_info);
 	if (!err)
@@ -2336,6 +2339,45 @@ static bool is_global_root(struct btrfs_root *root)
 		return true;
 	return false;
 }
+
+int btrfs_clear_tree(struct btrfs_trans_handle *trans,
+		     struct btrfs_root *root)
+{
+	struct btrfs_path *path;
+	struct btrfs_key key;
+	struct extent_buffer *leaf = NULL;
+	int ret;
+	int nr = 0;
+
+	path = btrfs_alloc_path();
+	if (!path)
+		return -ENOMEM;
+
+	key.objectid = 0;
+	key.offset = 0;
+	key.type = 0;
+
+	while (1) {
+		ret = btrfs_search_slot(trans, root, &key, path, -1, 1);
+		if (ret < 0)
+			goto out;
+		leaf = path->nodes[0];
+		nr = btrfs_header_nritems(leaf);
+		if (!nr)
+			break;
+		path->slots[0] = 0;
+		ret = btrfs_del_items(trans, root, path, 0, nr);
+		if (ret)
+			goto out;
+
+		btrfs_release_path(path);
+	}
+	ret = 0;
+out:
+	btrfs_free_path(path);
+	return ret;
+}
+
 int btrfs_delete_and_free_root(struct btrfs_trans_handle *trans,
 			       struct btrfs_root *root)
 {
@@ -2363,12 +2405,12 @@ int btrfs_delete_and_free_root(struct btrfs_trans_handle *trans,
 }
 
 struct btrfs_root *btrfs_create_tree(struct btrfs_trans_handle *trans,
-				     struct btrfs_fs_info *fs_info,
 				     struct btrfs_key *key)
 {
-	struct extent_buffer *leaf;
+	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_root *tree_root = fs_info->tree_root;
 	struct btrfs_root *root;
+	struct extent_buffer *leaf;
 	int ret = 0;
 
 	root = kzalloc(sizeof(*root), GFP_KERNEL);

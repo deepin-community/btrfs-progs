@@ -41,7 +41,7 @@
  *    single word in a bitmap may straddle two pages in the extent buffer.
  */
 #define BIT_BYTE(nr) ((nr) / BITS_PER_BYTE)
-#define BYTE_MASK ((1 << BITS_PER_BYTE) - 1)
+#define BYTE_MASK ((1U << BITS_PER_BYTE) - 1)
 #define BITMAP_FIRST_BYTE_MASK(start) \
 	((BYTE_MASK << ((start) & (BITS_PER_BYTE - 1))) & BYTE_MASK)
 #define BITMAP_LAST_BYTE_MASK(nbits) \
@@ -109,24 +109,24 @@ int memcmp_extent_buffer(const struct extent_buffer *eb, const void *ptrv,
 			 unsigned long start, unsigned long len);
 void read_extent_buffer(const struct extent_buffer *eb, void *dst,
 			unsigned long start, unsigned long len);
-void write_extent_buffer_fsid(const struct extent_buffer *eb, const void *src);
-void write_extent_buffer_chunk_tree_uuid(const struct extent_buffer *eb,
+void write_extent_buffer_fsid(struct extent_buffer *eb, const void *src);
+void write_extent_buffer_chunk_tree_uuid(struct extent_buffer *eb,
 		const void *src);
-void write_extent_buffer(const struct extent_buffer *eb, const void *src,
+void write_extent_buffer(struct extent_buffer *eb, const void *src,
 			 unsigned long start, unsigned long len);
-void copy_extent_buffer_full(const struct extent_buffer *dst,
+void copy_extent_buffer_full(struct extent_buffer *dst,
 			     const struct extent_buffer *src);
-void copy_extent_buffer(const struct extent_buffer *dst,
+void copy_extent_buffer(struct extent_buffer *dst,
 			const struct extent_buffer *src,
 			unsigned long dst_offset, unsigned long src_offset,
 			unsigned long len);
-void memcpy_extent_buffer(const struct extent_buffer *dst,
+void memcpy_extent_buffer(struct extent_buffer *dst,
 			  unsigned long dst_offset, unsigned long src_offset,
 			  unsigned long len);
-void memmove_extent_buffer(const struct extent_buffer *dst,
+void memmove_extent_buffer(struct extent_buffer *dst,
 			   const unsigned long dst_offset,
 			   unsigned long src_offset, unsigned long len);
-void memset_extent_buffer(const struct extent_buffer *eb, char c,
+void memset_extent_buffer(struct extent_buffer *eb, char c,
 			  unsigned long start, unsigned long len);
 int extent_buffer_test_bit(const struct extent_buffer *eb, unsigned long start,
 			   unsigned long nr);

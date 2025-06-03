@@ -21,6 +21,11 @@
 #ifndef __BTRFS_CHECK_MODE_ORIGINAL_H__
 #define __BTRFS_CHECK_MODE_ORIGINAL_H__
 
+#include "kerncompat.h"
+#include "kernel-lib/rbtree.h"
+#include "kernel-lib/list.h"
+#include "kernel-shared/uapi/btrfs_tree.h"
+#include "common/extent-cache.h"
 #include "common/rbtree-utils.h"
 
 struct extent_backref {
@@ -189,6 +194,7 @@ struct unaligned_extent_rec_t {
 #define I_ERR_INVALID_GEN		(1U << 20)
 #define I_ERR_INVALID_NLINK		(1U << 21)
 #define I_ERR_INVALID_XATTR		(1U << 22)
+#define I_ERR_DEPRECATED_FREE_INO	(1U << 23)
 
 struct inode_record {
 	struct list_head backrefs;

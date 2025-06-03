@@ -25,7 +25,9 @@
 /*
  * Workaround for custom format %pV that may not be supported on all libcs.
  */
-#ifdef HAVE_PRINTF_H
+#if defined(HAVE_PRINTF_H) \
+	&& defined(HAVE_REGISTER_PRINTF_SPECIFIER) \
+	&& defined(HAVE_REGISTER_PRINTF_MODIFIER)
 #define DECLARE_PV(name)		struct va_format name
 #define PV_FMT				"%pV"
 #define PV_VAL(va)			&va
@@ -190,6 +192,9 @@ enum common_error {
 	ERROR_MSG_MEMORY,
 	ERROR_MSG_START_TRANS,
 	ERROR_MSG_COMMIT_TRANS,
+	ERROR_MSG_UNEXPECTED,
+	ERROR_MSG_READ,
+	ERROR_MSG_WRITE,
 };
 
 __attribute__ ((format (printf, 2, 3)))

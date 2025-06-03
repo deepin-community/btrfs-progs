@@ -55,7 +55,7 @@ create [options] [<dest>/]<name> [[<dest2>/]<name2> ...]
         If *dest* part of the path is not given, subvolume *name* will be
         created in the current directory.
 
-	If multiple desinations are given, then given options are applied to all
+        If multiple destinations are given, then the given options are applied to all
 	subvolumes.
 
 	If failure happens for any of the destinations, the command would
@@ -113,11 +113,13 @@ delete [options] [<subvolume> [<subvolume>...]], delete -i|--subvolid <subvolid>
                 subvolume id to be removed instead of the <path> that should point to the
                 filesystem with the subvolume
 
-        --delete-qgroup
-                also delete the qgroup 0/subvolid if it exists
+        -R|--recursive
+                delete subvolumes beneath each subvolume recursively
 
-        --no-delete-qgroup
-                do not delete the 0/subvolid qgroup (default)
+                This requires either `CAP_SYS_ADMIN` or the filesystem must be
+                mounted with `user_subvol_rm_allowed` mount option.
+                In the unprivileged case, subvolumes which cannot be accessed
+                are skipped.  The deletion is not atomic.
 
         -v|--verbose
                 (deprecated) alias for global *-v* option
@@ -311,4 +313,4 @@ SEE ALSO
 :doc:`btrfs-quota`,
 :doc:`btrfs-send`,
 :doc:`mkfs.btrfs`,
-``mount(8)``
+:manref:`mount(8)`

@@ -179,7 +179,7 @@ static int process_subvol(const char *path, const u8 *uuid, u64 ctransid,
 	}
 
 	if (*rctx->dest_dir_path == 0) {
-		strncpy_null(rctx->cur_subvol_path, path);
+		strncpy_null(rctx->cur_subvol_path, path, sizeof(rctx->cur_subvol_path));
 	} else {
 		ret = path_cat_out(rctx->cur_subvol_path, rctx->dest_dir_path,
 				   path);
@@ -209,7 +209,7 @@ static int process_subvol(const char *path, const u8 *uuid, u64 ctransid,
 	}
 
 	memset(&args_v1, 0, sizeof(args_v1));
-	strncpy_null(args_v1.name, path);
+	strncpy_null(args_v1.name, path, sizeof(args_v1.name));
 	ret = ioctl(rctx->dest_dir_fd, BTRFS_IOC_SUBVOL_CREATE, &args_v1);
 	if (ret < 0) {
 		ret = -errno;
@@ -219,6 +219,25 @@ static int process_subvol(const char *path, const u8 *uuid, u64 ctransid,
 
 out:
 	return ret;
+}
+
+/*
+ * Search for the @subvol_uuid, try received_uuid and subvolume as a fallback
+ * if it's not found.
+ */
+static struct subvol_info *search_source_subvol(int mnt_fd, const u8 *subvol_uuid,
+						u64 transid)
+{
+	struct subvol_info *found;
+
+	found = subvol_uuid_search(mnt_fd, 0, subvol_uuid, transid, NULL,
+				   subvol_search_by_received_uuid);
+	if (IS_ERR_OR_NULL(found)) {
+		found = subvol_uuid_search(mnt_fd, 0, subvol_uuid, transid,
+					   NULL, subvol_search_by_uuid);
+	}
+
+	return found;
 }
 
 static int process_snapshot(const char *path, const u8 *uuid, u64 ctransid,
@@ -249,7 +268,7 @@ static int process_snapshot(const char *path, const u8 *uuid, u64 ctransid,
 	}
 
 	if (*rctx->dest_dir_path == 0) {
-		strncpy_null(rctx->cur_subvol_path, path);
+		strncpy_null(rctx->cur_subvol_path, path, sizeof(rctx->cur_subvol_path));
 	} else {
 		ret = path_cat_out(rctx->cur_subvol_path, rctx->dest_dir_path,
 				   path);
@@ -281,16 +300,10 @@ static int process_snapshot(const char *path, const u8 *uuid, u64 ctransid,
 	}
 
 	memset(&args_v2, 0, sizeof(args_v2));
-	strncpy_null(args_v2.name, path);
+	strncpy_null(args_v2.name, path, sizeof(args_v2.name));
 
-	parent_subvol = subvol_uuid_search(rctx->mnt_fd, 0, parent_uuid,
-					   parent_ctransid, NULL,
-					   subvol_search_by_received_uuid);
-	if (IS_ERR_OR_NULL(parent_subvol)) {
-		parent_subvol = subvol_uuid_search(rctx->mnt_fd, 0, parent_uuid,
-						   parent_ctransid, NULL,
-						   subvol_search_by_uuid);
-	}
+	parent_subvol = search_source_subvol(rctx->mnt_fd, parent_uuid,
+					     parent_ctransid);
 	if (IS_ERR_OR_NULL(parent_subvol)) {
 		if (!parent_subvol)
 			ret = -ENOENT;
@@ -663,7 +676,7 @@ static int open_inode_for_write(struct btrfs_receive *rctx, const char *path)
 		error("cannot open %s: %m", path);
 		goto out;
 	}
-	strncpy_null(rctx->write_path, path);
+	strncpy_null(rctx->write_path, path, sizeof(rctx->write_path));
 
 out:
 	return ret;
@@ -745,9 +758,8 @@ static int process_clone(const char *path, u64 offset, u64 len,
 		   BTRFS_UUID_SIZE) == 0) {
 		subvol_path = rctx->cur_subvol_path;
 	} else {
-		si = subvol_uuid_search(rctx->mnt_fd, 0, clone_uuid, clone_ctransid,
-					NULL,
-					subvol_search_by_received_uuid);
+		si = search_source_subvol(rctx->mnt_fd, clone_uuid,
+					  clone_ctransid);
 		if (IS_ERR_OR_NULL(si)) {
 			char uuid_str[BTRFS_UUID_UNPARSED_SIZE];
 
@@ -1543,7 +1555,8 @@ static int do_receive(struct btrfs_receive *rctx, const char *tomnt,
 			error("failed to chdir to / after chroot: %m");
 			goto out;
 		}
-		fprintf(stderr, "Chroot to %s\n", dest_dir_full_path);
+		if (bconf.verbose > BTRFS_BCONF_QUIET)
+			fprintf(stderr, "Chroot to %s\n", dest_dir_full_path);
 		rctx->root_path = strdup("/");
 		rctx->dest_dir_path = rctx->root_path;
 	} else {

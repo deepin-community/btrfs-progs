@@ -14,7 +14,7 @@ override_dh_autoreconf:
 	dh_autoreconf ./autogen.sh
 
 override_dh_auto_configure:
-	dh_auto_configure -- --bindir=/bin
+	dh_auto_configure
 
 override_dh_auto_build:
 	dh_auto_build -- V=1
@@ -23,9 +23,9 @@ override_dh_auto_install:
 	dh_auto_install -- install
 	cd libbtrfsutil/python; \
 		python3 setup.py install --install-layout=deb --skip-build --root ../../debian/tmp --prefix /usr
-	mkdir -p debian/tmp/sbin
-	mv debian/tmp/bin/fsck.btrfs debian/tmp/sbin/fsck.btrfs
-	mv debian/tmp/bin/mkfs.btrfs debian/tmp/sbin/mkfs.btrfs
+	mkdir -p debian/tmp/usr/sbin
+	mv debian/tmp/usr/bin/fsck.btrfs debian/tmp/usr/sbin/fsck.btrfs
+	mv debian/tmp/usr/bin/mkfs.btrfs debian/tmp/usr/sbin/mkfs.btrfs
 
 	# Adding initramfs-tools integration
 	install -D -m 0755 debian/local/btrfs.hook debian/btrfs-progs/usr/share/initramfs-tools/hooks/btrfs

@@ -136,7 +136,6 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	bool force_using_targetdev = false;
 	u64 dstdev_block_count;
 	bool do_not_background = false;
-	DIR *dirstream = NULL;
 	u64 srcdev_size;
 	u64 dstdev_size;
 	bool enqueue = false;
@@ -184,7 +183,7 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 		return 1;
 	path = argv[optind + 2];
 
-	fdmnt = open_path_or_dev_mnt(path, &dirstream, 1);
+	fdmnt = btrfs_open_mnt(path);
 	if (fdmnt < 0)
 		goto leave_with_error;
 
@@ -200,7 +199,6 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 	if (ret != 0) {
 		if (ret < 0)
 			error("unable to check status of exclusive operation: %m");
-		close_file_or_dir(fdmnt, dirstream);
 		goto leave_with_error;
 	}
 
@@ -268,8 +266,8 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 			goto leave_with_error;
 		}
 	} else if (path_is_block_device(srcdev) > 0) {
-		strncpy((char *)start_args.start.srcdev_name, srcdev,
-			BTRFS_DEVICE_PATH_NAME_MAX);
+		strncpy_null((char *)start_args.start.srcdev_name, srcdev,
+			     BTRFS_DEVICE_PATH_NAME_MAX + 1);
 		start_args.start.srcdevid = 0;
 		srcdev_size = device_get_partition_size(srcdev);
 	} else {
@@ -294,8 +292,8 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 		goto leave_with_error;
 	}
 
-	strncpy((char *)start_args.start.tgtdev_name, dstdev,
-		BTRFS_DEVICE_PATH_NAME_MAX);
+	strncpy_null((char *)start_args.start.tgtdev_name, dstdev,
+		     BTRFS_DEVICE_PATH_NAME_MAX + 1);
 	ret = btrfs_prepare_device(fddstdev, dstdev, &dstdev_block_count, 0,
 			PREP_DEVICE_ZERO_END | PREP_DEVICE_VERBOSE |
 			(discard ? PREP_DEVICE_DISCARD : 0) |
@@ -348,7 +346,7 @@ static int cmd_replace_start(const struct cmd_struct *cmd,
 			goto leave_with_error;
 		}
 	}
-	close_file_or_dir(fdmnt, dirstream);
+	close(fdmnt);
 	return 0;
 
 leave_with_error:
@@ -378,7 +376,6 @@ static int cmd_replace_status(const struct cmd_struct *cmd,
 	char *path;
 	int once = 0;
 	int ret;
-	DIR *dirstream = NULL;
 
 	optind = 0;
 	while ((c = getopt(argc, argv, "1")) != -1) {
@@ -395,12 +392,12 @@ static int cmd_replace_status(const struct cmd_struct *cmd,
 		return 1;
 
 	path = argv[optind];
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0)
 		return 1;
 
 	ret = print_replace_status(fd, path, once);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	return !!ret;
 }
 static DEFINE_SIMPLE_COMMAND(replace_status, "status");
@@ -546,7 +543,6 @@ static int cmd_replace_cancel(const struct cmd_struct *cmd,
 	int c;
 	int fd;
 	char *path;
-	DIR *dirstream = NULL;
 
 	optind = 0;
 	while ((c = getopt(argc, argv, "")) != -1) {
@@ -561,14 +557,14 @@ static int cmd_replace_cancel(const struct cmd_struct *cmd,
 		return 1;
 
 	path = argv[optind];
-	fd = btrfs_open_dir(path, &dirstream, 1);
+	fd = btrfs_open_dir(path);
 	if (fd < 0)
 		return 1;
 
 	args.cmd = BTRFS_IOCTL_DEV_REPLACE_CMD_CANCEL;
 	args.result = BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT;
 	ret = ioctl(fd, BTRFS_IOC_DEV_REPLACE, &args);
-	close_file_or_dir(fd, dirstream);
+	close(fd);
 	if (ret < 0) {
 		error("ioctl(DEV_REPLACE_CANCEL) failed on \"%s\": %m", path);
 		if (args.result != BTRFS_IOCTL_DEV_REPLACE_RESULT_NO_RESULT)

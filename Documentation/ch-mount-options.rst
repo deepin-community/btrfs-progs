@@ -2,8 +2,9 @@ BTRFS SPECIFIC MOUNT OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This section describes mount options specific to BTRFS.  For the generic mount
-options please refer to ``mount(8)`` manual page. The options are sorted alphabetically
-(discarding the *no* prefix).
+options please refer to :manref:`mount(8)` manual page and also see the section
+with BTRFS specifics :docref:`below<btrfs-man5:mount-options-generic>`. The options are
+sorted alphabetically (discarding the *no* prefix).
 
 .. note::
         Most mount options apply to the whole filesystem and only options in the
@@ -22,12 +23,12 @@ acl, noacl
         (default: on)
 
         Enable/disable support for POSIX Access Control Lists (ACLs).  See the
-        ``acl(5)`` manual page for more information about ACLs.
+        :manref:`acl(5)` manual page for more information about ACLs.
 
         The support for ACL is build-time configurable (BTRFS_FS_POSIX_ACL) and
         mount fails if *acl* is requested but the feature is not compiled in.
 
-.. _mount-option-autodefrag:
+.. duplabel:: mount-option-autodefrag
 
 autodefrag, noautodefrag
         (since: 3.0, default: off)
@@ -69,27 +70,6 @@ barrier, nobarrier
         option will not lead to filesystem corruption as the pending blocks are
         supposed to make it to the permanent storage.
 
-check_int, check_int_data, check_int_print_mask=<value>
-        (since: 3.0, default: off)
-
-        These debugging options control the behavior of the integrity checking
-        module (the BTRFS_FS_CHECK_INTEGRITY config option required). The main goal is
-        to verify that all blocks from a given transaction period are properly linked.
-
-        *check_int* enables the integrity checker module, which examines all
-        block write requests to ensure on-disk consistency, at a large
-        memory and CPU cost.
-
-        *check_int_data* includes extent data in the integrity checks, and
-        implies the *check_int* option.
-
-        *check_int_print_mask* takes a bitmask of BTRFSIC_PRINT_MASK_* values
-        as defined in *fs/btrfs/check-integrity.c*, to control the integrity
-        checker module behavior.
-
-        See comments at the top of *fs/btrfs/check-integrity.c*
-        for more information.
-
 clear_cache
         Force clearing and rebuilding of the free space cache if something
         has gone wrong.
@@ -110,9 +90,14 @@ commit=<seconds>
 
         Set the interval of periodic transaction commit when data are synchronized
         to permanent storage. Higher interval values lead to larger amount of unwritten
-        data, which has obvious consequences when the system crashes.
-        The upper bound is not forced, but a warning is printed if it's more than 300
-        seconds (5 minutes). Use with care.
+        data to accumulate in memory, which has obvious consequences when the
+        system crashes.  The upper bound is not forced, but a warning is
+        printed if it's more than 300 seconds (5 minutes). Use with care.
+
+        The periodic commit is not the only mechanism to do the transaction commit,
+        this can also happen by explicit :command:`sync` or indirectly by other
+        commands that affect the global filesystem state or internal kernel
+        mechanisms that flush based on various thresholds or policies (e.g. cgroups).
 
 compress, compress=<type[:level]>, compress-force, compress-force=<type[:level]>
         (default: off, level support since: 5.1)
@@ -147,7 +132,7 @@ datacow, nodatacow
 
         Enable data copy-on-write for newly created files.
         *Nodatacow* implies *nodatasum*, and disables *compression*. All files created
-        under *nodatacow* are also set the NOCOW file attribute (see ``chattr(1)``).
+        under *nodatacow* are also set the NOCOW file attribute (see :manref:`chattr(1)`).
 
         .. note::
                 If *nodatacow* or *nodatasum* are enabled, compression is disabled.
@@ -162,7 +147,7 @@ datasum, nodatasum
         Enable data checksumming for newly created files.
         *Datasum* implies *datacow*, i.e. the normal mode of operation. All files created
         under *nodatasum* inherit the "no checksums" property, however there's no
-        corresponding file attribute (see ``chattr(1)``).
+        corresponding file attribute (see :manref:`chattr(1)`).
 
         .. note::
                 If *nodatacow* or *nodatasum* are enabled, compression is disabled.
@@ -172,7 +157,7 @@ datasum, nodatasum
         The cost of checksumming of the blocks in memory is much lower than the IO,
         modern CPUs feature hardware support of the checksumming algorithm.
 
-.. _mount-option-degraded:
+.. duplabel:: mount-option-degraded
 
 degraded
         (default: off)
@@ -194,7 +179,7 @@ degraded
         then the constraint of single/data is not satisfied and the filesystem
         cannot be mounted.
 
-.. _mount-option-device:
+.. duplabel:: mount-option-device
 
 device=<devicepath>
         Specify a path to a device that will be scanned for BTRFS filesystem during
@@ -210,14 +195,14 @@ device=<devicepath>
 discard, discard=sync, discard=async, nodiscard
         (default: async when devices support it since 6.2, async support since: 5.6)
 
-        Enable discarding of freed file blocks.  This is useful for SSD devices, thinly
-        provisioned LUNs, or virtual machine images; however, every storage layer must
-        support discard for it to work.
+        Enable discarding of freed file blocks.  This is useful for SSD/NVMe
+        devices, thinly provisioned LUNs, or virtual machine images; however,
+        every storage layer must support discard for it to work.
 
         In the synchronous mode (*sync* or without option value), lack of asynchronous
         queued TRIM on the backing device TRIM can severely degrade performance,
         because a synchronous TRIM operation will be attempted instead. Queued TRIM
-        requires newer than SATA revision 3.1 chipsets and devices.
+        requires SATA devices with chipsets revision newer than 3.1 and devices.
 
         The asynchronous mode (*async*) gathers extents in larger chunks before sending
         them to the devices for TRIM. The overhead and performance impact should be
@@ -319,29 +304,56 @@ norecovery
         and avoids other write operations. Note that this option is the same as
         *nologreplay*.
 
-
         .. note::
                 The opposite option *recovery* used to have different meaning but was
                 changed for consistency with other filesystems, where *norecovery* is used for
                 skipping log replay. BTRFS does the same and in general will try to avoid any
                 write operations.
 
+.. duplabel:: mount-option-rescan-uuid-tree
+
 rescan_uuid_tree
         (since: 3.12, default: off)
 
         Force check and rebuild procedure of the UUID tree. This should not
-        normally be needed.
+        normally be needed. Alternatively the tree can be cleared from
+        userspace by command :ref:`btrfs rescue clear-uuid-tree<man-rescue-clear-uuid-tree>`
+        and then it will be automatically rebuilt in kernel (the mount option
+        is not needed in that case).
 
 rescue
         (since: 5.9)
 
-        Modes allowing mount with damaged filesystem structures.
+        Modes allowing mount with damaged filesystem structures, all requires
+	the filesystem to be mounted read-only and doesn't allow remount to read-write.
+        This is supposed to provide unified and more fine grained tuning of
+        errors that affect filesystem operation.
 
-        * *usebackuproot* (since: 5.9, replaces standalone option *usebackuproot*)
-        * *nologreplay* (since: 5.9, replaces standalone option *nologreplay*)
+        * *usebackuproot* (since 5.9)
+
+	  Try to use backup root slots inside super block.
+	  Replaces standalone option *usebackuproot*
+
+        * *nologreplay* (since 5.9)
+
+	  Do not replay any dirty logs.
+	  Replaces standalone option *nologreplay*
+
         * *ignorebadroots*, *ibadroots* (since: 5.11)
+
+	  Ignore bad tree roots, greatly improve the chance for data salvage.
+
         * *ignoredatacsums*, *idatacsums* (since: 5.11)
+
+	  Ignore data checksum verification.
+
+	* *ignoremetacsums*, *imetacsums* (since 6.12)
+
+	  Ignore metadata checksum verification, useful for interrupted checksum conversion.
+
         * *all* (since: 5.9)
+
+	  Enable all supported rescue options.
 
 skip_balance
         (since: 3.3, default: off)
@@ -349,7 +361,7 @@ skip_balance
         Skip automatic resume of an interrupted balance operation. The operation can
         later be resumed with :command:`btrfs balance resume`, or the paused state can be
         removed with :command:`btrfs balance cancel`. The default behaviour is to resume an
-        interrupted balance immediately after a volume is mounted.
+        interrupted balance immediately after the filesystem is mounted.
 
 space_cache, space_cache=<version>, nospace_cache
         (*nospace_cache* since: 3.2, *space_cache=v1* and *space_cache=v2* since 4.5, default: *space_cache=v2*)
@@ -387,8 +399,9 @@ ssd, ssd_spread, nossd, nossd_spread
         Options to control SSD allocation schemes.  By default, BTRFS will
         enable or disable SSD optimizations depending on status of a device with
         respect to rotational or non-rotational type. This is determined by the
-        contents of */sys/block/DEV/queue/rotational*). If it is 0, the *ssd* option is
-        turned on.  The option *nossd* will disable the autodetection.
+        contents of :file:`/sys/block/DEV/queue/rotational`). If it is 0, the
+        *ssd* option is turned on.  The option *nossd* will disable the
+        autodetection.
 
         The optimizations make use of the absence of the seek penalty that's inherent
         for the rotational devices. The blocks can be typically written faster and
@@ -455,7 +468,7 @@ usebackuproot
         use the first readable. This can be used with read-only mounts as well.
 
         .. note::
-                This option has replaced *recovery*.
+                This option has replaced *recovery* which has been deprecated.
 
 user_subvol_rm_allowed
         (default: off)
@@ -468,7 +481,7 @@ user_subvol_rm_allowed
                 of the source subvolume, the subvolume deletion has been restricted for that
                 reason. The subvolume creation has been restricted but this mount option is
                 still required. This is a usability issue.
-                Since 4.18, the ``rmdir(2)`` syscall can delete an empty subvolume just like an
+                Since 4.18, the :manref:`rmdir(2)` syscall can delete an empty subvolume just like an
                 ordinary directory. Whether this is possible can be detected at runtime, see
                 *rmdir_subvol* feature in *FILESYSTEM FEATURES*.
 
@@ -492,12 +505,41 @@ inode_cache, noinode_cache
                 previous use of the *inode_cache* option can be removed by
                 :ref:`btrfs rescue clear-ino-cache<man-rescue-clear-ino-cache>`.
 
+check_int, check_int_data, check_int_print_mask=<value>
+        (removed in: 6.7, since: 3.0, default: off)
+
+        These debugging options control the behavior of the integrity checking
+        module (the BTRFS_FS_CHECK_INTEGRITY config option required). The main goal is
+        to verify that all blocks from a given transaction period are properly linked.
+
+        *check_int* enables the integrity checker module, which examines all
+        block write requests to ensure on-disk consistency, at a large
+        memory and CPU cost.
+
+        *check_int_data* includes extent data in the integrity checks, and
+        implies the *check_int* option.
+
+        *check_int_print_mask* takes a bit mask of BTRFSIC_PRINT_MASK_* values
+        as defined in *fs/btrfs/check-integrity.c*, to control the integrity
+        checker module behavior.
+
+        See comments at the top of *fs/btrfs/check-integrity.c*
+        for more information.
+
 
 NOTES ON GENERIC MOUNT OPTIONS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Some of the general mount options from ``mount(8)`` that affect BTRFS and are
+Some of the general mount options from :manref:`mount(8)` that affect BTRFS and are
 worth mentioning.
+
+.. duplabel:: mount-options-generic
+
+context
+        The context refers to the SELinux contexts and policy definitions passed
+        as mount options. This works properly since version v6.8 (because the
+        mount option parser of BTRFS was ported to new API that also understood
+        the options).
 
 noatime
         under read intensive work-loads, specifying *noatime* significantly improves
@@ -510,5 +552,5 @@ noatime
         https://lwn.net/Articles/499293/ - *Atime and btrfs: a bad combination? (LWN, 2012-05-31)*.
 
         Note that *noatime* may break applications that rely on atime uptimes like
-        the venerable Mutt (unless you use maildir mailboxes).
+        the venerable Mutt (unless you use *maildir* mailboxes).
 

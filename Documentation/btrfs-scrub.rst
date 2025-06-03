@@ -69,7 +69,7 @@ resume [-BdqrR] <path>|<device>
 
 .. _man-scrub-start:
 
-start [-BdrRf] <path>|<device>
+start [options] <path>|<device>
         Start a scrub on all devices of the mounted filesystem identified by
         *path* or on a single *device*. If a scrub is already running, the new
         one will not start. A device of an unmounted filesystem cannot be
@@ -89,8 +89,24 @@ start [-BdrRf] <path>|<device>
         -r
                 run in read-only mode, do not attempt to correct anything, can
                 be run on a read-only filesystem
+
+                Note that a read-only scrub on a read-write filesystem can
+                still cause writes into the filesystem due to some internal
+                limitations.  Only a read-only scrub on a read-only filesystem
+                can avoid writes from scrub.
         -R
                 raw print mode, print full data instead of summary
+	--limit <limit>
+		set the scrub throughput limit for each device.
+
+		If the scrub is for the whole fs, it's the same as
+		:command:`btrfs scrub limit -a -l <value>`.
+		If the scrub is for a single device, it's the same as
+		:command:`btrfs scrub limit -d <devid> -l <value>`.
+
+		The value is bytes per second, and accepts the usual KMGT prefixes.
+		After the scrub is finished, the throughput limit will be reset to
+		the old value of each device.
         -f
                 force starting new scrub even if a scrub is already running,
                 this can useful when scrub status file is damaged and reports a
@@ -100,13 +116,13 @@ start [-BdrRf] <path>|<device>
         ``Deprecated options``
 
         -c <ioprio_class>
-                set IO priority class (see ``ionice(1)`` manual page) if the IO
+                set IO priority class (see :manref:`ionice(1)` manual page) if the IO
                 scheduler configured for the device supports ionice. This is
                 only supported by BFQ or Kyber but is *not* supported by
                 mq-deadline. Please read the section about
-                :ref:`IO limiting<scrub-io-limiting>`.
+                :docref:`IO limiting <btrfs-scrub:scrub-io-limiting>`.
         -n <ioprio_classdata>
-                set IO priority classdata (see ``ionice(1)`` manpage)
+                set IO priority classdata (see :manref:`ionice(1)` manpage)
         -q
                 (deprecated) alias for global *-q* option
 
@@ -184,7 +200,7 @@ status [options] <path>|<device>
         :file:`sysfs/fs/btrfs/FSID/devinfo/scrub_speed_max`. In that case
         the limit is printed on the *Rate:* line if option *-d* is specified,
         or without it on a single-device filesystem.  Read more about tat in
-        section about :ref:`scrub IO limiting<scrub-io-limiting>`.
+        section about :docref:`scrub IO limiting <btrfs-scrub:scrub-io-limiting>`.
 
         .. code-block:: none
 

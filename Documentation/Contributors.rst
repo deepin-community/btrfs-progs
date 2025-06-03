@@ -15,6 +15,28 @@ Sorted by amount of contributions:
 The following contributed in the past (sorted alphabetically):
 Fujitsu, Fusion-IO, Intel, Linux Foundation, Red Hat, STRATO AG.
 
+.. list-table::
+   :header-rows: 0
+
+   * - .. figure:: plot-contribs.svg
+          :scale: 33%
+          :alt: Contributors
+          :target: `contributors-contribs`_
+
+          Contributors
+     - .. figure:: plot-sloc-lines.svg
+          :scale: 33%
+          :alt: Lines
+          :target: `contributors-lines`_
+
+          Lines
+     - .. figure:: plot-patches.svg
+          :scale: 33%
+          :alt: Patches
+          :target: `contributors-patches`_
+
+          Patches
+
 Statistics for 6.x series
 -------------------------
 
@@ -29,6 +51,14 @@ Statistics for 6.x series
     "6.4", "18", "110224", "159150", "180", "+3118 -4879"
     "6.5", "19", "110377", "159415", "230", "+3193 -2928"
     "6.6", "21", "110785", "160152", "153", "+2648 -1909"
+    "6.7", "18", "109562", "159074", "185", "+4376 -5476"
+    "6.8", "17", "109963", "160078", "134", "+4494 -3490"
+    "6.9", "19", "110727", "161231", "147", "+2476 -1323"
+    "6.10", "21", "110878", "161751", "154", "+2993 -2473"
+    "6.11", "18", "111848", "163484", "188", "+5776 -4043"
+    "6.12", "20", "111881", "163548", "148", "+1868 -1804"
+    "6.13", "25", "112756", "164722", "156", "+2780 -1579"
+    "6.14", "20", "114592", "167178", "147", "+3847 -1391"
 
 
 Legend:
@@ -147,3 +177,27 @@ Statistics for 2.6.x series
    "2.6.37", "17", "44781", "59491",  "83", "+3104 -701"
    "2.6.38", "23", "46573", "61980",  "90", "+3472 -983"
    "2.6.39", "28", "47206", "62859", "102", "+2115 -1236"
+
+Graphs
+------
+
+.. _contributors-contribs:
+
+Contributors
+^^^^^^^^^^^^
+
+.. image:: plot-contribs.svg
+
+.. _contributors-lines:
+
+Lines of code, raw lines
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. image:: plot-sloc-lines.svg
+
+.. _contributors-patches:
+
+Patches
+^^^^^^^
+
+.. image:: plot-patches.svg

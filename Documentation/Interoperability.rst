@@ -13,8 +13,7 @@ data. This can be used to limit bandwidth or for accounting. The cgroups can
 be configured directly or e.g. via systemd directives *IOAccounting*,
 *IOWeight* etc.
 
-See also:
-https://www.man7.org/linux/man-pages/man5/systemd.resource-control.5.html
+See also :manref:`systemd.resource-control(5)`.
 
 .. _interop-fsverity:
 
@@ -24,6 +23,12 @@ fsverity
 The fs-verity is a support layer that filesystems can hook into to
 support transparent integrity and authenticity protection of read-only
 files. This requires a separate management utility :command:`fsverity`.
+
+The ioctls supported by btrfs:
+
+* `FS_IOC_ENABLE_VERITY <https://www.kernel.org/doc/html/latest/filesystems/fsverity.html#fs-ioc-enable-verity>`__
+* `FS_IOC_MEASURE_VERITY <https://www.kernel.org/doc/html/latest/filesystems/fsverity.html#fs-ioc-measure-verity>`__
+* `FS_IOC_READ_VERITY_METADATA <https://www.kernel.org/doc/html/latest/filesystems/fsverity.html#fs-ioc-read-verity-metadata>`__
 
 See also:
 https://www.kernel.org/doc/html/latest/filesystems/fsverity.html
@@ -49,7 +54,7 @@ automatically in any way, must be resolved either in btrfs or on the DM/MD
 layer.
 
 The functionality of DM/MD may duplicate the one provided by btrfs (like
-mirroring), it's possible to use it that way but is probably wasteful and may
+mirroring), it's possible to use it that way but it's probably wasteful and may
 degrade performance. Creating a filesystem on top of the multiplexed device is
 likely the desired way.
 
@@ -62,10 +67,17 @@ for overlayfs (supporting the rename modes of *exchange* and *whiteout*).
 SELinux
 -------
 
+The SELinux labels can be defined via mount option *context* and since
+version 6.8 there are no limitations. Until that version some cases
+were not supported.
+
 .. _interop-io-uring:
 
 io_uring
 --------
+
+Basic file operations are supported. Since 6.12 the *Encoded IO read/write ioctls* the
+*read* is supported and write since 6.13.
 
 .. _interop-nfs:
 
@@ -83,8 +95,7 @@ Example of server side export:
    /mnt/data/subvolume1      192.168.1.2/24(fsid=12345,rw,sync)
    /mnt/data/subvolume2      192.168.1.2/24(fsid=23456,rw,sync)
 
-See also:
-https://www.man7.org/linux/man-pages/man5/exports.5.html
+See also :manref:`exports(5)`.
 
 .. _interop-samba:
 

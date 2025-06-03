@@ -1,0 +1,205 @@
+# Workflow for testing branch 'devel'
+# - build tests
+# - various runtime tests
+
+name: Devel build and tests
+run-name: Devel build and tests
+on:
+  push:
+    branches:
+      - devel
+      - 'ci/**'
+      - 'CI/**'
+jobs:
+  build-simple:
+    name: Simple build tests, manual page build test
+    strategy:
+      matrix:
+        compiler: [ gcc, clang ]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v46
+      - run: sudo modprobe btrfs
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev python3-sphinx sphinx-rtd-theme-common python3-sphinx-rtd-theme
+      - name: Configure
+        run: ./autogen.sh && CC=${{ matrix.compiler }} ./configure --enable-experimental
+      - name: Documentation
+        run: make V=1 -C Documentation
+      - name: Generate manual pages preview (html)
+        if: ${{ matrix.compiler == 'gcc' }}
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          for file in ${ALL_CHANGED_FILES}; do
+            echo "$file was changed, generate preview to summary"
+            Documentation/html-preview.sh "$file" >> $GITHUB_STEP_SUMMARY
+          done
+      - run: echo '<hr>' >> $GITHUB_STEP_SUMMARY
+      - name: Generate manual pages preview (man)
+        if: ${{ matrix.compiler == 'gcc' }}
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          for file in ${ALL_CHANGED_FILES}; do
+            echo "$file was changed, generate preview to summary"
+            Documentation/man-preview.sh "$file" >> $GITHUB_STEP_SUMMARY
+          done
+      - name: Make static
+        run: make V=1 EXTRA_CFLAGS='-march=x86-64' static
+      - name: Make box.static
+        run: make V=1 EXTRA_CFLAGS='-march=x86-64' btrfs.box.static
+  build-musl:
+    name: Build test on musl
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Musl build
+        run: sudo docker run kdave/ci-musl-x86_64 ./test-build $GITHUB_REF_NAME --disable-documentation --disable-backtrace --disable-libudev
+  test-quick:
+    name: Quick tests
+    strategy:
+      matrix:
+        compiler: [ gcc, clang ]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo modprobe btrfs
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev libaio-dev liburing-dev attr jq
+      - name: Configure
+        run: ./autogen.sh && CC=${{ matrix.compiler }} ./configure --disable-documentation --enable-experimental
+      - name: Make
+        run: make V=1
+      - name: Test internal APIs
+        run: make test-api
+      - name: Libbtrfsutil test
+        run: make test-libbtrfsutil
+      - name: Libbtrfs build test
+        run: make library-test
+      - name: Libbtrfs build test (static)
+        run: make library-test.static
+      - name: Tests ioctl
+        run: make ioctl-test
+      - name: Tests hash (speed)
+        run: make hash-speedtest && ./hash-speedtest 1
+      - name: Tests hash (correctness)
+        run: make hash-vectest && ./hash-vectest
+  test-mkfs:
+    name: Test mkfs.btrfs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo modprobe btrfs
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev libaio-dev liburing-dev attr jq
+      - name: Configure
+        run: ./autogen.sh && ./configure --disable-documentation --enable-experimental
+      - name: Make
+        run: make V=1
+      - name: Tests mkfs
+        run: sudo make TEST_LOG=dump test-mkfs
+      - name: Save logs to artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkfs-tests-results.txt
+          path: tests/mkfs-tests-results.txt
+          if-no-files-found: ignore
+  test-check:
+    name: Test btrfs check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo modprobe btrfs
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev libaio-dev liburing-dev attr jq
+      - name: Configure
+        run: ./autogen.sh && ./configure --disable-documentation --enable-experimental
+      - name: Make
+        run: make V=1
+      - name: Tests check
+        run: sudo make TEST_LOG=dump test-check
+      - name: Tests check (lowmem)
+        run: sudo make TEST_LOG=dump test-check-lowmem
+      - name: Save logs to artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fsck-tests-results.txt
+          path: tests/fsck-tests-results.txt
+          if-no-files-found: ignore
+  test-misc:
+    name: Test misc
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo modprobe btrfs
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev libaio-dev liburing-dev attr jq
+      - name: Configure
+        run: ./autogen.sh && ./configure --disable-documentation --enable-experimental
+      - name: Make
+        run: make V=1
+      - name: Tests misc
+        run: sudo make TEST_LOG=dump test-misc
+      - name: Save logs to artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: misc-tests-results.txt
+          path: tests/misc-tests-results.txt
+          if-no-files-found: ignore
+  test-convert:
+    name: Test btrfs-convert
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo modprobe btrfs
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev libaio-dev liburing-dev attr jq
+      - name: Configure
+        run: ./autogen.sh && ./configure --disable-documentation --enable-experimental
+      - name: Make
+        run: make V=1
+      - name: Tests convert
+        run: sudo make TEST_LOG=dump test-convert
+      - name: Save logs to artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: convert-tests-results.txt
+          path: tests/convert-tests-results.txt
+          if-no-files-found: ignore
+  test-other:
+    name: Test cli, fuzz
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo modprobe btrfs
+      - run: sudo apt-get update -qqq
+      - run: sudo apt-get install -y pkg-config gcc liblzo2-dev libzstd-dev libblkid-dev uuid-dev zlib1g-dev libext2fs-dev e2fsprogs libudev-dev libaio-dev liburing-dev attr jq
+      - name: Configure
+        run: ./autogen.sh && ./configure --disable-documentation --enable-experimental
+      - name: Make
+        run: make V=1
+      - name: Tests cli
+        run: sudo make TEST_LOG=dump test-cli
+      - name: Save logs to artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-tests-results.txt
+          path: tests/cli-tests-results.txt
+          if-no-files-found: ignore
+      - name: Tests fuzz
+        run: sudo make TEST_LOG=dump test-fuzz
+      - name: Save logs to artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-tests-results.txt
+          path: tests/fuzz-tests-results.txt
+          if-no-files-found: ignore

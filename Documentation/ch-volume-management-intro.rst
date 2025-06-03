@@ -27,7 +27,7 @@ RAID level
         standard RAID levels. At the moment the supported ones are: RAID0, RAID1,
         RAID10, RAID5 and RAID6.
 
-.. _man-device-typical-use-cases:
+.. duplabel:: man-device-typical-use-cases
 
 Typical use cases
 -----------------
@@ -84,9 +84,9 @@ What changed:
 * available data space decreased by 3GiB, usable roughly (50 - 3) + (100 - 3) = 144 GiB
 * metadata redundancy increased
 
-IOW, the unequal device sizes allow for combined space for data yet improved
-redundancy for metadata. If we decide to increase redundancy of data as well,
-we're going to lose 50GiB of the second device for obvious reasons.
+In other words, the unequal device sizes allow for combined space for data yet
+improved redundancy for metadata. If we decide to increase redundancy of data as
+well, we're going to lose 50GiB of the second device for obvious reasons.
 
 .. code-block:: bash
 
@@ -116,3 +116,13 @@ In order to remove a device, you need to convert the profile in this case:
 
         $ btrfs balance start -mconvert=dup -dconvert=single /mnt
         $ btrfs device remove /dev/sda /mnt
+
+.. warning::
+   Do not run balance to convert from a profile with more redundancy to one with
+   less redundancy in order to remove a failing device from a filesystem.
+
+   Balance is done by reading out the good metadata/data and write them into a
+   new chunk.
+   Thus it's possible the new chunk is written into the failing device.
+
+   Use :command:`btrfs device replace` instead.

@@ -21,11 +21,15 @@
 #define __BTRFS_SEND_H__
 
 #include "kernel-lib/sizes.h"
-#include "kernel-shared/ctree.h"
+#include "kernel-shared/accessors.h"
 
 #define BTRFS_SEND_STREAM_MAGIC "btrfs-stream"
 /* Conditional support for the upcoming protocol version. */
-#ifdef CONFIG_BTRFS_DEBUG
+/*
+ * Note: this is CONFIG_BTRFS_DEBUG in kernel but for btrfs-progs it must be
+ * enabled in experimental mode.
+ */
+#if EXPERIMENTAL
 #define BTRFS_SEND_STREAM_VERSION 3
 #else
 #define BTRFS_SEND_STREAM_VERSION 2

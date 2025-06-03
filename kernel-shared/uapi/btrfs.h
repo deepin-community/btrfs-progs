@@ -107,6 +107,7 @@ _static_assert(sizeof(struct btrfs_qgroup_limit) == 40);
  * struct btrfs_qgroup_inherit.flags
  */
 #define BTRFS_QGROUP_INHERIT_SET_LIMITS	(1ULL << 0)
+#define BTRFS_QGROUP_INHERIT_FLAGS_SUPP (BTRFS_QGROUP_INHERIT_SET_LIMITS)
 
 struct btrfs_qgroup_inherit {
 	__u64	flags;
@@ -205,6 +206,7 @@ struct btrfs_scrub_progress {
 };
 
 #define BTRFS_SCRUB_READONLY	1
+#define BTRFS_SCRUB_SUPPORTED_FLAGS	(BTRFS_SCRUB_READONLY)
 struct btrfs_ioctl_scrub_args {
 	__u64 devid;				/* in */
 	__u64 start;				/* in */
@@ -271,7 +273,7 @@ struct btrfs_ioctl_dev_info_args {
 	 * Optional, out.
 	 *
 	 * Showing the fsid of the device, allowing user space to check if this
-	 * device is a seed one.
+	 * device is a seeding one.
 	 *
 	 * Introduced in v6.3, thus user space still needs to check if kernel
 	 * changed this value.  Older kernel will not touch the values here.
@@ -287,12 +289,12 @@ _static_assert(sizeof(struct btrfs_ioctl_dev_info_args) == 4096);
  */
 
 /* Request information about checksum type and size */
-#define BTRFS_FS_INFO_FLAG_CSUM_INFO			(1 << 0)
+#define BTRFS_FS_INFO_FLAG_CSUM_INFO			(1U << 0)
 
 /* Request information about filesystem generation */
-#define BTRFS_FS_INFO_FLAG_GENERATION			(1 << 1)
+#define BTRFS_FS_INFO_FLAG_GENERATION			(1U << 1)
 /* Request information about filesystem metadata UUID */
-#define BTRFS_FS_INFO_FLAG_METADATA_UUID		(1 << 2)
+#define BTRFS_FS_INFO_FLAG_METADATA_UUID		(1U << 2)
 
 struct btrfs_ioctl_fs_info_args {
 	__u64 max_id;				/* out */
@@ -369,7 +371,6 @@ _static_assert(sizeof(struct btrfs_ioctl_feature_flags) == 24);
 /* balance control ioctl modes */
 #define BTRFS_BALANCE_CTL_PAUSE		1
 #define BTRFS_BALANCE_CTL_CANCEL	2
-#define BTRFS_BALANCE_CTL_RESUME	3
 
 /*
  * this is packed, because it should be exactly the same as its disk
@@ -644,6 +645,11 @@ _static_assert(sizeof(struct btrfs_ioctl_clone_range_args) == 32);
  */
 #define BTRFS_DEFRAG_RANGE_COMPRESS 1
 #define BTRFS_DEFRAG_RANGE_START_IO 2
+#define BTRFS_DEFRAG_RANGE_COMPRESS_LEVEL 4
+#define BTRFS_DEFRAG_RANGE_FLAGS_SUPP	(BTRFS_DEFRAG_RANGE_COMPRESS |		\
+					 BTRFS_DEFRAG_RANGE_COMPRESS_LEVEL |	\
+					 BTRFS_DEFRAG_RANGE_START_IO)
+
 struct btrfs_ioctl_defrag_range_args {
 	/* start of the defrag operation */
 	__u64 start;
@@ -665,11 +671,20 @@ struct btrfs_ioctl_defrag_range_args {
 	__u32 extent_thresh;
 
 	/*
-	 * which compression method to use if turning on compression
-	 * for this defrag operation.  If unspecified, zlib will
-	 * be used
+	 * Which compression method to use if turning on compression for
+	 * defragmentation operation.  If unspecified, zlib will be used.
+	 *
+	 * If compression level is also being specified, set the
+	 * BTRFS_DEFRAG_RANGE_COMPRESS_LEVEL flag and set the compress.type
+	 * member structure instead of the compress_type field.
 	 */
-	__u32 compress_type;
+	union {
+		__u32 compress_type;
+		struct {
+			__u8 type;
+			__s8 level;
+		} compress;
+	};
 
 	/* spare for later */
 	__u32 unused[4];
@@ -1151,6 +1166,29 @@ struct btrfs_ioctl_encoded_io_args {
 #define BTRFS_ENCODED_IO_ENCRYPTION_NONE 0
 #define BTRFS_ENCODED_IO_ENCRYPTION_TYPES 1
 
+/*
+ * Wait for subvolume cleaning process. This queries the kernel queue and it
+ * can change between the calls.
+ *
+ * - FOR_ONE	- specify the subvolid
+ * - FOR_QUEUED - wait for all currently queued
+ * - COUNT	- count number of queued
+ * - PEEK_FIRST - read which is the first in the queue (to be cleaned or being
+ * 		  cleaned already), or 0 if the queue is empty
+ * - PEEK_LAST  - read the last subvolid in the queue, or 0 if the queue is empty
+ */
+struct btrfs_ioctl_subvol_wait {
+	__u64 subvolid;
+	__u32 mode;
+	__u32 count;
+};
+
+#define BTRFS_SUBVOL_SYNC_WAIT_FOR_ONE		(0)
+#define BTRFS_SUBVOL_SYNC_WAIT_FOR_QUEUED	(1)
+#define BTRFS_SUBVOL_SYNC_COUNT			(2)
+#define BTRFS_SUBVOL_SYNC_PEEK_FIRST		(3)
+#define BTRFS_SUBVOL_SYNC_PEEK_LAST		(4)
+
 /* Error codes as returned by the kernel */
 enum btrfs_err_code {
 	BTRFS_ERROR_DEV_RAID1_MIN_NOT_MET = 1,
@@ -1304,6 +1342,8 @@ enum btrfs_err_code {
 				    struct btrfs_ioctl_encoded_io_args)
 #define BTRFS_IOC_ENCODED_WRITE _IOW(BTRFS_IOCTL_MAGIC, 64, \
 				     struct btrfs_ioctl_encoded_io_args)
+#define BTRFS_IOC_SUBVOL_SYNC_WAIT _IOW(BTRFS_IOCTL_MAGIC, 65, \
+					struct btrfs_ioctl_subvol_wait)
 
 #ifdef __cplusplus
 }

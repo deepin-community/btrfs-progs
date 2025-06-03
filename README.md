@@ -6,6 +6,7 @@ Btrfs-progs
 [![codecov](https://codecov.io/gh/kdave/btrfs-progs/branch/coverage-test/graph/badge.svg?token=fhLI8V9s0k)](https://codecov.io/gh/kdave/btrfs-progs)
 [![static](https://github.com/kdave/btrfs-progs/actions/workflows/artifacts-static-build.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/artifacts-static-build.yml)
 [![release](https://github.com/kdave/btrfs-progs/actions/workflows/ci-build-test.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/ci-build-test.yml)
+[![codeql](https://github.com/kdave/btrfs-progs/actions/workflows/codeql.yml/badge.svg)](https://github.com/kdave/btrfs-progs/actions/workflows/codeql.yml)
 
 Userspace utilities to manage btrfs filesystems.
 License: GPLv2.
@@ -20,6 +21,7 @@ This repository hosts following utilities and also documentation:
 * **mkfs.btrfs** &mdash; utility to create the filesystem ([manual page](https://btrfs.readthedocs.io/en/latest/mkfs.btrfs.html))
 * all-in-one binary in the busybox style with mkfs.btrfs, btrfs-image and other tools built-in ([standalone tools](https://btrfs.readthedocs.io/en/latest/btrfs.html#standalone-tools))
 * **libbtrfsutil** (LGPL v2.1) &mdash; C and python 3 bindings, see [libbtrfsutil/README.md](libbtrfsutil/README.md) for more
+* **btrfsutil** python bindings published at https://pypi.org/project/btrfsutil
 * manual pages and documentation source published at [btrfs.readthedocs.io](https://btrfs.readthedocs.io) (RTD)
 
 See [INSTALL](INSTALL) for build instructions, [tests/README.md](tests/README.md) for
@@ -58,7 +60,8 @@ provided by the kernel.
 ### Build compatibility
 
 Build is supported on the [GNU C library](https://www.gnu.org/software/libc/)
-as the primary target, and on the [musl libc](https://musl.libc.org/).
+as the primary target, and on the [musl libc](https://musl.libc.org/)
+and [uClibc-ng](https://www.uclibc-ng.org/).
 
 The supported compilers are [gcc](https://gcc.gnu.org/) (minimal version 4.8)
 and [clang](https://clang.llvm.org/) (minimal version 3.4).
@@ -164,7 +167,7 @@ some architectures.  Optionally it's possible to use
 [Botan](https://botan.randombit.net) or
 [OpenSSL](https://www.openssl.org) implementations.
 
-The builtin implemtations uses the following sources:
+The builtin implementations uses the following sources:
 [CRC32C](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git),
 [XXHASH](https://github.com/Cyan4973/xxHash),
 [SHA256](https://tools.ietf.org/html/rfc4634),
@@ -178,5 +181,5 @@ References
 
 * [Documentation](https://btrfs.readthedocs.io)
 * [Manual pages](https://btrfs.readthedocs.io/en/latest/man-index.html)
-* [Changes -- brfs-progs](https://btrfs.readthedocs.io/en/latest/CHANGES.html)
+* [Changes -- btrfs-progs](https://btrfs.readthedocs.io/en/latest/CHANGES.html)
 * [Features by kernel version](https://btrfs.readthedocs.io/en/latest/Feature-by-version.html)

@@ -47,8 +47,7 @@ void fixup_argv0(char **argv, const char *token)
 
 void set_argv0(char **argv)
 {
-	strncpy(argv0_buf, argv[0], sizeof(argv0_buf));
-	argv0_buf[sizeof(argv0_buf) - 1] = 0;
+	strncpy_null(argv0_buf, argv[0], sizeof(argv0_buf));
 }
 
 int check_argc_exact(int nargs, int expected)
@@ -88,13 +87,14 @@ int check_argc_max(int nargs, int expected)
 /*
  * Preprocess @argv with getopt_long to reorder options and consume the "--"
  * option separator.
- * Unknown short and long options are reported, optionally the @usage is printed
- * before exit.
+ * Unknown short and long options are reported. Also consume the --help
+ * option in case it's for a command without any options.
  */
 void clean_args_no_options(const struct cmd_struct *cmd, int argc, char *argv[])
 {
 	static const struct option long_options[] = {
-		{NULL, 0, NULL, 0}
+		{ "help", no_argument, NULL, GETOPT_VAL_HELP },
+		{ NULL, 0, NULL, 0 }
 	};
 
 	while (1) {
@@ -104,9 +104,13 @@ void clean_args_no_options(const struct cmd_struct *cmd, int argc, char *argv[])
 			break;
 
 		switch (c) {
-		default:
+		case GETOPT_VAL_HELP:
 			if (cmd->usagestr)
 				usage(cmd, 1);
+			break;
+		default:
+			if (cmd->usagestr)
+				usage_unknown_option(cmd, argv);
 		}
 	}
 }
@@ -310,10 +314,10 @@ static int usage_command_internal(const char * const *usagestr,
 	ret = do_usage_one_command(usagestr, flags, cmd_flags, outf);
 	switch (ret) {
 	case -1:
-		fprintf(outf, "No usage for '%s'\n", token);
+		fprintf(outf, "No usage for '%s'\n", token ? : "");
 		break;
 	case -2:
-		fprintf(outf, "No short description for '%s'\n", token);
+		fprintf(outf, "No short description for '%s'\n", token ? : "");
 		break;
 	}
 
@@ -536,3 +540,62 @@ void help_command_group(const struct cmd_group *grp, int argc, char **argv)
 	usage_command_group(grp, full, false);
 }
 
+void help_builtin_features(const char *prefix)
+{
+	static const char *features[] = {
+#if EXPERIMENTAL
+		"+"
+#else
+		"-"
+#endif
+		"EXPERIMENTAL",
+#ifdef INJECT
+		"+"
+#else
+		"-"
+#endif
+		"INJECT",
+#ifdef STATIC_BUILD
+		"+"
+#else
+		"-"
+#endif
+		"STATIC",
+#if defined(COMPRESSION_LZO) && COMPRESSION_LZO == 1
+		"+"
+#else
+		"-"
+#endif
+		"LZO",
+#if defined(COMPRESSION_ZSTD) && COMPRESSION_ZSTD == 1
+		"+"
+#else
+		"-"
+#endif
+		"ZSTD",
+#if defined(HAVE_LIBUDEV) && HAVE_LIBUDEV == 1
+		"+"
+#else
+		"-"
+#endif
+		"UDEV",
+#if defined(HAVE_LINUX_FSVERITY_H) && HAVE_LINUX_FSVERITY_H == 1
+		"+"
+#else
+		"-"
+#endif
+		"FSVERITY",
+#if defined(BTRFS_ZONED) && BTRFS_ZONED == 1
+		"+"
+#else
+		"-"
+#endif
+		"ZONED",
+		"CRYPTO=" CRYPTOPROVIDER,
+	};
+
+	printf("%s%s\n", prefix, PACKAGE_STRING);
+	for (int i = 0; i < ARRAY_SIZE(features); i++)
+		printf("%s%s", (i == 0 ? "" : " "), features[i]);
+	putchar('\n');
+}

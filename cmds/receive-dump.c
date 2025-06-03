@@ -19,7 +19,6 @@
 #include "kerncompat.h"
 #include <limits.h>
 #include <time.h>
-#include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -29,6 +28,7 @@
 #include "common/messages.h"
 #include "common/send-stream.h"
 #include "common/path-utils.h"
+#include "common/string-utils.h"
 #include "cmds/receive-dump.h"
 
 #define PATH_CAT_OR_RET(function_name, outpath, path1, path2, ret)	\
@@ -39,47 +39,6 @@
 		return ret;						\
 	}								\
 })
-
-/*
- * Print path and escape characters (in a C way) that could break the line.
- * Returns the length of the escaped characters. Unprintable characters are
- * escaped as octals.
- */
-static int print_path_escaped(const char *path)
-{
-	size_t i;
-	size_t path_len = strlen(path);
-	int len = 0;
-
-	for (i = 0; i < path_len; i++) {
-		char c = path[i];
-
-		len++;
-		switch (c) {
-		case '\a': putchar('\\'); putchar('a'); len++; break;
-		case '\b': putchar('\\'); putchar('b'); len++; break;
-		case '\e': putchar('\\'); putchar('e'); len++; break;
-		case '\f': putchar('\\'); putchar('f'); len++; break;
-		case '\n': putchar('\\'); putchar('n'); len++; break;
-		case '\r': putchar('\\'); putchar('r'); len++; break;
-		case '\t': putchar('\\'); putchar('t'); len++; break;
-		case '\v': putchar('\\'); putchar('v'); len++; break;
-		case ' ':  putchar('\\'); putchar(' '); len++; break;
-		case '\\': putchar('\\'); putchar('\\'); len++; break;
-		default:
-			  if (!isprint(c)) {
-				  printf("\\%c%c%c",
-						  '0' + ((c & 0300) >> 6),
-						  '0' + ((c & 070) >> 3),
-						  '0' + (c & 07));
-				  len += 3;
-			  } else {
-				  putchar(c);
-			  }
-		}
-	}
-	return len;
-}
 
 enum print_mode {
 	PRINT_DUMP_NORMAL,
@@ -111,7 +70,7 @@ static int __print_dump(enum print_mode mode, void *user, const char *path,
 
 	/* Unified header */
 	printf("%-16s", title);
-	ret = print_path_escaped(out_path);
+	ret = string_print_escape_special(out_path);
 	if (!fmt) {
 		putchar('\n');
 		return 0;
@@ -199,7 +158,7 @@ static int print_mksock(const char *path, void *user)
 static int print_symlink(const char *path, const char *lnk, void *user)
 {
 	PRINT_DUMP_NO_NEWLINE(user, path, "symlink", "dest=");
-	print_path_escaped(lnk);
+	string_print_escape_special(lnk);
 	putchar('\n');
 	return 0;
 }
@@ -212,7 +171,7 @@ static int print_rename(const char *from, const char *to, void *user)
 
 	PATH_CAT_OR_RET("rename", full_to, r->full_subvol_path, to, ret);
 	PRINT_DUMP_NO_NEWLINE(user, from, "rename", "dest=");
-	print_path_escaped(full_to);
+	string_print_escape_special(full_to);
 	putchar('\n');
 	return 0;
 }
@@ -220,7 +179,7 @@ static int print_rename(const char *from, const char *to, void *user)
 static int print_link(const char *path, const char *lnk, void *user)
 {
 	PRINT_DUMP_NO_NEWLINE(user, path, "link", "dest=");
-	print_path_escaped(lnk);
+	string_print_escape_special(lnk);
 	putchar('\n');
 	return 0;
 }
@@ -251,24 +210,37 @@ static int print_clone(const char *path, u64 offset, u64 len,
 	char full_path[PATH_MAX];
 	int ret;
 
-	PATH_CAT_OR_RET("clone", full_path, r->full_subvol_path, clone_path,
-			ret);
-	return PRINT_DUMP(user, path, "clone",
-			  "offset=%llu len=%llu from=%s clone_offset=%llu",
-			  offset, len, full_path, clone_offset);
+	PATH_CAT_OR_RET("clone", full_path, r->full_subvol_path, clone_path, ret);
+	PRINT_DUMP_NO_NEWLINE(user, path, "clone", "offset=%llu len=%llu from=", offset, len);
+	string_print_escape_special(full_path);
+	putchar(' ');
+	printf("clone_offset=%llu\n", clone_offset);
+	return 0;
 }
 
+/*
+ * Xattr names are like paths and can potentially contain special characters,
+ * xattr values can be arbitrary.
+ */
 static int print_set_xattr(const char *path, const char *name,
 			   const void *data, int len, void *user)
 {
-	return PRINT_DUMP(user, path, "set_xattr", "name=%s data=%.*s len=%d",
-			  name, len, (char *)data, len);
+	PRINT_DUMP_NO_NEWLINE(user, path, "set_xattr", "name=");
+	string_print_escape_special(name);
+	putchar(' ');
+	string_print_escape_special_len((const char *)data, len);
+	putchar(' ');
+	printf("len=%d\n", len);
+	return 0;
 }
 
 static int print_remove_xattr(const char *path, const char *name, void *user)
 {
 
-	return PRINT_DUMP(user, path, "remove_xattr", "name=%s", name);
+	PRINT_DUMP_NO_NEWLINE(user, path, "remove_xattr", "name=");
+	string_print_escape_special(name);
+	putchar('\n');
+	return 0;
 }
 
 static int print_truncate(const char *path, u64 size, void *user)
@@ -336,9 +308,7 @@ static int print_encoded_write(const char *path, const void *data, u64 offset,
 			       u32 compression, u32 encryption, void *user)
 {
 	return PRINT_DUMP(user, path, "encoded_write",
-			  "offset=%llu len=%llu, unencoded_file_len=%llu, "
-			  "unencoded_len=%llu, unencoded_offset=%llu, "
-			  "compression=%u, encryption=%u",
+"offset=%llu len=%llu unencoded_file_len=%llu unencoded_len=%llu unencoded_offset=%llu compression=%u encryption=%u",
 			  offset, len, unencoded_file_len, unencoded_len,
 			  unencoded_offset, compression, encryption);
 }

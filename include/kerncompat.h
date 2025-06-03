@@ -54,6 +54,10 @@
 
 #endif
 
+#ifndef __maybe_unused
+#define __maybe_unused __attribute__((__unused__))
+#endif
+
 #ifndef BTRFS_DISABLE_BACKTRACE
 #include <execinfo.h>
 #endif
@@ -73,7 +77,7 @@
 #define BITS_PER_BYTE 8
 #define BITS_PER_LONG (__SIZEOF_LONG__ * BITS_PER_BYTE)
 #define __GFP_BITS_SHIFT 20
-#define __GFP_BITS_MASK ((int)((1 << __GFP_BITS_SHIFT) - 1))
+#define __GFP_BITS_MASK ((int)((1U << __GFP_BITS_SHIFT) - 1))
 #define __GFP_DMA32 0
 #define __GFP_HIGHMEM 0
 #define GFP_KERNEL 0
@@ -102,6 +106,36 @@
 #else
 #define BUILD_ASSERT(x)
 #endif
+
+#ifndef __DECLARE_FLEX_ARRAY
+/*
+ * Copied from linux.git/include/uapi/stddef.h
+ *
+ * __DECLARE_FLEX_ARRAY() - Declare a flexible array usable in a union
+ *
+ * @TYPE: The type of each flexible array element
+ * @NAME: The name of the flexible array member
+ *
+ * In order to have a flexible array member in a union or alone in a struct, it
+ * needs to be wrapped in an anonymous struct with at least 1 named member, but
+ * that member can be empty.
+ */
+#define __DECLARE_FLEX_ARRAY(TYPE, NAME)	\
+	struct { \
+		struct { } __empty_ ## NAME; \
+		TYPE NAME[]; \
+	}
+#endif
+
+/**
+ * min_not_zero - return the minimum that is _not_ zero, unless both are zero
+ * @x: value1
+ * @y: value2
+ */
+#define min_not_zero(x, y) ({			\
+	typeof(x) __x = (x);			\
+	typeof(y) __y = (y);			\
+	__x == 0 ? __y : ((__y == 0) ? __x : min(__x, __y)); })
 
 static inline void print_trace(void)
 {
@@ -285,35 +319,13 @@ static inline void up_read(struct rw_semaphore *sem)
 #if defined __has_attribute
 # if __has_attribute(__fallthrough__)
 #  define fallthrough			__attribute__((__fallthrough__))
+# else
+/* Compatibility with gcc 5.x and 6.x that don't have the attribute. */
+#  define fallthrough			do {} while (0)  /* fallthrough */
 # endif
 #else
 # define fallthrough			do {} while (0)  /* fallthrough */
 #endif
-
-/**
- * __set_bit - Set a bit in memory
- * @nr: the bit to set
- * @addr: the address to start counting from
- *
- * Unlike set_bit(), this function is non-atomic and may be reordered.
- * If it's called on the same region of memory simultaneously, the effect
- * may be that only one operation succeeds.
- */
-static inline void __set_bit(int nr, volatile unsigned long *addr)
-{
-	unsigned long mask = BITOP_MASK(nr);
-	unsigned long *p = ((unsigned long *)addr) + BITOP_WORD(nr);
-
-	*p  |= mask;
-}
-
-static inline void __clear_bit(int nr, volatile unsigned long *addr)
-{
-	unsigned long mask = BITOP_MASK(nr);
-	unsigned long *p = ((unsigned long *)addr) + BITOP_WORD(nr);
-
-	*p &= ~mask;
-}
 
 /**
  * test_bit - Determine whether a bit is set
@@ -458,9 +470,39 @@ do {					\
 
 #define IS_ENABLED(c) 0
 
-#define container_of(ptr, type, member) ({                      \
-        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
-	        (type *)( (char *)__mptr - offsetof(type,member) );})
+/* Are two types/vars the same type (ignoring qualifiers)? */
+#define __same_type(a, b) __builtin_types_compatible_p(typeof(a), typeof(b))
+
+#define typeof_member(T, m)	typeof(((T*)0)->m)
+
+/**
+ * container_of - cast a member of a structure out to the containing structure
+ * @ptr:	the pointer to the member.
+ * @type:	the type of the container struct this is embedded in.
+ * @member:	the name of the member within the struct.
+ *
+ * WARNING: any const qualifier of @ptr is lost.
+ */
+#define container_of(ptr, type, member) ({				\
+	void *__mptr = (void *)(ptr);					\
+	static_assert(__same_type(*(ptr), ((type *)0)->member) ||	\
+		      __same_type(*(ptr), void),			\
+		      "pointer type mismatch in container_of()");	\
+	((type *)(__mptr - offsetof(type, member))); })
+
+/**
+ * container_of_const - cast a member of a structure out to the containing
+ *			structure and preserve the const-ness of the pointer
+ * @ptr:		the pointer to the member
+ * @type:		the type of the container struct this is embedded in.
+ * @member:		the name of the member within the struct.
+ */
+#define container_of_const(ptr, type, member)				\
+	_Generic(ptr,							\
+		const typeof(*(ptr)) *: ((const type *)container_of(ptr, type, member)),\
+		default: ((type *)container_of(ptr, type, member))	\
+	)
+
 #ifndef __bitwise
 #ifdef __CHECKER__
 #define __bitwise __bitwise__
