@@ -40,8 +40,8 @@ Description: Checksumming Copy on Write Filesystem utilities
  This package contains utilities (mkfs, fsck) used to work with btrfs
  and an utility (btrfs-convert) to make a btrfs filesystem from an ext3.
 
-Package: libbtrfs0t64
-Provides: ${t64:Provides}
+Package: libbtrfs0
+Provides: ${Provides}
 Replaces: libbtrfs0
 Breaks: libbtrfs0 (<< ${source:Version})
 Architecture: linux-any
@@ -59,7 +59,7 @@ Package: libbtrfs-dev
 Architecture: linux-any
 Multi-Arch: same
 Section: libdevel
-Depends: ${misc:Depends}, ${shlibs:Depends}, libbtrfs0t64 (= ${binary:Version})
+Depends: ${misc:Depends}, ${shlibs:Depends}, libbtrfs0 (= ${binary:Version})
 Description: Checksumming Copy on Write Filesystem utilities (development headers)
  Btrfs is a copy on write filesystem for Linux aimed at implementing
  advanced features while focusing on fault tolerance, repair and easy
@@ -67,8 +67,8 @@ Description: Checksumming Copy on Write Filesystem utilities (development header
  .
  This package contains development headers for the libbtrfs library.
 
-Package: libbtrfsutil1t64
-Provides: ${t64:Provides}
+Package: libbtrfsutil1
+Provides: ${Provides}
 Replaces: libbtrfsutil1
 Breaks: libbtrfsutil1 (<< ${source:Version})
 Architecture: linux-any
@@ -86,7 +86,7 @@ Package: libbtrfsutil-dev
 Architecture: linux-any
 Multi-Arch: same
 Section: libdevel
-Depends: ${misc:Depends}, ${shlibs:Depends}, libbtrfsutil1t64 (= ${binary:Version})
+Depends: ${misc:Depends}, ${shlibs:Depends}, libbtrfsutil1 (= ${binary:Version})
 Description: Checksumming Copy on Write Filesystem utilities (util development headers)
  Btrfs is a copy on write filesystem for Linux aimed at implementing
  advanced features while focusing on fault tolerance, repair and easy
