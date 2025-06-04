@@ -1,3 +1,9 @@
+btrfs-progs (6.14-1deepin2) unstable; urgency=medium
+
+  * Revert 64-bit time_t transition.
+
+ -- WangYuli <wangyuli@uniontech.com>  Wed, 4 Jun 2025 11:46:25 +0800
+
 btrfs-progs (6.14-1deepin1) unstable; urgency=medium
 
   * Reapply deepin's changes.
